@@ -6,11 +6,12 @@ Tools:
 - collections: List available collections
 """
 import logging
+import json
 import os
+import re
 from typing import Any
 
-from fastapi import FastAPI
-from pydantic import BaseModel
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from packages.vectorstore import QdrantStore
 from packages.llm import OllamaClient
@@ -24,6 +25,12 @@ app = FastAPI(title="Semantic MCP Server")
 # Global instances
 vector_store: QdrantStore | None = None
 ollama_client: OllamaClient | None = None
+
+QUERY_MIN_LEN = 3
+QUERY_MAX_LEN = 512
+SEMANTIC_MAX_TOP_K = 20
+TAG_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+COLLECTION_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 @app.on_event("startup")
@@ -53,91 +60,10 @@ async def shutdown():
         await ollama_client.close()
 
 
-class ToolsListRequest(BaseModel):
-    """Empty request for tools/list."""
-
-    pass
-
-
-class ToolCallRequest(BaseModel):
-    """Tool call request."""
-
-    name: str
-    arguments: dict[str, Any]
-
-
 @app.get("/health")
 async def health_check():
     """Health check."""
     return {"status": "healthy"}
-
-
-@app.post("/tools/list")
-async def list_tools(request: ToolsListRequest | None = None):
-    """Return available tools."""
-    return {
-        "tools": [
-            {
-                "name": "query",
-                "description": "Perform semantic search over ingested documents. Returns relevant document chunks with similarity scores.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "The search query",
-                        },
-                        "top_k": {
-                            "type": "integer",
-                            "description": "Number of results to return",
-                            "default": 5,
-                        },
-                        "tags": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Optional tags to filter by",
-                        },
-                        "collection": {
-                            "type": "string",
-                            "description": "Optional collection name (defaults to 'documents')",
-                        },
-                    },
-                    "required": ["query"],
-                },
-            },
-            {
-                "name": "collections",
-                "description": "List all available document collections in the vector store.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {},
-                },
-            },
-        ]
-    }
-
-
-@app.post("/tools/call")
-async def call_tool(request: ToolCallRequest):
-    """Execute a tool."""
-    tool_name = request.name
-    arguments = request.arguments
-
-    logger.info(f"Tool call: {tool_name} with args: {arguments}")
-
-    if tool_name == "query":
-        result = await semantic_query(
-            query=arguments["query"],
-            top_k=arguments.get("top_k", 5),
-            tags=arguments.get("tags"),
-            collection=arguments.get("collection"),
-        )
-    elif tool_name == "collections":
-        result = await list_collections()
-    else:
-        result = {"error": f"Unknown tool: {tool_name}"}
-
-    return {"content": [{"type": "text", "text": str(result)}]}
 
 
 async def semantic_query(
@@ -160,6 +86,37 @@ async def semantic_query(
     """
     if not vector_store or not ollama_client:
         return {"error": "Services not initialized"}
+
+    if not isinstance(query, str):
+        return {"error": "query must be a string"}
+    query = query.strip()
+    if len(query) < QUERY_MIN_LEN or len(query) > QUERY_MAX_LEN:
+        return {
+            "error": f"query must be between {QUERY_MIN_LEN} and {QUERY_MAX_LEN} characters",
+        }
+
+    if not isinstance(top_k, int) or top_k < 1 or top_k > SEMANTIC_MAX_TOP_K:
+        return {"error": f"top_k must be between 1 and {SEMANTIC_MAX_TOP_K}"}
+
+    if tags is not None:
+        if not isinstance(tags, list):
+            return {"error": "tags must be an array of strings"}
+        sanitized_tags: list[str] = []
+        for tag in tags:
+            if not isinstance(tag, str):
+                return {"error": "tags must be strings"}
+            candidate = tag.strip()
+            if not candidate or len(candidate) > 64 or not TAG_PATTERN.fullmatch(candidate):
+                return {"error": "tags must match ^[A-Za-z0-9._-]+$ and be <= 64 chars"}
+            sanitized_tags.append(candidate)
+        tags = sanitized_tags
+
+    if collection:
+        if not isinstance(collection, str):
+            return {"error": "collection must be a string"}
+        collection = collection.strip()
+        if not collection or len(collection) > 128 or not COLLECTION_PATTERN.fullmatch(collection):
+            return {"error": "collection must match ^[A-Za-z0-9._-]+$ and be <= 128 chars"}
 
     try:
         # Generate query embedding
@@ -207,6 +164,146 @@ async def list_collections() -> dict[str, Any]:
     except Exception as e:
         logger.error(f"List collections failed: {e}")
         return {"error": str(e)}
+
+
+def get_tools_schema() -> list[dict[str, Any]]:
+    return [
+        {
+            "name": "query",
+            "description": "Perform semantic search over ingested documents. Returns relevant document chunks with similarity scores.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The search query",
+                        "minLength": QUERY_MIN_LEN,
+                        "maxLength": QUERY_MAX_LEN,
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Number of results to return",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": SEMANTIC_MAX_TOP_K,
+                    },
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "pattern": r"^[A-Za-z0-9._-]+$",
+                        },
+                        "description": "Optional tags to filter by",
+                        "maxItems": 10,
+                    },
+                    "collection": {
+                        "type": "string",
+                        "description": "Optional collection name (defaults to 'documents')",
+                        "minLength": 1,
+                        "maxLength": 128,
+                        "pattern": r"^[A-Za-z0-9._-]+$",
+                    },
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "collections",
+            "description": "List all available document collections in the vector store.",
+            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    ]
+
+
+@app.websocket("/mcp")
+async def mcp_socket(ws: WebSocket):
+    await ws.accept()
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                req = json.loads(raw)
+            except Exception:
+                await ws.send_text(
+                    json.dumps({
+                        "jsonrpc": "2.0",
+                        "id": None,
+                        "error": {"code": -32700, "message": "Parse error", "data": {"raw": str(raw)[:200]}},
+                    })
+                )
+                continue
+
+            req_id = req.get("id")
+            method = req.get("method")
+            params = req.get("params", {}) or {}
+
+            try:
+                if method == "initialize":
+                    result = {
+                        "protocolVersion": "2024-10-01",
+                        "serverInfo": {"name": "semantic", "version": "0.1.0"},
+                        "capabilities": {"tools": {"list": True, "call": True}},
+                    }
+                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result}))
+
+                elif method == "tools/list":
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"tools": get_tools_schema()}})
+                    )
+
+                elif method == "tools/call":
+                    name = params.get("name")
+                    arguments = params.get("arguments", {})
+                    if name == "query":
+                        result = await semantic_query(
+                            query=arguments["query"],
+                            top_k=arguments.get("top_k", 5),
+                            tags=arguments.get("tags"),
+                            collection=arguments.get("collection"),
+                        )
+                    elif name == "collections":
+                        result = await list_collections()
+                    else:
+                        await ws.send_text(
+                            json.dumps({
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "error": {"code": -32601, "message": f"Unknown tool: {name}", "data": {"name": name}},
+                            })
+                        )
+                        continue
+
+                    await ws.send_text(
+                        json.dumps(
+                            {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "json", "json": result}]}}
+                        )
+                    )
+
+                elif method == "ping":
+                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}}))
+
+                else:
+                    await ws.send_text(
+                        json.dumps({
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {"code": -32601, "message": "Method not found", "data": {"method": method}},
+                        })
+                    )
+
+            except Exception as e:
+                await ws.send_text(
+                    json.dumps({
+                        "jsonrpc": "2.0",
+                        "id": req_id,
+                        "error": {"code": -32000, "message": str(e), "data": {"type": type(e).__name__}},
+                    })
+                )
+    except WebSocketDisconnect:
+        logger.info("MCP WebSocket disconnected (semantic)")
 
 
 if __name__ == "__main__":
