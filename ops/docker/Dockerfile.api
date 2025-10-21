@@ -1,0 +1,46 @@
+FROM python:3.11-slim as base
+
+ARG ENABLE_GPU_TORCH=0
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_PIP_SYSTEM=1 \
+    PATH="/root/.local/bin:${PATH}" \
+    PYTHONPATH="/app" \
+    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusolver/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusparse/lib:/usr/local/lib/python3.11/site-packages/nvidia/cufft/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_cupti/lib:/usr/local/lib/python3.11/site-packages/nvidia/curand/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvtx/lib"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    ffmpeg \
+    tesseract-ocr \
+    poppler-utils \
+    libglib2.0-0 \
+    libsm6 \
+    libxrender1 \
+    libxext6 \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
+
+COPY requirements.txt /app/requirements.txt
+
+# Some cached layers miss the uv installer, so we re-run it if the binary is absent.
+RUN if [ ! -x /root/.local/bin/uv ]; then \
+        curl -LsSf https://astral.sh/uv/install.sh | sh; \
+    fi
+
+RUN /root/.local/bin/uv pip install --system --upgrade pip \
+    && /root/.local/bin/uv pip install --system --requirement requirements.txt \
+    && if [ "$ENABLE_GPU_TORCH" = "1" ]; then \
+        /root/.local/bin/uv pip install --system --index-url https://download.pytorch.org/whl/cu121 torch==2.5.1; \
+    fi
+
+COPY packages /app/packages
+COPY apps /app/apps
+COPY README.md /app/README.md
+
+EXPOSE 8001
+
+CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -1,0 +1,26 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_PIP_SYSTEM=1 \
+    PATH="/root/.local/bin:${PATH}" \
+    PYTHONPATH="/app"
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && curl -LsSf https://astral.sh/uv/install.sh | sh
+
+COPY requirements/mcp-datetime.txt /app/requirements.txt
+
+RUN /root/.local/bin/uv pip install --system --upgrade pip \
+    && /root/.local/bin/uv pip install --system --requirement requirements.txt
+
+COPY apps/__init__.py /app/apps/__init__.py
+COPY apps/mcp_servers /app/apps/mcp_servers
+
+EXPOSE 7003
+
+CMD ["uvicorn", "apps.mcp_servers.datetime.server:app", "--host", "0.0.0.0", "--port", "7003"]

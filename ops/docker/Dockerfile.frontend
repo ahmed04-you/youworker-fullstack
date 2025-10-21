@@ -1,0 +1,44 @@
+FROM node:20-alpine AS base
+
+ENV NEXT_TELEMETRY_DISABLED=1
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat
+
+FROM base AS deps
+
+WORKDIR /app
+COPY apps/frontend/package*.json ./
+
+RUN npm install --legacy-peer-deps
+
+FROM base AS build
+
+ARG NEXT_PUBLIC_API_BASE_URL
+ARG NEXT_PUBLIC_API_PORT
+
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY apps/frontend ./
+
+ENV NEXT_INTERNAL_API_BASE_URL=http://api:8001 \
+    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
+    NEXT_PUBLIC_API_PORT=${NEXT_PUBLIC_API_PORT}
+
+RUN npm run build
+
+FROM base AS runner
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    NEXT_INTERNAL_API_BASE_URL=http://api:8001 \
+    PORT=3000 \
+    HOSTNAME=0.0.0.0
+
+COPY --from=build /app/public ./public
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

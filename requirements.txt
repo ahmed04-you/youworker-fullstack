@@ -1,0 +1,27 @@
+fastapi
+uvicorn[standard]
+sse-starlette
+pydantic
+pydantic-settings
+httpx
+aiohttp
+qdrant-client
+docling
+docling-core
+playwright
+beautifulsoup4
+lxml
+python-dateutil
+pytz
+tenacity
+
+# Document parsing
+pandas
+pdfplumber
+Pillow
+pytesseract
+
+# Media processing
+ffmpeg-python
+
+# Optional: install PyTorch by building Docker images with ENABLE_GPU_TORCH=1 when GPU acceleration is required.
