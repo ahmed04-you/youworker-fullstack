@@ -382,6 +382,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `EMBED_MODEL` | Embedding model | `embeddinggemma:300m` |
 | `QDRANT_URL` | Qdrant URL | `http://localhost:6333` |
 | `MCP_SERVER_URLS` | Comma-separated MCP URLs | (see compose) |
+| `MCP_REFRESH_INTERVAL` | Seconds between MCP tool refreshes (0 to disable) | `90` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `MAX_AGENT_ITERATIONS` | Max tool iterations | `10` |
 
@@ -440,17 +441,31 @@ docker compose -f ops/compose/docker-compose.yml logs mcp_datetime
 
 ## Extending the System
 
+### MCP Protocol
+
+MCP servers communicate via JSON-RPC 2.0 over WebSocket at `/mcp`.
+
+- Handshake: `initialize` → returns `protocolVersion`, `serverInfo`, `capabilities`
+- Discovery: `tools/list` → returns `{"tools": [...]}`
+- Invocation: `tools/call` → `{"name", "arguments"}` → returns `{"content": [{"type": "json", "json": <result>}]}`
+- Health: keep using `GET /health` for simple checks; a `ping` JSON-RPC method is also supported.
+
+Deprecation: Legacy HTTP tool routes (`POST /tools/list`, `POST /tools/call`) are deprecated and will be removed in a future release. Use the WebSocket endpoint instead.
+
 ### Adding New MCP Servers
 
 1. Create new server in `apps/mcp_servers/new_server/`
-2. Implement `/tools/list` and `/tools/call` endpoints
+2. Implement a WebSocket endpoint at `/mcp` that handles JSON-RPC methods:
+   - `initialize`
+   - `tools/list`
+   - `tools/call`
 3. Add Dockerfile under `ops/docker/`
 4. Add to `ops/compose/docker-compose.yml`
-5. Update `MCP_SERVER_URLS` environment variable
+5. Update `MCP_SERVER_URLS` environment variable (http:// or ws:// are both accepted; the client normalizes to `ws(s)://.../mcp`)
 
 ### Adding New Tools to Existing Servers
 
-Just implement the tool in the MCP server - the registry will discover it automatically on the next `tools/list` call.
+Add the tool to the server's tool schema, and handle it in the `tools/call` JSON-RPC method. The registry will discover it automatically on the next `tools/list` call.
 
 ## Production Deployment
 

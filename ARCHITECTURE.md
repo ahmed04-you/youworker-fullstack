@@ -79,18 +79,18 @@ async def chat_stream(messages, model, tools, think="low"):
 
 ### 4. MCP Client (`packages/mcp/client.py`)
 
-Generic client for any MCP server:
+Generic client using JSON-RPC 2.0 over WebSocket (`/mcp`):
 
 ```python
 class MCPClient:
     async def list_tools() -> list[MCPTool]:
-        # POST /tools/list
+        # JSON-RPC: method="tools/list"
 
     async def call_tool(tool_name, arguments):
-        # POST /tools/call
+        # JSON-RPC: method="tools/call"
 
     async def health_check():
-        # GET /health
+        # Convenience HTTP GET /health (optional)
 ```
 
 **Retry logic**: Uses `tenacity` for automatic retries with exponential backoff.
@@ -124,13 +124,16 @@ class IngestionPipeline:
 
 ## MCP Server Protocol
 
-Each MCP server must implement:
+Each MCP server exposes a WebSocket endpoint at `/mcp` that speaks JSON-RPC 2.0.
 
-### Required Endpoints
+### Required Methods
 
-1. **GET /health** - Health check
-2. **POST /tools/list** - Return available tools
-3. **POST /tools/call** - Execute a tool
+1. `initialize` → returns `protocolVersion`, `serverInfo`, `capabilities`
+2. `tools/list` → returns `{ "tools": [...] }`
+3. `tools/call` → params `{ "name", "arguments" }` → returns tool result content
+4. Optional `ping`
+
+Additionally, servers should expose `GET /health` for simple liveness checks.
 
 ### Tool Schema Format
 
@@ -162,7 +165,7 @@ Each MCP server must implement:
 ```json
 {
   "content": [
-    {"type": "text", "text": "...result..."}
+    {"type": "json", "json": {"...": "structured result"}}
   ]
 }
 ```
@@ -191,7 +194,7 @@ Each MCP server must implement:
 
 6. Registry → MCP Server
    - Route to appropriate server
-   - POST /tools/call
+   - JSON-RPC tools/call over WebSocket
 
 7. MCP Server → Registry
    - Return tool result

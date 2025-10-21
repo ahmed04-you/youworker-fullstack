@@ -19,12 +19,15 @@ class Settings(BaseSettings):
 
     # MCP Servers
     mcp_server_urls: str = ""  # Comma-separated URLs
+    mcp_refresh_interval: int = 90  # Seconds between tool refreshes
 
     # API
     api_host: str = "0.0.0.0"
     api_port: int = 8001
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:8000"
+    root_api_key: str = "dev-root-key"
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker"
 
     # Agent
     max_agent_iterations: int = 10

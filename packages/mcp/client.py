@@ -15,6 +15,7 @@ from urllib.parse import urlparse, urlunparse
 
 from tenacity import retry, stop_after_attempt, wait_exponential
 import websockets
+from websockets.protocol import State
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +117,10 @@ class MCPClient:
 
     async def _connect(self) -> None:
         # Already initialized
-        if self._ws and not self._ws.closed and self._initialized:
+        if self._ws is not None and not self._is_ws_closed(self._ws) and self._initialized:
             return
         # Socket exists but not initialized yet
-        if self._ws and not self._ws.closed and not self._initialized:
+        if self._ws is not None and not self._is_ws_closed(self._ws) and not self._initialized:
             async with self._init_lock:
                 if not self._initialized:
                     await self._initialize()
@@ -176,7 +177,7 @@ class MCPClient:
                 fut.set_exception(MCPTransportError("Client closed"))
         self._pending.clear()
 
-        if self._ws and not self._ws.closed:
+        if self._ws is not None and not self._is_ws_closed(self._ws):
             await self._ws.close()
         self._ws = None
         self._initialized = False
@@ -287,7 +288,7 @@ class MCPClient:
 
     async def _reconnect(self) -> None:
         try:
-            if self._ws and not self._ws.closed:
+            if self._ws is not None and not self._is_ws_closed(self._ws):
                 await self._ws.close()
         finally:
             self._ws = None
@@ -350,6 +351,24 @@ class MCPClient:
                 if not fut.done():
                     fut.set_exception(MCPTransportError("WebSocket receive loop terminated"))
             self._pending.clear()
+
+    def _is_ws_closed(self, ws: Any) -> bool:
+        """Best-effort check whether a websocket is closed.
+
+        Supports both real `websockets` objects (with a `.state` attribute)
+        and simple fakes that expose a boolean `.closed` attribute.
+        """
+        try:
+            state = getattr(ws, "state", None)
+            if state is not None:
+                return state == State.CLOSED
+            closed_flag = getattr(ws, "closed", None)
+            if isinstance(closed_flag, bool):
+                return closed_flag
+        except Exception:
+            pass
+        # If we cannot determine, assume not closed
+        return False
 
     def _parse_tools(self, tools_data: list[dict[str, Any]]) -> list[MCPTool]:
         tools: list[MCPTool] = []

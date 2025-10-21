@@ -3,25 +3,28 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
-  ChevronDown,
   ChevronRight,
-  ChevronUp,
   Clock,
-  Code,
-  Database,
-  FileText,
-  Globe,
-  Search,
-  Sparkles,
-  Terminal,
   Wrench,
   CheckCircle2,
   XCircle,
+  Sparkles,
+  FileText,
+  Edit3,
+  Search,
+  FolderOpen,
+  Terminal,
+  Globe,
+  Bot,
+  Database,
+  Code,
+  GitBranch,
+  TestTube,
+  Hammer,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
-import { Card } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import type { ToolRun } from "@/lib/contexts/chat-context"
@@ -29,18 +32,23 @@ import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 
 export function RightPanel() {
   const [isCollapsed, setIsCollapsed] = useState(false)
-  const [expandedArgs, setExpandedArgs] = useState<Set<string>>(new Set())
   const { toolEvents } = useChatContext()
   const prefersReducedMotion = useMotionPreference()
 
   const getToolIcon = (toolName: string) => {
     const name = toolName.toLowerCase()
-    if (name.includes("search") || name.includes("query")) return Search
-    if (name.includes("file") || name.includes("read")) return FileText
+    if (name.includes("read") || name.includes("file")) return FileText
+    if (name.includes("write") || name.includes("edit")) return Edit3
+    if (name.includes("search") || name.includes("grep")) return Search
+    if (name.includes("glob") || name.includes("find")) return FolderOpen
+    if (name.includes("bash") || name.includes("shell") || name.includes("command")) return Terminal
+    if (name.includes("web") || name.includes("http") || name.includes("fetch")) return Globe
+    if (name.includes("task") || name.includes("agent")) return Bot
     if (name.includes("database") || name.includes("db")) return Database
     if (name.includes("code") || name.includes("execute")) return Code
-    if (name.includes("web") || name.includes("http")) return Globe
-    if (name.includes("shell") || name.includes("command")) return Terminal
+    if (name.includes("git")) return GitBranch
+    if (name.includes("test")) return TestTube
+    if (name.includes("build") || name.includes("compile")) return Hammer
     return Wrench
   }
 
@@ -190,116 +198,45 @@ export function RightPanel() {
                     .reverse()
                     .map((run) => {
                       const ToolIcon = getToolIcon(run.tool)
-                      const isExpanded = expandedArgs.has(run.id)
-                      const hasArgs = run.args && Object.keys(run.args).length > 0
-                      const argsString = hasArgs ? JSON.stringify(run.args) : ""
-                      const truncatedArgs = argsString.length > 70 ? `${argsString.slice(0, 70)}…` : argsString
                       const statusMeta = runStatusStyles[run.status]
+                      const duration = run.latencyMs
+                        ? formatDuration(run.latencyMs)
+                        : run.startedAt && run.completedAt
+                          ? formatDuration(
+                              Math.max(
+                                0,
+                                new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime(),
+                              ),
+                            )
+                          : null
 
                       return (
                         <motion.div
                           key={run.id}
                           className="w-full max-w-full"
-                          initial={prefersReducedMotion ? {} : { opacity: 0, x: 20, scale: 0.98 }}
-                          animate={prefersReducedMotion ? {} : { opacity: 1, x: 0, scale: 1 }}
-                          transition={{ delay: 0.05, type: "spring", stiffness: 280, damping: 26 }}
+                          initial={prefersReducedMotion ? {} : { opacity: 0, y: 8 }}
+                          animate={prefersReducedMotion ? {} : { opacity: 1, y: 0 }}
+                          transition={{ duration: 0.2 }}
                         >
-                          <Card className="relative w-full max-w-full overflow-hidden rounded-2xl border border-border/50 bg-background/70 p-3 shadow-sm">
-                            {!prefersReducedMotion && (
-                              <div
-                                className={cn(
-                                  "pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r opacity-70",
-                                  statusMeta.accent,
-                                )}
-                              />
-                            )}
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex min-w-0 items-center gap-3">
-                                <span className="grid h-9 w-9 place-items-center rounded-xl border border-border/40 bg-muted/40">
-                                  <ToolIcon className="h-4 w-4 text-muted-foreground" />
-                                </span>
-                                <div className="min-w-0 truncate">
-                                  <p className="truncate text-sm font-semibold leading-tight">{run.tool}</p>
-                                  {run.server && (
-                                    <p className="truncate text-xs leading-tight text-muted-foreground">Server · {run.server}</p>
-                                  )}
-                                </div>
+                          <div className="w-full max-w-full overflow-hidden rounded-lg border border-border/40 bg-background/50 p-2.5 shadow-sm">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <ToolIcon className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                              <div className="flex-1 min-w-0 truncate">
+                                <p className="text-xs font-medium truncate">{run.tool}</p>
                               </div>
-                              <Badge
-                                className={cn("flex-shrink-0 items-center gap-1 text-[0.65rem]", statusMeta.className)}
-                              >
-                                {statusMeta.icon}
-                                {statusMeta.label}
-                              </Badge>
-                            </div>
-
-                            {hasArgs && (
-                              <div className="mt-2 rounded-xl border border-border/40 bg-muted/40 p-2 text-xs font-mono text-muted-foreground">
-                                {isExpanded ? (
-                                  <pre className="max-h-48 whitespace-pre-wrap break-all text-muted-foreground">
-                                    {JSON.stringify(run.args, null, 2)}
-                                  </pre>
-                                ) : (
-                                  <div className="truncate">{truncatedArgs}</div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                {duration && (
+                                  <span className="text-[0.65rem] text-muted-foreground font-mono">{duration}</span>
                                 )}
-                                {argsString.length > 70 && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => toggleArgExpansion(run.id)}
-                                    className="mt-1 h-6 px-2 text-[0.65rem]"
-                                  >
-                                    {isExpanded ? (
-                                      <>
-                                        <ChevronUp className="mr-1 h-3 w-3" />
-                                        Comprimi
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ChevronDown className="mr-1 h-3 w-3" />
-                                        Espandi
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
-                              </div>
-                            )}
-
-                            <div className="mt-3 space-y-1.5">
-                              {run.updates.map((update) => (
-                                <div
-                                  key={update.id}
-                                  className="flex items-center gap-2 rounded-xl border border-border/40 bg-background/60 px-2 py-1.5 text-xs text-muted-foreground"
+                                <Badge
+                                  variant="outline"
+                                  className={cn("h-5 px-1.5 text-[0.6rem] gap-1", statusMeta.className)}
                                 >
-                                  <span className="grid h-6 w-6 place-items-center rounded-lg bg-muted/60">
-                                    {getUpdateIcon(update.status)}
-                                  </span>
-                                  <span className="min-w-0 truncate font-medium">{getUpdateLabel(update.status)}</span>
-                                  <span className="ml-auto text-[0.65rem] text-muted-foreground/80">
-                                    {update.ts ? new Date(update.ts).toLocaleTimeString() : "—"}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-
-                            {(run.latencyMs || (run.startedAt && run.completedAt)) && (
-                              <div className="mt-3 flex items-center justify-between text-[0.7rem] text-muted-foreground">
-                                <span>Durata</span>
-                                <span className="font-medium text-foreground">
-                                  {run.latencyMs
-                                    ? formatDuration(run.latencyMs)
-                                    : run.startedAt && run.completedAt
-                                      ? formatDuration(
-                                          Math.max(
-                                            0,
-                                            new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime(),
-                                          ),
-                                        )
-                                      : "—"}
-                                </span>
+                                  {statusMeta.icon}
+                                </Badge>
                               </div>
-                            )}
-                          </Card>
+                            </div>
+                          </div>
                         </motion.div>
                       )
                     })

@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useMemo, useCallback, useEffect } from "react"
 import { motion } from "framer-motion"
-import { Plus, Search, MessageSquare, Upload, Settings, Trash2 } from "lucide-react"
+import { Plus, Search, MessageSquare, Upload, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import Image from "next/image"
@@ -12,32 +12,31 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { useLocalThreads } from "@/lib/hooks"
+import { useLocalThreads, useHealthSWR } from "@/lib/hooks"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { useComposerContext } from "@/lib/contexts/composer-context"
 import { ThreadListSkeleton } from "@/components/chat/thread-list-skeleton"
-import { SettingsSheet } from "@/components/shell/settings-sheet"
 import { IngestSheet } from "@/components/shell/ingest-sheet"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 const quickLinks = [
   { title: "Nuova chat", icon: Plus, href: "/" },
   { title: "Carica file", icon: Upload, action: "ingest" },
-  { title: "Impostazioni", icon: Settings, action: "settings" },
 ]
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isHydrated, setIsHydrated] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [settingsOpen, setSettingsOpen] = useState(false)
   const [ingestOpen, setIngestOpen] = useState(false)
   const pathname = usePathname()
   const prefersReducedMotion = useMotionPreference()
 
   const { threads, activeThreadId, setActiveThreadId, createThread, deleteThread } = useLocalThreads()
+  const { data: health, error: healthError } = useHealthSWR()
   const { clearChat } = useChatContext()
   const { focusComposer } = useComposerContext()
 
@@ -124,10 +123,18 @@ export function LeftSidebar() {
         role="complementary"
         aria-label="Navigazione laterale"
       >
-        {/* Product Mark */}
-        <div className="flex flex-col items-center justify-center gap-3 border-b border-border/50 p-4">
+        {/* Product Mark + API status */}
+        <div className="flex flex-col items-center justify-center gap-2 border-b border-border/50 p-4">
           <Image src="/youco-logo.png" alt="YouCo logo" width={160} height={82} priority />
           <h1 className="text-lg font-semibold">YouWorker.AI</h1>
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground">API</span>
+            {healthError ? (
+              <span className="rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5">Auth/Offline</span>
+            ) : (
+              <span className="rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5">Online</span>
+            )}
+          </div>
         </div>
 
         <Separator className="bg-border/50" />
@@ -223,9 +230,7 @@ export function LeftSidebar() {
             const isActive = link.href ? pathname === link.href : false
             if (link.action) {
               const handleClick = () => {
-                if (link.action === "settings") {
-                  setSettingsOpen(true)
-                } else if (link.action === "ingest") {
+                if (link.action === "ingest") {
                   setIngestOpen(true)
                 }
               }
@@ -256,10 +261,17 @@ export function LeftSidebar() {
             )
           })}
         </nav>
+
+        {/* Theme selector (moved from settings) */}
+        <div className="px-3 pb-3">
+          <div className="flex items-center justify-between rounded-xl border border-border/50 bg-card/40 p-2">
+            <span className="text-xs text-muted-foreground">Tema</span>
+            <ThemeToggle />
+          </div>
+        </div>
       </Container>
 
       {/* Modals */}
-      <SettingsSheet open={settingsOpen} onOpenChange={setSettingsOpen} />
       <IngestSheet open={ingestOpen} onOpenChange={setIngestOpen} />
     </>
   )

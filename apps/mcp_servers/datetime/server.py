@@ -5,6 +5,7 @@ Tools:
 - now: Get current time in specified timezone
 - format: Format an ISO timestamp with custom format and timezone
 - add: Add/subtract time delta from a timestamp
+- parse_natural: Parse natural language dates (e.g., "next Friday 3pm UTC")
 """
 import logging
 import json
@@ -15,6 +16,7 @@ from typing import Any
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 import pytz
 from dateutil.parser import parse as parse_date
+import dateparser
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,18 +53,24 @@ def get_now(tz: str = "UTC") -> dict[str, Any]:
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
         return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
 
+    logger.info(f"get_now called with tz='{tz}'")
+
     try:
         timezone = pytz.timezone(tz)
         now = datetime.now(timezone)
 
-        return {
+        result = {
             "timestamp": now.isoformat(),
             "timezone": tz,
             "formatted": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
         }
+        logger.info(f"get_now success for tz='{tz}': {result}")
+        return result
 
     except Exception as e:
-        return {"error": f"Invalid timezone: {tz}"}
+        error_msg = f"Invalid timezone: {tz}"
+        logger.error(f"get_now failed for tz='{tz}': {str(e)}")
+        return {"error": error_msg}
 
 
 def format_time(iso: str, fmt: str = "%Y-%m-%d %H:%M:%S", tz: str = "UTC") -> dict[str, Any]:
@@ -167,6 +175,43 @@ def add_time(iso: str, delta: dict[str, int], tz: str = "UTC") -> dict[str, Any]
             "formatted": new_dt.strftime("%Y-%m-%d %H:%M:%S %Z"),
         }
 
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def parse_natural(text: str, tz: str | None = None) -> dict[str, Any]:
+    """Parse natural language date/time phrases using dateparser.
+
+    Args:
+        text: Expression to parse (e.g., "in two weeks", "next Friday 3pm UTC")
+        tz: Optional timezone name (default UTC)
+
+    Returns:
+        Parsed timestamp and formatted variants, or error
+    """
+    if not isinstance(text, str) or not text.strip():
+        return {"error": "text must be a non-empty string"}
+    tz = (tz or "UTC").strip()
+    if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
+        return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
+    try:
+        settings = {
+            "TIMEZONE": tz,
+            "RETURN_AS_TIMEZONE_AWARE": True,
+            "PREFER_DATES_FROM": "future",
+            "RELATIVE_BASE": None,
+        }
+        dt = dateparser.parse(text, settings=settings)
+        if dt is None:
+            return {"error": "Could not parse date expression"}
+        # Normalize to requested timezone
+        target_tz = pytz.timezone(tz)
+        dt = dt.astimezone(target_tz)
+        return {
+            "timestamp": dt.isoformat(),
+            "timezone": tz,
+            "formatted": dt.strftime("%Y-%m-%d %H:%M:%S %Z"),
+        }
     except Exception as e:
         return {"error": str(e)}
 
@@ -286,6 +331,31 @@ def get_tools_schema() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "parse_natural",
+            "description": "Parse natural language date/time expressions with optional timezone.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "Natural language date expression",
+                        "minLength": 1,
+                        "maxLength": 256,
+                    },
+                    "tz": {
+                        "type": "string",
+                        "description": "Timezone name (default UTC)",
+                        "default": "UTC",
+                        "minLength": 1,
+                        "maxLength": 64,
+                        "pattern": r"^[A-Za-z0-9._+\-/]+$",
+                    },
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -340,6 +410,11 @@ async def mcp_socket(ws: WebSocket):
                         result = add_time(
                             iso=arguments["iso"],
                             delta=arguments["delta"],
+                            tz=arguments.get("tz", "UTC"),
+                        )
+                    elif name == "parse_natural":
+                        result = parse_natural(
+                            text=arguments["text"],
                             tz=arguments.get("tz", "UTC"),
                         )
                     else:

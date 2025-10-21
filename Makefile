@@ -83,10 +83,16 @@ dev-mcp-semantic:
 dev-mcp-datetime:
 	PYTHONPATH=. python apps/mcp_servers/datetime/server.py
 
+dev-mcp-ingest:
+	PYTHONPATH=. python apps/mcp_servers/ingest/server.py
+
+dev-mcp-units:
+	PYTHONPATH=. python apps/mcp_servers/units/server.py
+
 # Install dependencies
 install:
 	uv pip install --requirement requirements.txt
-	uv run playwright install chromium
+	-uv run playwright install chromium || true
 
 # Install frontend dependencies
 install-frontend:
@@ -99,8 +105,11 @@ setup-env:
 		echo "OLLAMA_BASE_URL=http://localhost:11434" > .env; \
 		echo "CHAT_MODEL=gpt-oss:20b" >> .env; \
 		echo "EMBED_MODEL=embeddinggemma:300m" >> .env; \
-		echo "QDRANT_URL=http://localhost:6333" >> .env; \
-		echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003" >> .env; \
+			echo "QDRANT_URL=http://localhost:6333" >> .env; \
+			echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/youworker" >> .env; \
+			echo "ROOT_API_KEY=dev-root-key" >> .env; \
+			echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005" >> .env; \
+		echo "MCP_REFRESH_INTERVAL=90" >> .env; \
 		echo "LOG_LEVEL=INFO" >> .env; \
 		echo ".env file created"; \
 	else \

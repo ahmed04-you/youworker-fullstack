@@ -64,7 +64,11 @@ async def test_agent_enforces_single_tool_rule(agent_loop, mock_ollama_client):
 
     messages = [ChatMessage(role="user", content="Test query")]
 
-    result = await agent_loop.run_turn_stepper(messages)
+    # Consume streaming generator and capture final result
+    result = None
+    async for event in agent_loop.run_turn_stepper(messages):
+        if event["type"] == "complete":
+            result = event["result"]
 
     # Should enforce single-tool rule
     assert result.requires_followup is True
@@ -86,7 +90,11 @@ async def test_agent_handles_no_tool_calls(agent_loop, mock_ollama_client):
 
     messages = [ChatMessage(role="user", content="Test query")]
 
-    result = await agent_loop.run_turn_stepper(messages)
+    # Consume streaming generator and capture final result
+    result = None
+    async for event in agent_loop.run_turn_stepper(messages):
+        if event["type"] == "complete":
+            result = event["result"]
 
     # Should return final content without tool calls
     assert result.requires_followup is False

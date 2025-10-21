@@ -3,7 +3,7 @@
 import type React from "react"
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { motion } from "framer-motion"
-import { Send, Square, Sparkles } from "lucide-react"
+import { Send, Square, Mic, Volume2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Spotlight } from "@/components/aceternity/spotlight"
@@ -20,7 +20,7 @@ interface ChatComposerProps {
 const MAX_TEXTAREA_HEIGHT = 200
 
 export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProps) {
-  const { isStreaming, enableTools, setEnableTools, suggestedPrompt, setSuggestedPrompt } = useChatContext()
+  const { isStreaming, expectAudio, setExpectAudio, suggestedPrompt, setSuggestedPrompt } = useChatContext()
   const { registerComposer } = useComposerContext()
   const [message, setMessage] = useState("")
   const localTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -44,6 +44,45 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
     if (!message.trim() || isStreaming) return
     onSubmit(message)
     setMessage("")
+  }
+
+  // Minimal STT using Web Speech API (fallback for quick audio input)
+  const [recording, setRecording] = useState(false)
+  const recognitionRef = useRef<any>(null)
+  const startRecording = () => {
+    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition
+    if (!SpeechRecognition) {
+      alert("Riconoscimento vocale non supportato in questo browser.")
+      return
+    }
+    const rec = new SpeechRecognition()
+    rec.lang = "it-IT"
+    rec.interimResults = true
+    rec.continuous = true
+    rec.onresult = (event: any) => {
+      let finalText = ""
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        const res = event.results[i]
+        if (res.isFinal) finalText += res[0].transcript
+        else setMessage(res[0].transcript)
+      }
+      if (finalText.trim()) {
+        setMessage(finalText)
+        // Auto-send when a final result arrives
+        onSubmit(finalText)
+        setRecording(false)
+        rec.stop()
+      }
+    }
+    rec.onerror = () => setRecording(false)
+    rec.onend = () => setRecording(false)
+    recognitionRef.current = rec
+    rec.start()
+    setRecording(true)
+  }
+  const stopRecording = () => {
+    recognitionRef.current?.stop()
+    setRecording(false)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -107,20 +146,32 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
             />
 
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <Button
-                type="button"
-                onClick={() => setEnableTools((prev) => !prev)}
-                aria-pressed={enableTools}
-                className={cn(
-                  "h-11 rounded-2xl px-5 text-sm font-semibold transition-colors ml-3 mb-3",
-                  enableTools
-                    ? "bg-primary text-primary-foreground shadow-md hover:bg-primary/90"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80",
-                )}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {enableTools ? "Tool abilitati" : "Tool disabilitati"}
-              </Button>
+              <div className="flex items-center gap-2 ml-3 mb-3">
+                <Button
+                  type="button"
+                  onClick={recording ? stopRecording : startRecording}
+                  className={cn(
+                    "h-11 rounded-2xl px-4 text-sm font-semibold transition-colors",
+                    recording ? "bg-rose-600 text-white" : "bg-muted text-foreground",
+                  )}
+                >
+                  <Mic className="mr-2 h-4 w-4" />
+                  {recording ? "Interrompi audio" : "Parla"}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setExpectAudio((v) => !v)}
+                  aria-pressed={expectAudio}
+                  className={cn(
+                    "h-11 rounded-2xl px-4 text-sm font-semibold transition-colors",
+                    expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                  )}
+                  title="Risposta audio"
+                >
+                  <Volume2 className="mr-2 h-4 w-4" />
+                  {expectAudio ? "Risposta audio" : "Risposta testo"}
+                </Button>
+              </div>
               {isStreaming ? (
                 <Button
                   type="button"

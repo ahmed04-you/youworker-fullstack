@@ -6,11 +6,10 @@ It continues only after a new completion request that includes the tool result.
 """
 import json
 import logging
-import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import AsyncIterator, Dict, Any, Iterator
+from typing import AsyncIterator, Dict, Any
 
 from packages.llm import OllamaClient, ChatMessage, ToolCall
 from packages.agent.registry import MCPRegistry
@@ -29,6 +28,11 @@ If multiple steps are required:
 3. Then call the next tool if needed
 
 Never emit multiple tool calls in a single response. Always wait for each tool result before proceeding.
+
+Tool usage policy:
+- The ONLY tools you may describe or invoke are those currently provided in the tool schema for this conversation.
+- Do NOT claim access to other tools or environments (e.g., "webbrowser", "wolfram", "python") unless they appear in the provided tool list.
+- When a user asks about your tools or capabilities, list the available tool names exactly as provided (including namespaces such as "web.search") and summarize their purpose from the schema. If no tools are available, state that clearly.
 """
 
 
@@ -81,16 +85,20 @@ class AgentLoop:
         self,
         messages: list[ChatMessage],
         enable_tools: bool = True,
-    ) -> AgentTurnResult:
+    ) -> AsyncIterator[dict]:
         """
         Execute a single agent turn with strict single-tool stepper.
+
+        NOW YIELDS STREAMING CHUNKS in real-time as they arrive from Ollama.
 
         Args:
             messages: Conversation history
             enable_tools: Whether to enable tool calling
 
-        Returns:
-            AgentTurnResult with thinking, content, and/or tool_calls
+        Yields:
+            Streaming events:
+            - {"type": "chunk", "content": str} for each content chunk from LLM
+            - {"type": "complete", "result": AgentTurnResult} when turn is complete
         """
         # Ensure system prompt is present
         if not messages or messages[0].role != "system":
@@ -117,9 +125,11 @@ class AgentLoop:
             if chunk.thinking:
                 thinking_buffer += chunk.thinking
 
-            # Accumulate content
+            # Stream AND accumulate content
             if chunk.content:
                 content_buffer += chunk.content
+                # YIELD IMMEDIATELY for real streaming
+                yield {"type": "chunk", "content": chunk.content}
 
             # Accumulate tool calls
             if chunk.tool_calls:
@@ -142,21 +152,28 @@ class AgentLoop:
             # Keep only the first tool call
             selected_tool_call = tool_calls_buffer[0]
 
-            return AgentTurnResult(
-                thinking=thinking_buffer,
-                content=content_buffer,  # Don't stream this yet
-                tool_calls=[selected_tool_call],
-                requires_followup=True,
-            )
+            yield {
+                "type": "complete",
+                "result": AgentTurnResult(
+                    thinking=thinking_buffer,
+                    content=content_buffer,
+                    tool_calls=[selected_tool_call],
+                    requires_followup=True,
+                )
+            }
+            return
 
         # No tool calls - return final content
         logger.info("Agent completed turn without tool calls")
-        return AgentTurnResult(
-            thinking=thinking_buffer,
-            content=content_buffer,
-            tool_calls=None,
-            requires_followup=False,
-        )
+        yield {
+            "type": "complete",
+            "result": AgentTurnResult(
+                thinking=thinking_buffer,
+                content=content_buffer,
+                tool_calls=None,
+                requires_followup=False,
+            )
+        }
 
     async def execute_tool_call(self, tool_call: ToolCall) -> str:
         """
@@ -194,11 +211,11 @@ class AgentLoop:
         Run agent until completion, handling tool calls automatically.
 
         This is the full agentic loop that:
-        1. Runs turn
+        1. Runs turn (NOW WITH REAL STREAMING)
         2. If tool call, executes it and appends result
         3. Runs another turn with the tool result
         4. Repeats until no more tool calls
-        5. Streams final content to caller
+        5. Streams content chunks in real-time as they arrive
 
         Args:
             messages: Initial conversation
@@ -215,16 +232,26 @@ class AgentLoop:
         while iterations < max_iterations:
             iterations += 1
 
-            # Run one turn
-            result = await self.run_turn_stepper(conversation, enable_tools=enable_tools)
+            # Run one turn and process streaming events
+            turn_result = None
+            final_content = ""
+
+            async for event in self.run_turn_stepper(conversation, enable_tools=enable_tools):
+                if event["type"] == "chunk":
+                    # Stream content chunk immediately to client
+                    yield {"event": "token", "data": {"text": event["content"]}}
+                    final_content += event["content"]
+
+                elif event["type"] == "complete":
+                    turn_result = event["result"]
 
             # Log thinking (but don't stream it)
-            if result.thinking:
-                logger.debug(f"Thinking: {result.thinking[:200]}...")
+            if turn_result and turn_result.thinking:
+                logger.debug(f"Thinking: {turn_result.thinking[:200]}...")
 
             # Check if tool call is required
-            if result.requires_followup and result.tool_calls:
-                tool_call = result.tool_calls[0]
+            if turn_result and turn_result.requires_followup and turn_result.tool_calls:
+                tool_call = turn_result.tool_calls[0]
 
                 started_at = datetime.now(timezone.utc)
                 timer_start = time.perf_counter()
@@ -242,7 +269,7 @@ class AgentLoop:
                 conversation.append(
                     ChatMessage(
                         role="assistant",
-                        content=result.content,
+                        content=turn_result.content,
                         tool_calls=[tool_call],
                     )
                 )
@@ -265,6 +292,11 @@ class AgentLoop:
                 logger.info(f"Tool completed, continuing to iteration {iterations + 1}")
                 tool_calls_executed += 1
 
+                # Include a small result preview to allow persistence without huge payloads
+                preview = (tool_result or "")
+                if isinstance(preview, str) and len(preview) > 2000:
+                    preview = preview[:2000]
+
                 yield {
                     "event": "tool",
                     "data": {
@@ -272,11 +304,12 @@ class AgentLoop:
                         "status": "end",
                         "ts": finished_at.isoformat(),
                         "latency_ms": duration_ms,
+                        "result_preview": preview,
                     },
                 }
 
                 # Check for multiple tool calls violation
-                if len(result.tool_calls) > 1:
+                if len(turn_result.tool_calls) > 1:
                     # Add corrective system message
                     conversation.append(
                         ChatMessage(
@@ -295,11 +328,7 @@ class AgentLoop:
                 # No tool calls - final answer reached
                 logger.info(f"Agent completed after {iterations} iterations")
 
-                final_text = result.content or ""
-                if final_text:
-                    for token in self._tokenize_for_streaming(final_text):
-                        yield {"event": "token", "data": {"text": token}}
-
+                # Content was already streamed in real-time, just send done event
                 yield {
                     "event": "done",
                     "data": {
@@ -308,7 +337,7 @@ class AgentLoop:
                             "tool_calls": tool_calls_executed,
                             "status": "success",
                         },
-                        "final_text": final_text,
+                        "final_text": final_content,
                     },
                 }
 
@@ -329,14 +358,3 @@ class AgentLoop:
                     "final_text": "",
                 },
             }
-
-    @staticmethod
-    def _tokenize_for_streaming(text: str) -> Iterator[str]:
-        """
-        Split text into display-friendly tokens while preserving whitespace.
-
-        We use Regex to keep trailing whitespace attached to tokens so that the
-        frontend renders spacing correctly.
-        """
-        for match in re.finditer(r"\S+\s*", text):
-            yield match.group(0)

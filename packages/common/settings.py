@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8001
     log_level: str = "INFO"
+    root_api_key: str = "dev-root-key"
+
+    # Database
+    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker"
 
     # Ingestion
     ingest_max_concurrency: int = 4

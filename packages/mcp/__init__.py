@@ -1,3 +1,9 @@
-from .client import MCPClient, MCPTool
+from .client import MCPClient, MCPTool, MCPError, MCPTransportError, MCPRpcError
 
-__all__ = ["MCPClient", "MCPTool"]
+__all__ = [
+    "MCPClient",
+    "MCPTool",
+    "MCPError",
+    "MCPTransportError",
+    "MCPRpcError",
+]

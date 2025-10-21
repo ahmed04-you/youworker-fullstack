@@ -1,11 +1,15 @@
 """
-MCP server for web search and fetch capabilities.
+MCP server for web research and fetching capabilities.
 
 Tools:
 - search: Web search via DuckDuckGo HTML
-- fetch: Fetch and extract content from URL
+- fetch: Fetch and extract basic content from URL
+- head: Fast HTTP HEAD metadata probe
+- extract_readable: Extract main article content with readability
+- crawl: Crawl a page and its outgoing links (depth 1–2)
 """
 import asyncio
+import os
 import ipaddress
 import json
 import logging
@@ -15,6 +19,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from readability import Document
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from bs4 import BeautifulSoup
 
@@ -33,6 +38,9 @@ MAX_TOP_K = 10
 QUERY_MIN_LEN = 3
 QUERY_MAX_LEN = 256
 SITE_PATTERN = re.compile(r"^[A-Za-z0-9.-]+$")
+CRAWL_MAX_DEPTH = 2
+CRAWL_MAX_PAGES = 10
+RESPECT_ROBOTS_DEFAULT = True
 
 
 @app.on_event("startup")
@@ -182,6 +190,245 @@ async def fetch_url(url: str, max_links: int = 10) -> dict[str, Any]:
 
     logger.info(f"Fetched {url}: {len(text)} chars, {len(links)} links")
     return {"title": title, "url": url, "text": text[:5000], "links": links}
+
+
+async def head_url(url: str, follow_redirects: bool = False) -> dict[str, Any]:
+    """Perform a fast HEAD request to probe metadata with strict SSRF guard."""
+    if not http_client:
+        return {"error": "HTTP client not initialized"}
+    try:
+        safe_url = await _ensure_safe_url(url)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        # Tiny timeouts for snappy probes
+        resp = await http_client.request(
+            "HEAD",
+            safe_url,
+            timeout=httpx.Timeout(3.0, connect=3.0, read=3.0),
+            follow_redirects=follow_redirects,
+        )
+        headers = resp.headers
+        result = {
+            "url": str(resp.request.url),
+            "status": resp.status_code,
+            "content_type": headers.get("content-type"),
+            "content_length": headers.get("content-length"),
+            "last_modified": headers.get("last-modified"),
+            "server": headers.get("server"),
+        }
+        # Include redirect location hint if present
+        loc = headers.get("location")
+        if loc:
+            result["location"] = loc
+        return result
+    except Exception as exc:
+        logger.error(f"HEAD failed for {url}: {exc}")
+        return {"error": f"HEAD request failed: {exc}", "url": url}
+
+
+async def extract_readable(url: str, include_links: bool = False, max_chars: int = 5000) -> dict[str, Any]:
+    """Extract main article content and metadata using readability-lxml."""
+    if not http_client:
+        return {"error": "HTTP client not initialized"}
+
+    if not isinstance(max_chars, int) or max_chars < 200 or max_chars > 50_000:
+        return {"error": "max_chars must be between 200 and 50000"}
+
+    try:
+        safe_url = await _ensure_safe_url(url)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    try:
+        resp = await _request_with_retries(
+            "GET",
+            safe_url,
+            headers={"Accept": "text/html"},
+        )
+    except Exception as exc:
+        logger.error(f"Readable fetch failed for {url}: {exc}")
+        return {"error": f"Fetch failed: {exc}", "url": url}
+
+    content_type = resp.headers.get("content-type", "").lower()
+    if "text/html" not in content_type:
+        return {"error": f"Unsupported content type: {content_type or 'unknown'}", "url": url}
+
+    html = resp.text
+    if len(html) > MAX_RESPONSE_BYTES:
+        html = html[:MAX_RESPONSE_BYTES]
+
+    doc = Document(html)
+    title = (doc.short_title() or doc.title() or "").strip()
+    summary_html = doc.summary() or ""
+    soup = BeautifulSoup(summary_html, "html.parser")
+    # Strip scripts/boilerplate
+    for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+        tag.decompose()
+    text = soup.get_text("\n", strip=True)
+
+    links: list[dict[str, str]] = []
+    if include_links:
+        for a in soup.find_all("a", href=True):
+            href = a["href"].strip()
+            if href.startswith("http"):
+                link_text = a.get_text(strip=True)
+                if link_text:
+                    links.append({"url": href, "text": link_text})
+
+    # Extract page-level metadata from original HTML
+    full_soup = BeautifulSoup(html, "html.parser")
+    meta: dict[str, Any] = {}
+    for name in ("description", "og:description", "og:site_name", "author"):
+        tag = full_soup.find("meta", attrs={"name": name}) or full_soup.find("meta", attrs={"property": name})
+        if tag and tag.get("content"):
+            meta[name] = tag.get("content")
+
+    return {
+        "title": title,
+        "url": url,
+        "text": text[:max_chars],
+        "metadata": meta,
+        **({"links": links} if include_links else {}),
+    }
+
+
+async def crawl(
+    url: str,
+    depth: int = 1,
+    max_pages: int = 5,
+    same_host: bool = True,
+) -> dict[str, Any]:
+    """Crawl a page and its outgoing links up to depth 1–2.
+
+    Returns titles, URLs, and readable text snippets for each visited page.
+    """
+    if not http_client:
+        return {"error": "HTTP client not initialized"}
+    if not isinstance(depth, int) or depth < 0 or depth > CRAWL_MAX_DEPTH:
+        return {"error": f"depth must be between 0 and {CRAWL_MAX_DEPTH}"}
+    if not isinstance(max_pages, int) or max_pages < 1 or max_pages > CRAWL_MAX_PAGES:
+        return {"error": f"max_pages must be between 1 and {CRAWL_MAX_PAGES}"}
+
+    try:
+        start_url = await _ensure_safe_url(url)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    start_host = urlparse(start_url).hostname
+
+    # Simple robots.txt respect (optional, default enabled)
+    respect_robots = os.environ.get("WEB_CRAWL_RESPECT_ROBOTS", "1").strip() not in {"0", "false", "False"}
+    robots_cache: dict[str, set[str]] = {}
+
+    async def allowed_by_robots(target: str) -> bool:
+        if not respect_robots:
+            return True
+        parsed = urlparse(target)
+        host = parsed.hostname or ""
+        scheme = parsed.scheme or "http"
+        base = f"{scheme}://{host}"
+        if base not in robots_cache:
+            # Fetch robots.txt once
+            try:
+                resp = await http_client.request(
+                    "GET",
+                    f"{base}/robots.txt",
+                    timeout=httpx.Timeout(3.0, connect=3.0, read=3.0),
+                )
+                if resp.status_code == 200 and len(resp.content) < 200_000:
+                    robots_cache[base] = set(resp.text.splitlines())
+                else:
+                    robots_cache[base] = set()
+            except Exception:
+                robots_cache[base] = set()
+
+        # Very light check: disallow simple path prefixes listed in Disallow for all (*)
+        lines = robots_cache.get(base) or set()
+        path = parsed.path or "/"
+        agent_star = False
+        disallows: list[str] = []
+        for line in lines:
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            if s.lower().startswith("user-agent:"):
+                agent = s.split(":", 1)[1].strip()
+                agent_star = (agent == "*")
+            elif agent_star and s.lower().startswith("disallow:"):
+                rule = s.split(":", 1)[1].strip()
+                if rule:
+                    disallows.append(rule)
+        for rule in disallows:
+            if path.startswith(rule):
+                return False
+        return True
+
+    # BFS crawl
+    from collections import deque
+    visited: set[str] = set()
+    queue = deque([(start_url, 0)])
+    results: list[dict[str, Any]] = []
+
+    while queue and len(results) < max_pages:
+        current, d = queue.popleft()
+        if current in visited:
+            continue
+        visited.add(current)
+
+        # Host restriction
+        if same_host and urlparse(current).hostname != start_host:
+            continue
+        if not await allowed_by_robots(current):
+            continue
+
+        # Fetch page
+        try:
+            resp = await _request_with_retries(
+                "GET",
+                current,
+                headers={"Accept": "text/html"},
+            )
+        except Exception:
+            continue
+
+        ctype = resp.headers.get("content-type", "").lower()
+        if "text/html" not in ctype:
+            continue
+        html = resp.text
+        if len(html) > MAX_RESPONSE_BYTES:
+            html = html[:MAX_RESPONSE_BYTES]
+
+        # Extract readable text snippet
+        doc = Document(html)
+        title = (doc.short_title() or doc.title() or "").strip()
+        snippet_html = doc.summary() or ""
+        snippet_soup = BeautifulSoup(snippet_html, "html.parser")
+        for tag in snippet_soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+        snippet_text = snippet_soup.get_text(" ", strip=True)[:500]
+
+        if title or snippet_text:
+            results.append({"title": title, "url": current, "snippet": snippet_text})
+
+        # Enqueue outgoing links up to depth
+        if d < depth:
+            page_soup = BeautifulSoup(html, "html.parser")
+            for a in page_soup.find_all("a", href=True):
+                href = a["href"].strip()
+                if not href or not href.startswith("http"):
+                    continue
+                try:
+                    safe = await _ensure_safe_url(href)
+                except ValueError:
+                    continue
+                if same_host and urlparse(safe).hostname != start_host:
+                    continue
+                if safe not in visited:
+                    queue.append((safe, d + 1))
+
+    return {"start_url": url, "pages": results}
 
 
 async def _request_with_retries(
@@ -344,6 +591,96 @@ def get_tools_schema() -> list[dict[str, Any]]:
                 "additionalProperties": False,
             },
         },
+        {
+            "name": "head",
+            "description": "Fast HTTP HEAD probe. Returns status and key headers (content-type, length, last-modified, server).",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to probe",
+                        "minLength": 8,
+                        "maxLength": 2048,
+                        "pattern": r"^https?://.+$",
+                    },
+                    "follow_redirects": {
+                        "type": "boolean",
+                        "description": "Whether to follow redirects",
+                        "default": False,
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "extract_readable",
+            "description": "Extract main article content and metadata from a URL using readability.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "The URL to extract",
+                        "minLength": 8,
+                        "maxLength": 2048,
+                        "pattern": r"^https?://.+$",
+                    },
+                    "include_links": {
+                        "type": "boolean",
+                        "description": "Include hyperlinks from the main content",
+                        "default": False,
+                    },
+                    "max_chars": {
+                        "type": "integer",
+                        "description": "Maximum number of characters of text to return",
+                        "default": 5000,
+                        "minimum": 200,
+                        "maximum": 50000,
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
+        {
+            "name": "crawl",
+            "description": "Crawl a page and outgoing links up to depth 1–2; returns titles, URLs, and readable snippets.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        "type": "string",
+                        "description": "Starting URL",
+                        "minLength": 8,
+                        "maxLength": 2048,
+                        "pattern": r"^https?://.+$",
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": "Maximum crawl depth (0=current page only)",
+                        "default": 1,
+                        "minimum": 0,
+                        "maximum": CRAWL_MAX_DEPTH,
+                    },
+                    "max_pages": {
+                        "type": "integer",
+                        "description": "Maximum pages to visit",
+                        "default": 5,
+                        "minimum": 1,
+                        "maximum": CRAWL_MAX_PAGES,
+                    },
+                    "same_host": {
+                        "type": "boolean",
+                        "description": "Restrict crawl to the same host",
+                        "default": True,
+                    },
+                },
+                "required": ["url"],
+                "additionalProperties": False,
+            },
+        },
     ]
 
 
@@ -397,6 +734,24 @@ async def mcp_socket(ws: WebSocket):
                         result = await fetch_url(
                             url=arguments["url"],
                             max_links=arguments.get("max_links", 10),
+                        )
+                    elif name == "head":
+                        result = await head_url(
+                            url=arguments["url"],
+                            follow_redirects=arguments.get("follow_redirects", False),
+                        )
+                    elif name == "extract_readable":
+                        result = await extract_readable(
+                            url=arguments["url"],
+                            include_links=arguments.get("include_links", False),
+                            max_chars=arguments.get("max_chars", 5000),
+                        )
+                    elif name == "crawl":
+                        result = await crawl(
+                            url=arguments["url"],
+                            depth=arguments.get("depth", 1),
+                            max_pages=arguments.get("max_pages", 5),
+                            same_host=arguments.get("same_host", True),
                         )
                     else:
                         await ws.send_text(

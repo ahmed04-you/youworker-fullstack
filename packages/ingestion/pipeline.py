@@ -96,11 +96,12 @@ class IngestionPipeline:
         recursive: bool | None = None,
         from_web: bool = False,
         tags: Sequence[str] | None = None,
+        collection_name: str | None = None,
     ) -> IngestionReport:
         """High-level ingestion API for local paths or web resources."""
         # Re-ensure collections in case Qdrant restarted after pipeline init.
         self._active_ingestions += 1
-        ensure_collections(self._client, self._settings)
+        ensure_collections(self._client, self._settings, collection_name=collection_name)
 
         recursive = self._config.recursive if recursive is None else recursive
         tags = list(tags or [])
@@ -162,7 +163,12 @@ class IngestionPipeline:
                 )
 
             if points_batch:
-                upsert_points(points_batch, client=self._client, settings=self._settings)
+                upsert_points(
+                    points_batch,
+                    client=self._client,
+                    settings=self._settings,
+                    collection_name=collection_name,
+                )
 
             report = IngestionReport(
                 total_files=len(items),

@@ -26,7 +26,9 @@ def get_client(settings: "Settings") -> QdrantClient:
     return QdrantClient(url=settings.qdrant_url)
 
 
-def ensure_collections(client: QdrantClient, settings: "Settings") -> None:
+def ensure_collections(
+    client: QdrantClient, settings: "Settings", *, collection_name: str | None = None
+) -> None:
     """
     Ensure required collections exist in Qdrant.
 
@@ -34,7 +36,7 @@ def ensure_collections(client: QdrantClient, settings: "Settings") -> None:
         client: Qdrant client
         settings: Application settings
     """
-    collection_name = settings.qdrant_collection
+    collection_name = collection_name or settings.qdrant_collection
     embedding_dim = settings.embedding_dim
 
     try:
@@ -63,6 +65,8 @@ def upsert_points(
     points: list[PointStruct],
     client: QdrantClient,
     settings: "Settings",
+    *,
+    collection_name: str | None = None,
 ) -> None:
     """
     Upsert points to Qdrant collection.
@@ -75,7 +79,7 @@ def upsert_points(
     if not points:
         return
 
-    collection_name = settings.qdrant_collection
+    collection_name = collection_name or settings.qdrant_collection
 
     try:
         client.upsert(
