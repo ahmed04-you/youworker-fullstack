@@ -28,23 +28,11 @@ async def init_db(settings: Settings) -> None:
     _session_factory = async_sessionmaker(bind=_engine, expire_on_commit=False)
     # Fail hard if DB is down and run migrations to head
     try:
-        # Run Alembic migrations programmatically
-        from alembic import command
-        from alembic.config import Config
-        import pathlib
-
-        here = pathlib.Path(__file__).resolve().parents[2]  # repo root
-        alembic_dir = here / "ops" / "alembic"
-        cfg = Config(str(alembic_dir / "alembic.ini"))
-        # Override database URL
-        cfg.set_main_option("sqlalchemy.url", database_url)
-        # Set script_location dynamically
-        cfg.set_main_option("script_location", str(alembic_dir))
-        command.upgrade(cfg, "head")
-    except Exception as exc:
-        # As a fallback try to create all (dev convenience); still fail hard to surface issues
+        # TODO: Fix Alembic migration hanging issue
+        # For now, just ensure tables exist using SQLAlchemy
         async with _engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
+    except Exception as exc:
         raise
 
 

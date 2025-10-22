@@ -3,6 +3,7 @@ uvicorn[standard]
 sse-starlette
 pydantic
 pydantic-settings
+python-multipart
 httpx
 aiohttp
 websockets
@@ -12,7 +13,6 @@ asyncpg==0.29.0
 alembic==1.13.3
 docling
 docling-core
-playwright
 beautifulsoup4
 lxml
 python-dateutil

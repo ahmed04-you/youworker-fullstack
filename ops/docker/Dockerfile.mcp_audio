@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl build-essential python3-dev \
+    curl build-essential python3-dev wget \
     && rm -rf /var/lib/apt/lists/* \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
@@ -17,6 +17,14 @@ COPY requirements/mcp-audio.txt /app/requirements.txt
 
 RUN /root/.local/bin/uv pip install --system --upgrade pip \
     && /root/.local/bin/uv pip install --system --requirement requirements.txt
+
+# Download Italian Piper TTS voice models (MIT License)
+# Using it_IT-paola-medium for smooth, natural female voice
+RUN mkdir -p /app/models/tts \
+    && cd /app/models/tts \
+    && wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx \
+    && wget -q https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/paola/medium/it_IT-paola-medium.onnx.json \
+    && echo "Italian TTS voice model (paola-medium) downloaded successfully"
 
 COPY apps /app/apps
 

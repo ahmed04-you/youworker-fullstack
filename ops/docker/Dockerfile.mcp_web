@@ -10,14 +10,11 @@ WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    wget \
     && rm -rf /var/lib/apt/lists/* \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 COPY requirements/mcp-web.txt /app/requirements.txt
 
-# Playwright misdetects Debian 13 (trixie) as Ubuntu 20.04, so we override the host
-# platform during installation to use the Debian 12 dependency list that matches.
 RUN /root/.local/bin/uv pip install --system --upgrade pip \
     && /root/.local/bin/uv pip install --system --requirement requirements.txt
 

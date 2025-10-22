@@ -11,9 +11,9 @@ export const metadata: Metadata = {
   description: "Assistente operativo basato su IA con integrazione MCP",
   generator: "v0.app",
   icons: {
-    icon: { url: "/placeholder-logo.svg", type: "image/svg+xml" },
-    shortcut: { url: "/placeholder-logo.svg", type: "image/svg+xml" },
-    apple: { url: "/placeholder-logo.png", type: "image/png" },
+    icon: { url: "/youco-logo.png", type: "image/png" },
+    shortcut: { url: "/youco-logo.png", type: "image/png" },
+    apple: { url: "/youco-logo.png", type: "image/png" },
   },
 }
 

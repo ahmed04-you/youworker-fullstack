@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     ingest_ocr_device: str | None = None
     ingest_transcription_device: str | None = None
 
+    # Ingest HTTP settings
+    ingest_user_agent: str | None = None
+
     # Web crawling
     crawl_max_depth: int = 2
     crawl_max_pages: int = 50

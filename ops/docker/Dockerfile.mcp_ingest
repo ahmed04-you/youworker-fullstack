@@ -20,6 +20,7 @@ RUN /root/.local/bin/uv pip install --system --upgrade pip \
     && /root/.local/bin/uv pip install --system --requirement requirements.txt
 
 COPY packages /app/packages
+COPY ops/alembic /app/ops/alembic
 COPY apps/__init__.py /app/apps/__init__.py
 COPY apps/mcp_servers /app/apps/mcp_servers
 

@@ -20,7 +20,6 @@ import { IngestSheet } from "@/components/shell/ingest-sheet"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
-import { ThemeToggle } from "@/components/ui/theme-toggle"
 
 const quickLinks = [
   { title: "Nuova chat", icon: Plus, href: "/" },
@@ -110,6 +109,11 @@ export function LeftSidebar() {
   }
 
   const Container = prefersReducedMotion ? "aside" : motion.aside
+  const statusBadgeClasses = cn(
+    "rounded-md px-2 py-0.5 text-xs font-medium",
+    healthError ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  )
+  const statusText = healthError ? "Auth/Offline" : "Online"
 
   return (
     <>
@@ -123,24 +127,8 @@ export function LeftSidebar() {
         role="complementary"
         aria-label="Navigazione laterale"
       >
-        {/* Product Mark + API status */}
-        <div className="flex flex-col items-center justify-center gap-2 border-b border-border/50 p-4">
-          <Image src="/youco-logo.png" alt="YouCo logo" width={160} height={82} priority />
-          <h1 className="text-lg font-semibold">YouWorker.AI</h1>
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-muted-foreground">API</span>
-            {healthError ? (
-              <span className="rounded-md bg-rose-500/10 text-rose-600 dark:text-rose-400 px-2 py-0.5">Auth/Offline</span>
-            ) : (
-              <span className="rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 px-2 py-0.5">Online</span>
-            )}
-          </div>
-        </div>
-
-        <Separator className="bg-border/50" />
-
         {/* Thread List with Search */}
-        <div className="flex flex-1 min-h-0 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="px-3 pt-3 pb-2">
             <div className="relative">
               <Search
@@ -262,11 +250,15 @@ export function LeftSidebar() {
           })}
         </nav>
 
-        {/* Theme selector (moved from settings) */}
-        <div className="px-3 pb-3">
-          <div className="flex items-center justify-between rounded-xl border border-border/50 bg-card/40 p-2">
-            <span className="text-xs text-muted-foreground">Tema</span>
-            <ThemeToggle />
+        {/* Product Mark + API status */}
+        <div className="border-t border-border/50 px-3 pb-4 pt-3">
+          <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 p-3">
+            <Image src="/youco-logo.png" alt="YouCo logo" width={48} height={24} priority />
+            <div className="flex flex-1 flex-col">
+              <span className="text-sm font-medium">YouWorker.AI</span>
+              <span className="text-xs text-muted-foreground">Stato API</span>
+            </div>
+            <span className={statusBadgeClasses}>{statusText}</span>
           </div>
         </div>
       </Container>

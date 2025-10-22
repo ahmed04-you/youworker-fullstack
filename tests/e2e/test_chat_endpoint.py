@@ -18,7 +18,7 @@ API_BASE_URL = "http://localhost:8001"
 @pytest.fixture
 async def api_client():
     """Create async HTTP client."""
-    async with httpx.AsyncClient(timeout=300.0) as client:
+    async with httpx.AsyncClient(timeout=300.0, headers={"X-API-Key": "dev-root-key"}) as client:
         yield client
 
 
@@ -133,7 +133,11 @@ async def test_agent_single_tool_enforcement():
             "enable_tools": True,
         }
 
-        response = await client.post(f"{API_BASE_URL}/v1/chat", json=request_data)
+        response = await client.post(
+            f"{API_BASE_URL}/v1/chat",
+            json=request_data,
+            headers={"X-API-Key": "dev-root-key"},
+        )
         assert response.status_code == 200
 
         data = response.json()

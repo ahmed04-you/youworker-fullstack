@@ -10,12 +10,12 @@ const BackgroundBeams = dynamic(
     ssr: false,
   },
 )
-import { LeftSidebar } from "@/components/shell/left-sidebar"
 import { RightPanel } from "@/components/shell/right-panel"
 import { MobileToolSheet } from "@/components/shell/mobile-tool-sheet"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 import { ComposerProvider } from "@/lib/contexts/composer-context"
 import { ChatProvider } from "@/lib/contexts/chat-context"
+import { ModeProvider } from "@/lib/mode"
 
 export default function ShellLayout({
   children,
@@ -26,22 +26,22 @@ export default function ShellLayout({
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="youworker-theme">
-      <ChatProvider>
-        <ComposerProvider>
-          <div className="relative flex h-screen overflow-hidden">
-            {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
+      <ModeProvider>
+        <ChatProvider>
+          <ComposerProvider>
+            <div className="relative flex h-screen overflow-hidden">
+              {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
 
-            <LeftSidebar />
+              <main className="relative z-10 flex-1 flex flex-col overflow-hidden">{children}</main>
 
-            <main className="relative z-10 flex-1 flex flex-col overflow-hidden">{children}</main>
+              <RightPanel />
+              <MobileToolSheet />
 
-            <RightPanel />
-            <MobileToolSheet />
-
-            <Toaster />
-          </div>
-        </ComposerProvider>
-      </ChatProvider>
+              <Toaster />
+            </div>
+          </ComposerProvider>
+        </ChatProvider>
+      </ModeProvider>
     </ThemeProvider>
   )
 }

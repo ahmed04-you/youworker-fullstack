@@ -156,7 +156,7 @@ export function RightPanel() {
               className="flex flex-1 items-center gap-2"
             >
               <Wrench className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold">Cronolgia tool</h2>
+              <h2 className="font-semibold">Cronologia strumenti</h2>
               {toolEvents.length > 0 && (
                 <Badge variant="secondary" className="ml-auto">
                   {toolEvents.length}

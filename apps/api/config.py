@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     # Agent
     max_agent_iterations: int = 10
 
+    # Ingestion paths
+    ingest_upload_root: str = "/data/uploads"
+    ingest_examples_dir: str = "/data/examples"
+    ingest_user_agent: str | None = None
+
     class Config:
         env_file = ".env"
         case_sensitive = False

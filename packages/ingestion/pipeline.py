@@ -17,11 +17,12 @@ from uuid import uuid4
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import PointStruct
 
+import httpx
+
 from packages.common import Settings, get_logger, get_settings
 from packages.llm import Embedder
 from packages.vectorstore import ensure_collections, get_client, upsert_points
 from packages.vectorstore.schema import DocumentSource
-from packages.web import PlaywrightClient, PlaywrightConfig
 
 from packages.parsers import (
     chunk_token_ranges,
@@ -1123,29 +1124,33 @@ class IngestionPipeline:
         return IngestionItem(path=path, uri=uri, mime=mime, bytes_size=bytes_size)
 
     async def _fetch_web_resources(self, url: str) -> list[IngestionItem]:
-        async with PlaywrightClient(PlaywrightConfig(), settings=self._settings) as client:
-            pages = await client.crawl(url, depth=self._settings.crawl_max_depth)
-
         tmp_dir = Path(tempfile.mkdtemp(prefix="ingest-web-"))
         self._temp_dirs.append(tmp_dir)
 
-        items: list[IngestionItem] = []
-        for idx, page in enumerate(pages[: self._settings.crawl_max_pages]):
-            html_content = page.get("html") or ""
-            if not html_content:
-                continue
-            target = tmp_dir / f"page-{idx}.html"
-            target.write_text(html_content, encoding="utf-8")
-            page_url = page.get("url") or url
-            items.append(
-                IngestionItem(
-                    path=target,
-                    uri=page_url,
-                    mime="text/html",
-                    bytes_size=target.stat().st_size,
-                )
+        user_agent = (
+            getattr(self._settings, "ingest_user_agent", None)
+            or "YouWorkerIngest/1.0 (+https://youworker.example)"
+        )
+
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, headers={"User-Agent": user_agent}) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+
+        html_content = response.text
+        if not html_content:
+            return []
+
+        target = tmp_dir / "page-0.html"
+        target.write_text(html_content, encoding="utf-8")
+        final_url = str(response.url) if response.url else url
+        return [
+            IngestionItem(
+                path=target,
+                uri=final_url,
+                mime="text/html",
+                bytes_size=target.stat().st_size,
             )
-        return items
+        ]
 
     def _determine_source(self, mime: str | None, *, from_web: bool) -> DocumentSource:
         mime = (mime or "").lower()

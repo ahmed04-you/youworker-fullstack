@@ -313,3 +313,166 @@ async def grant_user_collection_access(session: AsyncSession, user_id: int, coll
     if not uca:
         session.add(UserCollectionAccess(user_id=user_id, collection_id=col.id))
         await session.flush()
+
+
+# ==================== READ OPERATIONS ====================
+
+
+async def get_user_sessions(session: AsyncSession, user_id: int, limit: int = 50) -> list[ChatSession]:
+    """Get user's chat sessions ordered by most recent."""
+    q = await session.execute(
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(limit)
+    )
+    return list(q.scalars().all())
+
+
+async def get_session_with_messages(session: AsyncSession, session_id: int, user_id: int) -> ChatSession | None:
+    """Get a chat session with all its messages."""
+    q = await session.execute(
+        select(ChatSession)
+        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    )
+    chat_session = q.scalar_one_or_none()
+    if not chat_session:
+        return None
+
+    # Load messages
+    q = await session.execute(
+        select(ChatMessage)
+        .where(ChatMessage.session_id == session_id)
+        .order_by(ChatMessage.created_at.asc())
+    )
+    chat_session.messages = list(q.scalars().all())
+    return chat_session
+
+
+async def get_user_documents(
+    session: AsyncSession,
+    user_id: int | None = None,
+    collection: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[Document]:
+    """Get documents, optionally filtered by collection."""
+    query = select(Document).order_by(Document.last_ingested_at.desc())
+
+    if collection:
+        query = query.where(Document.collection == collection)
+
+    query = query.limit(limit).offset(offset)
+
+    q = await session.execute(query)
+    return list(q.scalars().all())
+
+
+async def get_user_ingestion_runs(
+    session: AsyncSession,
+    user_id: int,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[IngestionRun]:
+    """Get user's ingestion runs ordered by most recent."""
+    q = await session.execute(
+        select(IngestionRun)
+        .where(IngestionRun.user_id == user_id)
+        .order_by(IngestionRun.started_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(q.scalars().all())
+
+
+async def get_user_tool_runs(
+    session: AsyncSession,
+    user_id: int,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[ToolRun]:
+    """Get user's tool execution logs ordered by most recent."""
+    q = await session.execute(
+        select(ToolRun)
+        .where(ToolRun.user_id == user_id)
+        .order_by(ToolRun.start_ts.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(q.scalars().all())
+
+
+# ==================== DELETE OPERATIONS ====================
+
+
+async def delete_session(session: AsyncSession, session_id: int, user_id: int) -> bool:
+    """Delete a chat session and all its messages (cascade)."""
+    q = await session.execute(
+        select(ChatSession)
+        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    )
+    chat_session = q.scalar_one_or_none()
+    if not chat_session:
+        return False
+
+    await session.delete(chat_session)
+    await session.flush()
+    return True
+
+
+async def delete_document(session: AsyncSession, document_id: int) -> bool:
+    """Delete a document from the catalog."""
+    q = await session.execute(select(Document).where(Document.id == document_id))
+    doc = q.scalar_one_or_none()
+    if not doc:
+        return False
+
+    await session.delete(doc)
+    await session.flush()
+    return True
+
+
+async def delete_document_by_path_hash(session: AsyncSession, path_hash: str) -> bool:
+    """Delete a document by its path hash."""
+    q = await session.execute(select(Document).where(Document.path_hash == path_hash))
+    doc = q.scalar_one_or_none()
+    if not doc:
+        return False
+
+    await session.delete(doc)
+    await session.flush()
+    return True
+
+
+async def delete_ingestion_run(session: AsyncSession, run_id: int, user_id: int) -> bool:
+    """Delete an ingestion run record."""
+    q = await session.execute(
+        select(IngestionRun)
+        .where(IngestionRun.id == run_id, IngestionRun.user_id == user_id)
+    )
+    run = q.scalar_one_or_none()
+    if not run:
+        return False
+
+    await session.delete(run)
+    await session.flush()
+    return True
+
+
+# ==================== UPDATE OPERATIONS ====================
+
+
+async def update_session_title(session: AsyncSession, session_id: int, user_id: int, title: str) -> bool:
+    """Update a chat session's title."""
+    q = await session.execute(
+        select(ChatSession)
+        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    )
+    chat_session = q.scalar_one_or_none()
+    if not chat_session:
+        return False
+
+    chat_session.title = title
+    chat_session.updated_at = datetime.utcnow()
+    await session.flush()
+    return True

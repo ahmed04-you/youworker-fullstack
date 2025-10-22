@@ -92,7 +92,6 @@ dev-mcp-units:
 # Install dependencies
 install:
 	uv pip install --requirement requirements.txt
-	-uv run playwright install chromium || true
 
 # Install frontend dependencies
 install-frontend:

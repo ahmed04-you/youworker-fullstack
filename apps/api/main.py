@@ -12,7 +12,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from httpx import HTTPStatusError
@@ -49,23 +49,39 @@ async def lifespan(app: FastAPI):
 
     logger.info("Starting up API service...")
 
+    # Ensure ingestion directories exist
+    from pathlib import Path
+    for dir_path in [settings.ingest_upload_root, settings.ingest_examples_dir]:
+        try:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            logger.info(f"Ensured directory exists: {dir_path}")
+        except Exception as e:
+            logger.warning(f"Could not create directory {dir_path}: {e}")
+
     # Initialize database (fail hard if unavailable)
+    logger.info("Initializing database...")
     await init_database(settings)
+    logger.info("Database initialized")
 
     # Initialize Ollama client
+    logger.info("Initializing Ollama client...")
     ollama_client = OllamaClient(base_url=settings.ollama_base_url)
+    logger.info("Ollama client initialized")
 
     # Initialize vector store
+    logger.info("Initializing vector store...")
     vector_store = QdrantStore(
         url=settings.qdrant_url,
         embedding_dim=settings.embedding_dim,
         default_collection=settings.qdrant_collection,
     )
+    logger.info("Vector store initialized")
 
     # Initialize ingestion pipeline
     ingestion_pipeline = IngestionPipeline(settings=settings)
 
     # Parse MCP server URLs
+    logger.info("Parsing MCP server URLs...")
     mcp_server_configs = []
     if settings.mcp_server_urls:
         from urllib.parse import urlparse
@@ -113,6 +129,7 @@ async def lifespan(app: FastAPI):
     registry = MCPRegistry(server_configs=mcp_server_configs)
 
     # Connect to all MCP servers and discover tools
+    logger.info("About to connect to MCP servers...")
     try:
         await registry.connect_all()
         logger.info(f"Connected to {len(registry.clients)} MCP servers")
@@ -209,6 +226,7 @@ class IngestRequest(BaseModel):
     from_web: bool = False
     recursive: bool = False
     tags: list[str] | None = None
+    use_examples_dir: bool = False
 
 
 class IngestResponse(BaseModel):
@@ -337,15 +355,15 @@ async def chat_endpoint(request: ChatRequest, current_user=Depends(_get_current_
                             async with get_async_session() as db:
                                 from packages.db.crud import finish_tool_run
                                 if last_tool_run_id[0] is not None:
-                                await finish_tool_run(
-                                    db,
-                                    run_id=last_tool_run_id[0],
-                                    status="success",
-                                    end_ts=datetime.fromisoformat(data.get("ts")),
-                                    latency_ms=int(data.get("latency_ms")) if data.get("latency_ms") is not None else None,
-                                    result_preview=(data.get("result_preview") or None),
-                                    tool_name=data.get("tool"),
-                                )
+                                    await finish_tool_run(
+                                        db,
+                                        run_id=last_tool_run_id[0],
+                                        status="success",
+                                        end_ts=datetime.fromisoformat(data.get("ts")),
+                                        latency_ms=int(data.get("latency_ms")) if data.get("latency_ms") is not None else None,
+                                        result_preview=(data.get("result_preview") or None),
+                                        tool_name=data.get("tool"),
+                                    )
                     elif event.get("event") == "done":
                         # Persist assistant final message
                         final = event.get("data", {}).get("final_text") or ""
@@ -436,7 +454,7 @@ async def chat_endpoint(request: ChatRequest, current_user=Depends(_get_current_
         return {"content": response_text}
 
 
-@app.post("/v1/ingest", response_model=IngestResponse)
+@app.post("/v1/ingest")
 async def ingest_endpoint(request: IngestRequest, current_user=Depends(_get_current_user)):
     """
     Document ingestion endpoint.
@@ -449,15 +467,22 @@ async def ingest_endpoint(request: IngestRequest, current_user=Depends(_get_curr
     logger.info(f"Ingestion request: path={request.path_or_url}, tags={request.tags}")
 
     try:
-        if request.from_web:
-            # TODO: Implement web fetching
-            raise HTTPException(status_code=501, detail="Web ingestion not yet implemented")
+        target = request.path_or_url
+        from_web = request.from_web
+        recursive = request.recursive
 
-        # Ingest from local path
+        # Allow ingesting the fixed examples directory without exposing filesystem paths in the UI
+        if request.use_examples_dir:
+            target = settings.ingest_examples_dir
+            from_web = False
+            # examples dir usually contains subfolders
+            recursive = True
+
+        # Ingest from web or local path
         result = await ingestion_pipeline.ingest_path(
-            request.path_or_url,
-            recursive=request.recursive,
-            from_web=request.from_web,
+            target,
+            recursive=recursive,
+            from_web=from_web,
             tags=request.tags,
         )
 
@@ -507,16 +532,376 @@ async def ingest_endpoint(request: IngestRequest, current_user=Depends(_get_curr
         except Exception as persist_exc:
             logger.error(f"Failed to persist ingestion run: {persist_exc}")
 
-        return IngestResponse(
-            files_processed=result.total_files,
-            chunks_written=result.total_chunks,
-            files=[dict(file) for file in (result.files or [])],
-            errors=error_messages or None,
-        )
+        return {
+            "success": not error_messages,
+            "files_processed": result.total_files,
+            "chunks_written": result.total_chunks,
+            "totals": {
+                "files": result.total_files,
+                "chunks": result.total_chunks,
+                "total_bytes": sum(f.get("size_bytes", 0) for f in (result.files or [])),
+            },
+            "files": [dict(file) for file in (result.files or [])],
+            "errors": error_messages or [],
+        }
 
     except Exception as e:
         logger.error(f"Ingestion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/v1/ingest/upload")
+async def ingest_upload_endpoint(
+    files: list[UploadFile] = File(...),
+    tags: list[str] | None = Form(default=None),
+    current_user=Depends(_get_current_user),
+):
+    """Upload files, save them to a fixed directory, and ingest them.
+
+    Files are stored under a per-request folder inside `settings.ingest_upload_root`.
+    """
+    if not ingestion_pipeline:
+        raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
+
+    if not files:
+        raise HTTPException(status_code=400, detail="No files uploaded")
+
+    # Create per-request directory inside the upload root
+    import os
+    from pathlib import Path
+    import uuid
+    run_dir = Path(settings.ingest_upload_root) / f"run-{uuid.uuid4().hex}"
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to create upload directory: {exc}")
+
+    saved_paths: list[Path] = []
+    for f in files:
+        try:
+            # Sanitize filename (very basic)
+            name = os.path.basename(f.filename or "uploaded-file")
+            if not name:
+                name = f"file-{uuid.uuid4().hex}"
+            target_path = run_dir / name
+            # Ensure unique filename
+            counter = 1
+            while target_path.exists():
+                stem = target_path.stem
+                suffix = target_path.suffix
+                target_path = run_dir / f"{stem}-{counter}{suffix}"
+                counter += 1
+
+            with open(target_path, "wb") as out:
+                while True:
+                    chunk = await f.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
+            await f.close()
+            saved_paths.append(target_path)
+        except Exception as exc:
+            # Best-effort cleanup for this file, proceed with others
+            try:
+                await f.close()
+            except Exception:
+                pass
+            # Collect partial error response
+            return {
+                "success": False,
+                "totals": {"files": 0, "chunks": 0, "total_bytes": 0},
+                "files": [],
+                "errors": [f"Failed to save file {f.filename}: {exc}"],
+            }
+
+    # Ingest the per-request directory (limited scope, avoids reprocessing other uploads)
+    try:
+        result = await ingestion_pipeline.ingest_path(
+            str(run_dir),
+            recursive=False,
+            from_web=False,
+            tags=tags,
+        )
+
+        error_messages = [
+            f"{err.get('path') or err.get('target')}: {err.get('error')}" if isinstance(err, dict) else str(err)
+            for err in (result.errors or [])
+        ]
+
+        # Persist ingestion run + documents
+        try:
+            from packages.db.crud import record_ingestion_run, upsert_document
+            import hashlib
+            started_at = datetime.now().astimezone()
+            finished_at = datetime.now().astimezone()
+            async with get_async_session() as db:
+                await record_ingestion_run(
+                    db,
+                    user_id=current_user["id"],
+                    target=str(run_dir),
+                    from_web=False,
+                    recursive=False,
+                    tags=tags or [],
+                    collection=None,
+                    totals_files=result.total_files,
+                    totals_chunks=result.total_chunks,
+                    errors=error_messages or [],
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    status="success" if not error_messages else "partial",
+                )
+                for f in (result.files or []):
+                    uri = f.get("uri")
+                    path = f.get("path")
+                    basis = uri or path or ""
+                    ph = hashlib.sha256(basis.encode("utf-8")).hexdigest() if basis else None
+                    await upsert_document(
+                        db,
+                        path_hash=ph or "",
+                        uri=uri,
+                        path=path,
+                        mime=f.get("mime"),
+                        bytes_size=f.get("size_bytes"),
+                        source="file",
+                        tags=tags or [],
+                        collection=None,
+                    )
+        except Exception as persist_exc:
+            logger.error(f"Failed to persist upload ingestion run: {persist_exc}")
+
+        return {
+            "success": not error_messages,
+            "files_processed": result.total_files,
+            "chunks_written": result.total_chunks,
+            "totals": {
+                "files": result.total_files,
+                "chunks": result.total_chunks,
+                "total_bytes": sum(f.get("size_bytes", 0) for f in (result.files or [])),
+            },
+            "files": [dict(file) for file in (result.files or [])],
+            "errors": error_messages or [],
+        }
+    except Exception as e:
+        logger.error(f"Upload ingestion failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== CRUD ENDPOINTS ====================
+
+
+@app.get("/v1/sessions")
+async def list_sessions(current_user=Depends(_get_current_user), limit: int = 50):
+    """List user's chat sessions."""
+    async with get_async_session() as db:
+        from packages.db.crud import get_user_sessions
+        sessions = await get_user_sessions(db, user_id=current_user["id"], limit=limit)
+        return {
+            "sessions": [
+                {
+                    "id": s.id,
+                    "external_id": s.external_id,
+                    "title": s.title,
+                    "model": s.model,
+                    "enable_tools": s.enable_tools,
+                    "created_at": s.created_at.isoformat(),
+                    "updated_at": s.updated_at.isoformat(),
+                }
+                for s in sessions
+            ]
+        }
+
+
+@app.get("/v1/sessions/{session_id}")
+async def get_session(session_id: int, current_user=Depends(_get_current_user)):
+    """Get a specific chat session with all messages."""
+    async with get_async_session() as db:
+        from packages.db.crud import get_session_with_messages
+        session = await get_session_with_messages(db, session_id=session_id, user_id=current_user["id"])
+        if not session:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        return {
+            "session": {
+                "id": session.id,
+                "external_id": session.external_id,
+                "title": session.title,
+                "model": session.model,
+                "enable_tools": session.enable_tools,
+                "created_at": session.created_at.isoformat(),
+                "updated_at": session.updated_at.isoformat(),
+                "messages": [
+                    {
+                        "id": m.id,
+                        "role": m.role,
+                        "content": m.content,
+                        "tool_call_name": m.tool_call_name,
+                        "tool_call_id": m.tool_call_id,
+                        "created_at": m.created_at.isoformat(),
+                    }
+                    for m in session.messages
+                ],
+            }
+        }
+
+
+@app.delete("/v1/sessions/{session_id}")
+async def delete_session_endpoint(session_id: int, current_user=Depends(_get_current_user)):
+    """Delete a chat session and all its messages."""
+    async with get_async_session() as db:
+        from packages.db.crud import delete_session
+        success = await delete_session(db, session_id=session_id, user_id=current_user["id"])
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        await db.commit()
+        return {"success": True}
+
+
+@app.patch("/v1/sessions/{session_id}")
+async def update_session(session_id: int, title: str, current_user=Depends(_get_current_user)):
+    """Update a chat session's title."""
+    async with get_async_session() as db:
+        from packages.db.crud import update_session_title
+        success = await update_session_title(db, session_id=session_id, user_id=current_user["id"], title=title)
+        if not success:
+            raise HTTPException(status_code=404, detail="Session not found")
+        await db.commit()
+        return {"success": True}
+
+
+@app.get("/v1/documents")
+async def list_documents(
+    current_user=Depends(_get_current_user),
+    collection: str | None = None,
+    limit: int = 100,
+    offset: int = 0,
+):
+    """List ingested documents."""
+    async with get_async_session() as db:
+        from packages.db.crud import get_user_documents
+        documents = await get_user_documents(
+            db,
+            user_id=current_user["id"],
+            collection=collection,
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "documents": [
+                {
+                    "id": d.id,
+                    "uri": d.uri,
+                    "path": d.path,
+                    "mime": d.mime,
+                    "bytes_size": d.bytes_size,
+                    "source": d.source,
+                    "tags": d.tags,
+                    "collection": d.collection,
+                    "path_hash": d.path_hash,
+                    "created_at": d.created_at.isoformat(),
+                    "last_ingested_at": d.last_ingested_at.isoformat() if d.last_ingested_at else None,
+                }
+                for d in documents
+            ],
+            "total": len(documents),
+        }
+
+
+@app.delete("/v1/documents/{document_id}")
+async def delete_document_endpoint(document_id: int, current_user=Depends(_get_current_user)):
+    """Delete a document from the catalog.
+
+    Note: This only removes the metadata. Vector data in Qdrant must be deleted separately.
+    """
+    async with get_async_session() as db:
+        from packages.db.crud import delete_document
+        success = await delete_document(db, document_id=document_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Document not found")
+        await db.commit()
+        return {"success": True}
+
+
+@app.get("/v1/ingestion-runs")
+async def list_ingestion_runs(
+    current_user=Depends(_get_current_user),
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List ingestion run history."""
+    async with get_async_session() as db:
+        from packages.db.crud import get_user_ingestion_runs
+        runs = await get_user_ingestion_runs(
+            db,
+            user_id=current_user["id"],
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "runs": [
+                {
+                    "id": r.id,
+                    "target": r.target,
+                    "from_web": r.from_web,
+                    "recursive": r.recursive,
+                    "tags": r.tags,
+                    "collection": r.collection,
+                    "totals_files": r.totals_files,
+                    "totals_chunks": r.totals_chunks,
+                    "errors": r.errors,
+                    "started_at": r.started_at.isoformat(),
+                    "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                    "status": r.status,
+                }
+                for r in runs
+            ],
+            "total": len(runs),
+        }
+
+
+@app.delete("/v1/ingestion-runs/{run_id}")
+async def delete_ingestion_run_endpoint(run_id: int, current_user=Depends(_get_current_user)):
+    """Delete an ingestion run record."""
+    async with get_async_session() as db:
+        from packages.db.crud import delete_ingestion_run
+        success = await delete_ingestion_run(db, run_id=run_id, user_id=current_user["id"])
+        if not success:
+            raise HTTPException(status_code=404, detail="Ingestion run not found")
+        await db.commit()
+        return {"success": True}
+
+
+@app.get("/v1/tool-runs")
+async def list_tool_runs(
+    current_user=Depends(_get_current_user),
+    limit: int = 100,
+    offset: int = 0,
+):
+    """List tool execution logs."""
+    async with get_async_session() as db:
+        from packages.db.crud import get_user_tool_runs
+        runs = await get_user_tool_runs(
+            db,
+            user_id=current_user["id"],
+            limit=limit,
+            offset=offset,
+        )
+        return {
+            "runs": [
+                {
+                    "id": r.id,
+                    "tool_name": r.tool_name,
+                    "status": r.status,
+                    "start_ts": r.start_ts.isoformat(),
+                    "end_ts": r.end_ts.isoformat() if r.end_ts else None,
+                    "latency_ms": r.latency_ms,
+                    "args": r.args,
+                    "error_message": r.error_message,
+                    "result_preview": r.result_preview,
+                }
+                for r in runs
+            ],
+            "total": len(runs),
+        }
 
 
 if __name__ == "__main__":

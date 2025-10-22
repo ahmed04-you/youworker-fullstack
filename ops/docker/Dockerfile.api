@@ -38,6 +38,7 @@ RUN /root/.local/bin/uv pip install --system --upgrade pip \
 
 COPY packages /app/packages
 COPY apps /app/apps
+COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
 EXPOSE 8001

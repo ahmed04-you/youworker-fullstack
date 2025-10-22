@@ -1,10 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { Upload, FileText, AlertCircle, MessageSquare, CheckCircle2, RefreshCcw } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+import { Upload, FileText, AlertCircle, MessageSquare, CheckCircle2, X, Loader2, Link as LinkIcon } from "lucide-react"
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Card } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
@@ -29,12 +29,12 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { SpinLoader } from "@/components/aceternity/loaders"
-import { postIngest } from "@/lib/api"
+import { postIngest, postIngestUpload } from "@/lib/api"
 import type { IngestResponse } from "@/lib/types"
 import { toast } from "sonner"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Toggle } from "@/components/ui/toggle"
+import { cn } from "@/lib/utils"
 
 interface IngestSheetProps {
   open: boolean
@@ -44,55 +44,140 @@ interface IngestSheetProps {
 export function IngestSheet({ open, onOpenChange }: IngestSheetProps) {
   const router = useRouter()
   const { setSuggestedPrompt } = useChatContext()
-  const [source, setSource] = useState<"file" | "web">("file")
-  const [filePath, setFilePath] = useState("")
+  const [source, setSource] = useState<"upload" | "web">("upload")
+  const [files, setFiles] = useState<File[]>([])
   const [webUrl, setWebUrl] = useState("")
-  const [recursive, setRecursive] = useState(true)
   const [tags, setTags] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
   const [result, setResult] = useState<IngestResponse | null>(null)
-  const selectedInput = source === "file" ? filePath : webUrl
-  const canSubmit = selectedInput.trim().length > 0
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const dragCounterRef = useRef(0)
+  const canSubmit = source === "upload" ? files.length > 0 : webUrl.trim().length > 0
 
   useEffect(() => {
     if (!open) {
-      setSource("file")
-      setFilePath("")
+      setSource("upload")
+      setFiles([])
       setWebUrl("")
       setTags("")
       setIsLoading(false)
+      setUploadProgress(0)
       setResult(null)
+      setIsDragging(false)
+      dragCounterRef.current = 0
     }
   }, [open])
 
+  // Drag and drop handlers
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    dragCounterRef.current = 0
+
+    const droppedFiles = Array.from(e.dataTransfer.files)
+    if (droppedFiles.length > 0) {
+      setFiles(prev => [...prev, ...droppedFiles])
+      toast.success(`${droppedFiles.length} file aggiunti`)
+    }
+  }, [])
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFiles = Array.from(e.target.files)
+      setFiles(prev => [...prev, ...selectedFiles])
+      toast.success(`${selectedFiles.length} file selezionati`)
+    }
+  }, [])
+
+  const removeFile = useCallback((index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedInput.trim()) {
-      toast.error(source === "file" ? "Percorso file obbligatorio" : "URL obbligatorio")
+    if (source === "upload" && files.length === 0) {
+      toast.error("Seleziona almeno un file")
+      return
+    }
+    if (source === "web" && !webUrl.trim()) {
+      toast.error("URL obbligatorio")
       return
     }
 
     setIsLoading(true)
+    setUploadProgress(0)
     setResult(null)
 
     try {
-      const response = await postIngest({
-        path_or_url: selectedInput,
-        recursive: source === "file" ? recursive : undefined,
-        from_web: source === "web",
-        tags: tags ? tags.split(",").map((t) => t.trim()) : undefined,
-      })
+      let response: IngestResponse
+      const tagList = tags ? tags.split(",").map((t) => t.trim()).filter(Boolean) : undefined
+
+      if (source === "upload") {
+        // Simulate progress for better UX
+        const progressInterval = setInterval(() => {
+          setUploadProgress(prev => Math.min(prev + 10, 90))
+        }, 200)
+
+        try {
+          response = await postIngestUpload(files, tagList)
+          clearInterval(progressInterval)
+          setUploadProgress(100)
+        } catch (error) {
+          clearInterval(progressInterval)
+          throw error
+        }
+      } else {
+        response = await postIngest({
+          path_or_url: webUrl,
+          from_web: true,
+          tags: tagList,
+        })
+      }
 
       setResult(response)
       if (response.success) {
-        toast.success(`Ingestione completata: ${response.totals.files} file`)
-      } else {
-        toast.error("Ingestione completata con errori")
+        toast.success(`Ingestione completata: ${response.totals.files} file, ${response.totals.chunks} chunk`)
+      } else if (response.errors.length > 0) {
+        toast.warning(`Completata con ${response.errors.length} errori`)
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Ingestione non riuscita")
+      const errorMessage = error instanceof Error ? error.message : "Ingestione non riuscita"
+      toast.error(errorMessage)
+      setResult({
+        success: false,
+        totals: { files: 0, chunks: 0, total_bytes: 0 },
+        files: [],
+        errors: [errorMessage],
+      })
     } finally {
       setIsLoading(false)
+      setTimeout(() => setUploadProgress(0), 1000)
     }
   }
 
@@ -127,52 +212,125 @@ export function IngestSheet({ open, onOpenChange }: IngestSheetProps) {
           <div className="flex-1 overflow-y-auto px-8 py-6">
             <div className="space-y-6">
               <form onSubmit={handleSubmit} className="space-y-6">
-                <Tabs value={source} onValueChange={(value) => setSource(value as "file" | "web")} className="space-y-4">
+                <Tabs value={source} onValueChange={(value) => setSource(value as "upload" | "web")} className="space-y-4">
                   <TabsList className="grid w-full grid-cols-2 gap-2 rounded-2xl bg-muted/40 p-1">
-                    <TabsTrigger value="file" className="rounded-xl data-[state=active]:bg-background/90">
-                      Percorso file
+                    <TabsTrigger value="upload" className="rounded-xl data-[state=active]:bg-background/90">
+                      Carica file
                     </TabsTrigger>
                     <TabsTrigger value="web" className="rounded-xl data-[state=active]:bg-background/90">
                       URL web
                     </TabsTrigger>
                   </TabsList>
-                  <TabsContent value="file" className="space-y-2 focus-visible:outline-none focus-visible:ring-0">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                      <div className="flex-1 space-y-2">
-                        <Label htmlFor="file-path">Percorso file *</Label>
-                        <Input
-                          id="file-path"
-                          value={filePath}
-                          onChange={(e) => setFilePath(e.target.value)}
-                          placeholder="/percorso/ai/documenti"
-                          className="rounded-2xl"
-                        />
-                      </div>
-                      <Toggle
-                        aria-label="Includi le directory annidate"
-                        pressed={recursive}
-                        onPressedChange={setRecursive}
-                        variant="outline"
-                        className="h-11 rounded-2xl px-4 text-sm font-medium"
+                  <TabsContent value="upload" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
+                    <div className="space-y-2">
+                      <Label>Carica file *</Label>
+                      {/* Drag & Drop Area */}
+                      <div
+                        onDragEnter={handleDragEnter}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={cn(
+                          "relative flex min-h-[160px] cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-all",
+                          isDragging
+                            ? "border-primary bg-primary/10 scale-[1.02]"
+                            : "border-border/50 bg-muted/20 hover:border-primary/50 hover:bg-muted/40",
+                          isLoading && "pointer-events-none opacity-50"
+                        )}
                       >
-                        <RefreshCcw className="h-4 w-4" />
-                        Ricorsivo
-                      </Toggle>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          multiple
+                          onChange={handleFileSelect}
+                          className="hidden"
+                          disabled={isLoading}
+                        />
+                        <Upload className={cn("h-10 w-10 mb-3 transition-all", isDragging ? "text-primary scale-110" : "text-muted-foreground")} />
+                        <p className="text-sm font-medium text-center">
+                          {isDragging ? "Rilascia i file qui" : "Trascina i file qui o clicca per selezionare"}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Supporta tutti i formati comuni (PDF, DOC, immagini, audio, video)
+                        </p>
+                      </div>
+
+                      {/* File List */}
+                      {files.length > 0 && (
+                        <div className="space-y-2 mt-4">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs text-muted-foreground">
+                              {files.length} file selezionati
+                            </Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setFiles([])}
+                              className="h-7 text-xs"
+                              disabled={isLoading}
+                            >
+                              Rimuovi tutti
+                            </Button>
+                          </div>
+                          <ScrollArea className="h-[140px] rounded-2xl border border-border/40 bg-background/60 p-3">
+                            <AnimatePresence>
+                              {files.map((file, index) => (
+                                <motion.div
+                                  key={`${file.name}-${index}`}
+                                  initial={{ opacity: 0, x: -20 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  exit={{ opacity: 0, x: 20 }}
+                                  className="flex items-center justify-between gap-2 mb-2 last:mb-0 p-2 rounded-xl bg-muted/40 hover:bg-muted/60 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <FileText className="h-4 w-4 text-primary flex-shrink-0" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="text-xs font-medium truncate">{file.name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {(file.size / 1024).toFixed(1)} KB
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeFile(index)}
+                                    className="h-7 w-7 p-0 hover:bg-destructive/20 hover:text-destructive"
+                                    disabled={isLoading}
+                                  >
+                                    <X className="h-3.5 w-3.5" />
+                                  </Button>
+                                </motion.div>
+                              ))}
+                            </AnimatePresence>
+                          </ScrollArea>
+                        </div>
+                      )}
+
+                      <p className="text-xs text-muted-foreground">
+                        I file vengono caricati in una directory fissa nel container Docker e poi elaborati.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Includi automaticamente le directory annidate del percorso indicato.
-                    </p>
                   </TabsContent>
                   <TabsContent value="web" className="space-y-2 focus-visible:outline-none focus-visible:ring-0">
                     <Label htmlFor="web-url">URL *</Label>
-                    <Input
-                      id="web-url"
-                      value={webUrl}
-                      onChange={(e) => setWebUrl(e.target.value)}
-                      placeholder="https://esempio.com/docs"
-                      className="rounded-2xl"
-                    />
-                    <p className="text-xs text-muted-foreground">Il caricamento da URL analizza solo la risorsa specificata.</p>
+                    <div className="relative">
+                      <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="web-url"
+                        value={webUrl}
+                        onChange={(e) => setWebUrl(e.target.value)}
+                        placeholder="https://esempio.com/documentazione"
+                        className="rounded-2xl pl-10"
+                        disabled={isLoading}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Scarica e analizza la pagina web indicata, estraendo testo, immagini e tabelle.
+                    </p>
                   </TabsContent>
                 </Tabs>
 
@@ -187,23 +345,47 @@ export function IngestSheet({ open, onOpenChange }: IngestSheetProps) {
                   />
                 </div>
 
-                <Button
-                  type="submit"
-                  className="h-11 w-full rounded-2xl transition-transform hover:scale-[1.01] active:scale-[0.99]"
-                  disabled={isLoading || !canSubmit}
-                >
-                  {isLoading ? (
-                    <>
-                      <SpinLoader className="mr-2" />
-                      Caricamento in corso…
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="mr-2 h-4 w-4" />
-                      Carica file
-                    </>
+                <div className="space-y-3">
+                  <Button
+                    type="submit"
+                    className="h-11 w-full rounded-2xl transition-transform hover:scale-[1.01] active:scale-[0.99]"
+                    disabled={isLoading || !canSubmit}
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {source === "upload" ? "Caricamento in corso…" : "Analisi URL in corso…"}
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        {source === "upload" ? "Carica e indicizza" : "Analizza URL"}
+                      </>
+                    )}
+                  </Button>
+
+                  {/* Progress Bar */}
+                  {isLoading && source === "upload" && uploadProgress > 0 && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="space-y-2"
+                    >
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Caricamento ed elaborazione</span>
+                        <span>{uploadProgress}%</span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <motion.div
+                          className="h-full bg-primary"
+                          initial={{ width: 0 }}
+                          animate={{ width: `${uploadProgress}%` }}
+                          transition={{ duration: 0.3 }}
+                        />
+                      </div>
+                    </motion.div>
                   )}
-                </Button>
+                </div>
               </form>
 
               {isLoading && (
@@ -221,28 +403,72 @@ export function IngestSheet({ open, onOpenChange }: IngestSheetProps) {
                 <>
                   <Separator />
                   <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+                    {/* Success Banner */}
+                    {result.success && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="rounded-2xl border-2 border-green-500/30 bg-green-500/10 p-4"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="rounded-full bg-green-500/20 p-2">
+                            <CheckCircle2 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-green-700 dark:text-green-300">
+                              Ingestione completata con successo!
+                            </p>
+                            <p className="text-xs text-green-600/80 dark:text-green-400/80">
+                              I documenti sono ora disponibili per la ricerca e l'analisi
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <FileText className="h-4 w-4" />
-                          File
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.1 }}
+                        className="rounded-2xl border border-border/50 bg-gradient-to-br from-blue-500/10 to-blue-600/5 p-4"
+                      >
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <FileText className="h-4 w-4 text-blue-500" />
+                          File processati
                         </div>
-                        <div className="mt-1 text-2xl font-semibold">{result.totals.files}</div>
-                      </div>
-                      <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <CheckCircle2 className="h-4 w-4" />
-                          Chunk
+                        <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
+                          {result.totals.files}
                         </div>
-                        <div className="mt-1 text-2xl font-semibold">{result.totals.chunks}</div>
-                      </div>
-                      <div className="rounded-2xl border border-border/50 bg-background/60 p-4">
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Upload className="h-4 w-4" />
-                          Dimensione
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.15 }}
+                        className="rounded-2xl border border-border/50 bg-gradient-to-br from-purple-500/10 to-purple-600/5 p-4"
+                      >
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <CheckCircle2 className="h-4 w-4 text-purple-500" />
+                          Chunk creati
                         </div>
-                        <div className="mt-1 text-2xl font-semibold">{formatBytes(result.totals.total_bytes)}</div>
-                      </div>
+                        <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
+                          {result.totals.chunks}
+                        </div>
+                      </motion.div>
+                      <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="rounded-2xl border border-border/50 bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 p-4"
+                      >
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                          <Upload className="h-4 w-4 text-emerald-500" />
+                          Dimensione totale
+                        </div>
+                        <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                          {formatBytes(result.totals.total_bytes)}
+                        </div>
+                      </motion.div>
                     </div>
 
                     {result.files.length > 0 && (
@@ -280,30 +506,44 @@ export function IngestSheet({ open, onOpenChange }: IngestSheetProps) {
                     )}
 
                     {result.errors.length > 0 && (
-                      <Accordion type="single" collapsible className="rounded-2xl border border-border/50">
-                        <AccordionItem value="errors" className="border-none">
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <div className="flex items-center gap-2 text-destructive">
-                              <AlertCircle className="h-4 w-4" />
-                              <span>{result.errors.length} errore/i</span>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pb-4">
-                            <ScrollArea className="h-[200px]">
-                              <div className="space-y-2">
-                                {result.errors.map((error, idx) => (
-                                  <div
-                                    key={idx}
-                                    className="rounded-xl bg-destructive/10 p-3 text-xs font-mono text-destructive"
-                                  >
-                                    {error}
-                                  </div>
-                                ))}
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                      >
+                        <Accordion type="single" collapsible className="rounded-2xl border-2 border-destructive/30 bg-destructive/5">
+                          <AccordionItem value="errors" className="border-none">
+                            <AccordionTrigger className="px-4 hover:no-underline">
+                              <div className="flex items-center gap-2 text-destructive">
+                                <AlertCircle className="h-5 w-5" />
+                                <span className="font-semibold">
+                                  {result.errors.length} {result.errors.length === 1 ? "errore" : "errori"}
+                                </span>
                               </div>
-                            </ScrollArea>
-                          </AccordionContent>
-                        </AccordionItem>
-                      </Accordion>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-4">
+                              <ScrollArea className="h-[200px]">
+                                <div className="space-y-2">
+                                  {result.errors.map((error, idx) => (
+                                    <motion.div
+                                      key={idx}
+                                      initial={{ opacity: 0, x: -10 }}
+                                      animate={{ opacity: 1, x: 0 }}
+                                      transition={{ delay: idx * 0.05 }}
+                                      className="rounded-xl bg-destructive/10 border border-destructive/20 p-3 text-xs"
+                                    >
+                                      <div className="flex items-start gap-2">
+                                        <AlertCircle className="h-3.5 w-3.5 text-destructive mt-0.5 flex-shrink-0" />
+                                        <p className="text-destructive font-mono break-all">{error}</p>
+                                      </div>
+                                    </motion.div>
+                                  ))}
+                                </div>
+                              </ScrollArea>
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      </motion.div>
                     )}
 
                     {result.success && (

@@ -53,7 +53,35 @@ Production-ready full-stack AI agent system with:
 
 ## Key Features
 
-### 1. Single-Tool Stepper Pattern (CRITICAL)
+### 1. Communication Modes (NEW)
+
+**Text Mode** and **Voice Mode** - mutually exclusive per session:
+
+- **Text Mode**: Traditional typing with SSE streaming
+- **Voice Mode**: Speech-to-text input with text-to-speech output
+- **Clean Switching**: Automatic resource cleanup when changing modes
+- **Cross-browser**: No Web Speech API dependencies, consistent behavior
+- **Configurable**: Environment-based STT/TTS provider selection
+
+Switch modes using the toggle in the interface. Each session uses only one mode to ensure clean transport management.
+
+#### Modes & Transports
+
+- Two mutually exclusive modes: Text Mode (typing + read) and Voice Mode (talk + listen)
+- Text Mode streams tokens over SSE; Voice Mode streams audio over WebSocket (STT/TTS)
+- Server-side STT (faster-whisper) for cross-browser reliability (no Web Speech API)
+- Global mode store: `apps/frontend/lib/mode.ts` ensures all transports close cleanly on switch
+- Voice Mode auto-submits STT "final" transcripts and starts TTS only after `done`
+- Barge-in: opening the mic pauses TTS via `barge_in.control`
+
+Environment knobs (frontend awareness):
+- `NEXT_PUBLIC_STT_PROVIDER` (default: `faster-whisper`)
+- `NEXT_PUBLIC_STT_COMPUTE_TYPE` (default: `auto`)
+- `NEXT_PUBLIC_TTS_PROVIDER` (default: `piper`)
+- `NEXT_PUBLIC_TTS_VOICE` (default: `it_IT-paola-medium`)
+- `NEXT_PUBLIC_AUDIO_SAMPLE_RATE` (default: `24000`)
+
+### 2. Single-Tool Stepper Pattern (CRITICAL)
 
 The agent **MUST** emit at most ONE tool call per assistant message:
 
@@ -98,7 +126,7 @@ Turn 3 (after tool result):
 
 #### Web MCP Server (port 7001)
 - `web.search(query, top_k?, site?)` - DuckDuckGo search
-- `web.fetch(url, max_links?)` - Playwright-based content extraction
+- `web.fetch(url, max_links?)` - HTTP-based content extraction
 
 #### Semantic MCP Server (port 7002)
 - `vector.query(query, top_k?, tags?, collection?)` - Semantic search
@@ -115,6 +143,17 @@ Turn 3 (after tool result):
 
 - Docker & Docker Compose
 - (Optional) NVIDIA GPU with Docker runtime for GPU acceleration
+- Microphone access (for Voice Mode)
+- HTTPS context (for microphone permissions in production)
+
+### Communication Modes
+
+YouWorker.AI supports two distinct communication modes:
+
+- **Text Mode**: Traditional text-based chat with SSE streaming
+- **Voice Mode**: Speech-to-text input with text-to-speech output
+
+Switch between modes using the toggle in the interface. Each session uses only one mode to ensure clean transport management.
 
 ### 1. Start All Services
 
@@ -371,6 +410,29 @@ make lint
 
 ## Configuration
 
+### Communication Mode Configuration
+
+Configure STT/TTS providers and settings:
+
+```bash
+# STT Configuration
+STT_PROVIDER=faster-whisper          # Speech-to-text provider
+STT_MODEL=large-v3                   # Whisper model size
+STT_DEVICE=auto                      # Device: auto, cpu, cuda
+STT_COMPUTE_TYPE=float16             # Compute precision
+STT_VAD_ENABLED=true                 # Voice Activity Detection
+STT_BEAM_SIZE=1                      # Decoding beam size
+
+# TTS Configuration
+TTS_PROVIDER=piper                   # Text-to-speech provider
+TTS_VOICE=it_IT-paola-medium         # Voice model
+TTS_MODEL_DIR=/app/models/tts        # Model directory
+
+# Audio Processing
+AUDIO_SAMPLE_RATE=24000              # Sample rate in Hz
+AUDIO_FRAME_MS=20                    # Frame size in milliseconds
+```
+
 All configuration via environment variables (see [.env.example](.env.example)):
 
 ### Backend Configuration
@@ -385,6 +447,7 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `MCP_REFRESH_INTERVAL` | Seconds between MCP tool refreshes (0 to disable) | `90` |
 | `LOG_LEVEL` | Logging level | `INFO` |
 | `MAX_AGENT_ITERATIONS` | Max tool iterations | `10` |
+| `ROOT_API_KEY` | Root API key required by protected endpoints | `dev-root-key` |
 
 ### Frontend Configuration
 
@@ -393,6 +456,10 @@ All configuration via environment variables (see [.env.example](.env.example)):
 | `NEXT_PUBLIC_API_BASE_URL` | Public API URL (browser) | auto-detected |
 | `NEXT_PUBLIC_API_PORT` | API port | `8001` |
 | `NEXT_INTERNAL_API_BASE_URL` | Internal API URL (SSR) | `http://api:8001` |
+| `NEXT_PUBLIC_API_KEY` | API key sent as `X-API-Key` header | — |
+| `NEXT_PUBLIC_STT_PROVIDER` | Speech-to-text provider | `faster-whisper` |
+| `NEXT_PUBLIC_TTS_PROVIDER` | Text-to-speech provider | `piper` |
+| `NEXT_PUBLIC_TTS_VOICE` | TTS voice model | `it_IT-paola-medium` |
 
 ## GPU Support
 
@@ -424,6 +491,7 @@ Check logs:
 docker compose -f ops/compose/docker-compose.yml logs mcp_web
 docker compose -f ops/compose/docker-compose.yml logs mcp_semantic
 docker compose -f ops/compose/docker-compose.yml logs mcp_datetime
+docker compose -f ops/compose/docker-compose.yml logs mcp_audio  # Audio STT/TTS
 ```
 
 ### Agent not calling tools
@@ -436,8 +504,11 @@ docker compose -f ops/compose/docker-compose.yml logs mcp_datetime
 
 1. Check API is running: `curl http://localhost:8001/health`
 2. Check frontend logs: `make frontend-logs`
-3. Verify environment variables are set correctly
-4. If running locally, ensure `NEXT_PUBLIC_API_BASE_URL` points to correct API URL
+3. Verify environment variables:
+   - Set `NEXT_PUBLIC_API_KEY` to match backend `ROOT_API_KEY` (default `dev-root-key`).
+   - If running Next.js dev on port 3000, set backend `FRONTEND_ORIGIN=http://localhost:3000` (comma‑separate if multiple origins).
+   - Optionally set `NEXT_PUBLIC_API_BASE_URL` if auto-detect does not match your API host/protocol.
+4. If running locally, ensure the API URL/port are correct (`http://localhost:8001` by default) and that the browser is not blocking mixed content (HTTPS page calling HTTP API).
 
 ## Extending the System
 
@@ -462,6 +533,17 @@ Deprecation: Legacy HTTP tool routes (`POST /tools/list`, `POST /tools/call`) ar
 3. Add Dockerfile under `ops/docker/`
 4. Add to `ops/compose/docker-compose.yml`
 5. Update `MCP_SERVER_URLS` environment variable (http:// or ws:// are both accepted; the client normalizes to `ws(s)://.../mcp`)
+
+### Audio MCP Server
+
+The audio server (port 7006) provides STT/TTS capabilities:
+
+- **STT**: Speech-to-text with faster-whisper and VAD
+- **TTS**: Text-to-speech with Piper TTS
+- **Streaming**: Real-time audio at 24kHz PCM16
+- **Barge-in**: Voice interruption support
+
+Configure via environment variables (see Configuration section above).
 
 ### Adding New Tools to Existing Servers
 

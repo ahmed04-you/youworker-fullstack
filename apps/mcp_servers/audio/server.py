@@ -47,6 +47,14 @@ except Exception:  # pragma: no cover
     WhisperModel = None
     FW_AVAILABLE = False
 
+try:
+    from piper import PiperVoice  # type: ignore
+
+    PIPER_AVAILABLE = True
+except Exception:  # pragma: no cover
+    PiperVoice = None
+    PIPER_AVAILABLE = False
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -73,10 +81,14 @@ class AudioSession:
     # Metrics
     t_start: float = field(default_factory=time.perf_counter)
     last_partial: float = 0.0
+    # Session lifecycle tracking (for TTL cleanup)
+    created_at: float = field(default_factory=time.time)
+    last_activity: float = field(default_factory=time.time)
 
 
 SESSIONS: dict[str, AudioSession] = {}
 STT_MODEL: WhisperModel | None = None
+TTS_VOICE: PiperVoice | None = None
 
 
 def _pcm16le_to_np(buf: bytes) -> np.ndarray:
@@ -95,11 +107,59 @@ async def _lazy_load_whisper(device: str = "auto", compute_type: str = "float16"
     if STT_MODEL is None:
         logger.info("Loading faster-whisper model for streaming STT (lazy)")
         try:
-            STT_MODEL = WhisperModel(os.getenv("STT_MODEL", "large-v3"), device=device, compute_type=compute_type)
+            # Get configuration from environment
+            model_name = os.getenv("STT_MODEL", "large-v3")
+            device = os.getenv("STT_DEVICE", device)
+            compute_type = os.getenv("STT_COMPUTE_TYPE", compute_type)
+            
+            logger.info(f"Loading Whisper model: {model_name}, device: {device}, compute_type: {compute_type}")
+            STT_MODEL = WhisperModel(model_name, device=device, compute_type=compute_type)
         except Exception as exc:  # pragma: no cover
             logger.error(f"Failed to load faster-whisper: {exc}")
             STT_MODEL = None
     return STT_MODEL
+
+
+async def _lazy_load_piper_voice(voice_name: str = "it_IT-paola-medium") -> Optional[PiperVoice]:
+    """Lazy load Piper TTS voice model.
+
+    Default voice: it_IT-paola-medium (Italian female, MIT License)
+
+    Available Italian voices from Piper:
+    - it_IT-riccardo-x_low (male, fast, low quality)
+    - it_IT-paola-medium (female, smooth, natural quality)
+
+    Download from: https://huggingface.co/rhasspy/piper-voices
+    All voices are MIT licensed for commercial use.
+    """
+    global TTS_VOICE
+    if not PIPER_AVAILABLE:
+        return None
+    if TTS_VOICE is None:
+        # Get configuration from environment
+        voice_name = os.getenv("TTS_VOICE", voice_name)
+        tts_provider = os.getenv("TTS_PROVIDER", "piper")
+        
+        if tts_provider != "piper":
+            logger.info(f"Skipping Piper TTS loading, provider is: {tts_provider}")
+            return None
+            
+        logger.info(f"Loading Piper TTS voice: {voice_name}")
+        try:
+            # Check for voice model file
+            model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
+            model_path = os.path.join(model_dir, f"{voice_name}.onnx")
+
+            if not os.path.exists(model_path):
+                logger.warning(f"TTS model not found at {model_path}. TTS will use fallback.")
+                return None
+
+            TTS_VOICE = PiperVoice.load(model_path)
+            logger.info(f"Piper TTS voice loaded: {voice_name}")
+        except Exception as exc:  # pragma: no cover
+            logger.error(f"Failed to load Piper voice: {exc}")
+            TTS_VOICE = None
+    return TTS_VOICE
 
 
 def get_tools_schema() -> list[dict[str, Any]]:
@@ -181,9 +241,48 @@ def get_tools_schema() -> list[dict[str, Any]]:
     ]
 
 
+async def cleanup_stale_sessions():
+    """Background task to remove sessions idle for more than 5 minutes."""
+    SESSION_TTL = int(os.getenv("SESSION_TTL_SECONDS", "300"))  # 5 minutes default
+    while True:
+        await asyncio.sleep(60)  # Check every minute
+        now = time.time()
+        stale_sessions = [
+            sid for sid, sess in SESSIONS.items()
+            if now - sess.last_activity > SESSION_TTL
+        ]
+        for sid in stale_sessions:
+            logger.info(f"Cleaning up stale session {sid} (idle for >{SESSION_TTL}s)")
+            SESSIONS.pop(sid, None)
+        if stale_sessions:
+            logger.info(f"Cleaned up {len(stale_sessions)} stale session(s). Active: {len(SESSIONS)}")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background tasks on application startup."""
+    asyncio.create_task(cleanup_stale_sessions())
+    logger.info("Session cleanup background task started")
+
+
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "whisper": FW_AVAILABLE, "vad": VAD_AVAILABLE}
+    """Enhanced health check with model status and session count."""
+    return {
+        "status": "healthy",
+        "whisper_available": FW_AVAILABLE,
+        "whisper_loaded": STT_MODEL is not None,
+        "vad_available": VAD_AVAILABLE,
+        "piper_available": PIPER_AVAILABLE,
+        "piper_loaded": TTS_VOICE is not None,
+        "active_sessions": len(SESSIONS),
+        "session_ttl_seconds": int(os.getenv("SESSION_TTL_SECONDS", "300")),
+        "stt_provider": os.getenv("STT_PROVIDER", "faster-whisper"),
+        "tts_provider": os.getenv("TTS_PROVIDER", "piper"),
+        "stt_compute_type": os.getenv("STT_COMPUTE_TYPE", "float16"),
+        "tts_voice": os.getenv("TTS_VOICE", "it_IT-paola-medium"),
+        "audio_sample_rate": int(os.getenv("AUDIO_SAMPLE_RATE", "24000")),
+    }
 
 
 @app.websocket("/mcp")
@@ -302,15 +401,28 @@ async def stt_ws(ws: WebSocket, session_id: str):
     if not sess:
         await ws.close(code=4000)
         return
+    # Read configuration from environment (available even if FW not loaded)
+    compute_type_env = os.getenv("STT_COMPUTE_TYPE", "float16").lower()
+    if compute_type_env not in {"float16", "int8", "auto"}:
+        compute_type_env = "float16"
+    device = os.getenv("STT_DEVICE", "auto")
+    vad_enabled = os.getenv("STT_VAD_ENABLED", "true").lower() == "true"
+    min_silence_ms = int(os.getenv("STT_MIN_SILENCE_MS", "400"))
+    chunk_size_ms = int(os.getenv("STT_CHUNK_SIZE_MS", "400"))
+
     # Load Whisper lazily (best effort)
     if FW_AVAILABLE:
-        compute_type = "float16" if os.getenv("STT_COMPUTE", "gpu").lower() == "gpu" else "int8"
-        await _lazy_load_whisper(device=os.getenv("STT_DEVICE", "auto"), compute_type=compute_type)
-    # VAD setup
-    vad = webrtcvad.Vad(2) if VAD_AVAILABLE else None
-    window_samples = int(sess.sample_rate * 0.8)  # 0.8s window
-    overlap = int(window_samples * 0.5)
+        compute_type = "float16" if compute_type_env == "auto" else compute_type_env
+        await _lazy_load_whisper(device=device, compute_type=compute_type)
+
+    # VAD setup (mode 2 = balanced, less aggressive)
+    vad = webrtcvad.Vad(2) if VAD_AVAILABLE and vad_enabled else None
+    # Use configurable window size
+    window_samples = int(sess.sample_rate * (chunk_size_ms / 1000.0))
+    overlap = int(window_samples * 0.3)  # 30% overlap
     ring = bytearray()
+    # Ring buffer max size to prevent memory issues (10 seconds max)
+    MAX_RING_BYTES = sess.sample_rate * 2 * 10  # 10 seconds of PCM16
 
     try:
         while True:
@@ -321,7 +433,18 @@ async def stt_ws(ws: WebSocket, session_id: str):
             if not isinstance(b64, str):
                 continue
             frame = base64.b64decode(b64)
+
+            # Update session activity timestamp
+            sess.last_activity = time.time()
+
+            # Add to ring buffer with overflow protection
             ring.extend(frame)
+            if len(ring) > MAX_RING_BYTES:
+                # Trim oldest data to prevent unbounded growth
+                excess = len(ring) - MAX_RING_BYTES
+                ring = bytearray(ring[excess:])
+                logger.warning(f"Ring buffer overflow for session {session_id}, trimmed {excess} bytes")
+            is_speech = True
             if vad is not None:
                 # Quick gate: only proceed if voice activity detected in last chunk
                 if len(frame) >= int(sess.sample_rate * sess.frame_ms / 1000) * 2:
@@ -331,6 +454,12 @@ async def stt_ws(ws: WebSocket, session_id: str):
                             continue
                     except Exception:
                         pass
+                        
+                # Check for silence duration to trigger final transcription
+                if not is_speech:
+                    # Track silence duration (this is a simplified approach)
+                    # In a real implementation, you'd want more sophisticated silence detection
+                    pass
 
             if len(ring) >= window_samples * 2:
                 # Prepare analysis window
@@ -342,26 +471,58 @@ async def stt_ws(ws: WebSocket, session_id: str):
                     # Convert to float32 normalized audio for faster-whisper
                     arr = _pcm16le_to_np(buf).astype(np.float32) / 32768.0
                     try:
-                        segments, info = STT_MODEL.transcribe(arr, language=None, beam_size=1, vad_filter=False)
+                        # Get beam size from environment
+                        beam_size = int(os.getenv("STT_BEAM_SIZE", "1"))
+                        
+                        segments, info = STT_MODEL.transcribe(
+                            arr,
+                            language=None,
+                            beam_size=beam_size,
+                            vad_filter=False,
+                            word_timestamps=True
+                        )
                         text_parts = []
                         s_start = None
                         s_end = None
+                        confidence_scores = []
                         for s in segments:
                             text_parts.append(s.text.strip())
                             if s_start is None:
                                 s_start = s.start
                             s_end = s.end
+                            # Extract confidence from avg_logprob (convert log probability to 0-1 range)
+                            if hasattr(s, 'avg_logprob'):
+                                # avg_logprob is typically negative, convert to confidence score
+                                confidence_scores.append(math.exp(s.avg_logprob))
                         text = " ".join(tp for tp in text_parts if tp)
+                        # Average confidence across all segments
+                        avg_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else None
+                        
                         if text:
                             now = time.time()
+                            
+                            # Determine if this should be a final transcript based on silence
+                            is_final = False
+                            if vad is not None:
+                                # Simple silence detection - in production, use more sophisticated logic
+                                silence_duration = len(ring) < overlap * 2  # Simplified check
+                                is_final = silence_duration and len(text.strip()) > 0
+                            
+                            message_type = "final" if is_final else "partial"
+                            
                             await ws.send_text(json.dumps({
-                                "type": "partial",
+                                "type": message_type,
                                 "text": text,
                                 "start_ts": s_start,
                                 "end_ts": s_end,
-                                "confidence": None,
+                                "confidence": round(avg_confidence, 3) if avg_confidence is not None else None,
                                 "ts": now,
                             }))
+                            
+                            # If final, clear the buffer to start fresh
+                            if is_final:
+                                ring = bytearray()
+                                
                     except Exception as exc:
                         logger.warning(f"stt window error: {exc}")
                 else:
@@ -378,36 +539,109 @@ async def tts_ws(ws: WebSocket, session_id: str):
     if not sess:
         await ws.close(code=4000)
         return
-    # Simple sine-wave generator placeholder (replace with real TTS backend)
-    sr = 24000
+
+    # Try to load Piper TTS voice
+    voice_name = os.getenv("TTS_VOICE", "it_IT-paola-medium")
+    voice = await _lazy_load_piper_voice(voice_name)
+
+    # Use voice's native sample rate if available, otherwise default to 24000
+    sr = voice.config.sample_rate if (voice and hasattr(voice, 'config')) else 24000
     chunk_ms = 80
     samples_per_chunk = int(sr * (chunk_ms / 1000.0))
+
     try:
         while True:
             payload = await ws.receive_text()
             data = json.loads(payload)
+
+            # Update session activity
+            sess.last_activity = time.time()
+
             if data.get("type") == "synthesize":
                 text = data.get("text", "")
-                duration = max(0.3, min(len(text) * 0.03, 3.0))  # naive mapping
-                total_samples = int(sr * duration)
-                t = np.arange(total_samples) / sr
-                tone = 0.1 * np.sin(2 * math.pi * 440.0 * t)
-                pos = 0
-                while pos < total_samples:
-                    if sess.barge_canceled:
-                        await ws.send_text(json.dumps({"type": "done", "reason": "canceled"}))
-                        break
-                    if sess.barge_paused:
-                        await asyncio.sleep(0.05)
-                        continue
-                    end = min(total_samples, pos + samples_per_chunk)
-                    chunk = tone[pos:end]
-                    pos = end
-                    pcm = _np_to_pcm16le(chunk * 32767.0)
-                    b64 = base64.b64encode(pcm).decode("ascii")
-                    await ws.send_text(json.dumps({"type": "audio_chunk", "audio_chunk": b64, "ts": time.time()}))
-                    await asyncio.sleep(chunk_ms / 1000.0)
-                await ws.send_text(json.dumps({"type": "done"}))
+
+                if not text.strip():
+                    await ws.send_text(json.dumps({"type": "done", "reason": "empty_text"}))
+                    continue
+
+                # Use Piper TTS if available, otherwise fallback to sine wave
+                if PIPER_AVAILABLE and voice is not None:
+                    try:
+                        # Synthesize with Piper - returns generator of PCM16 chunks
+                        audio_chunks = []
+                        for audio_chunk in voice.synthesize_stream_raw(text):
+                            # audio_chunk is already PCM16 bytes from Piper
+                            audio_chunks.append(audio_chunk)
+
+                        # Combine all chunks
+                        full_audio = b"".join(audio_chunks)
+
+                        # Stream in 80ms chunks
+                        pos = 0
+                        chunk_size_bytes = samples_per_chunk * 2  # 2 bytes per sample (PCM16)
+
+                        while pos < len(full_audio):
+                            # Check barge-in controls
+                            if sess.barge_canceled:
+                                await ws.send_text(json.dumps({"type": "done", "reason": "canceled"}))
+                                sess.barge_canceled = False  # Reset flag
+                                break
+
+                            if sess.barge_paused:
+                                await asyncio.sleep(0.05)
+                                continue
+
+                            # Extract chunk
+                            end = min(len(full_audio), pos + chunk_size_bytes)
+                            chunk = full_audio[pos:end]
+                            pos = end
+
+                            # Send chunk
+                            b64 = base64.b64encode(chunk).decode("ascii")
+                            await ws.send_text(json.dumps({
+                                "type": "audio_chunk",
+                                "audio_chunk": b64,
+                                "ts": time.time()
+                            }))
+
+                            # Pace the stream to match real-time playback
+                            await asyncio.sleep(chunk_ms / 1000.0)
+
+                        if not sess.barge_canceled:
+                            await ws.send_text(json.dumps({"type": "done", "reason": "completed"}))
+
+                    except Exception as exc:
+                        logger.error(f"Piper TTS error: {exc}")
+                        await ws.send_text(json.dumps({"type": "error", "error": f"TTS failed: {exc}"}))
+
+                else:
+                    # Fallback: sine wave generator (original placeholder)
+                    logger.warning("Piper TTS not available, using fallback sine wave")
+                    duration = max(0.3, min(len(text) * 0.03, 3.0))  # naive mapping
+                    total_samples = int(sr * duration)
+                    t = np.arange(total_samples) / sr
+                    tone = 0.1 * np.sin(2 * math.pi * 440.0 * t)
+                    pos = 0
+
+                    while pos < total_samples:
+                        if sess.barge_canceled:
+                            await ws.send_text(json.dumps({"type": "done", "reason": "canceled"}))
+                            sess.barge_canceled = False
+                            break
+                        if sess.barge_paused:
+                            await asyncio.sleep(0.05)
+                            continue
+
+                        end = min(total_samples, pos + samples_per_chunk)
+                        chunk = tone[pos:end]
+                        pos = end
+                        pcm = _np_to_pcm16le(chunk * 32767.0)
+                        b64 = base64.b64encode(pcm).decode("ascii")
+                        await ws.send_text(json.dumps({"type": "audio_chunk", "audio_chunk": b64, "ts": time.time()}))
+                        await asyncio.sleep(chunk_ms / 1000.0)
+
+                    await ws.send_text(json.dumps({"type": "done", "reason": "completed"}))
+
     except WebSocketDisconnect:
         return
 
@@ -416,4 +650,3 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=7006)
-
