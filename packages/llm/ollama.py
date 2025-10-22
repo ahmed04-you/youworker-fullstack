@@ -99,11 +99,16 @@ class OllamaClient:
         Yields:
             StreamChunk objects with thinking, content, and/or tool_calls
         """
+        options = {
+            "temperature": temperature,
+            "num_ctx": 16384,
+        }
+
         payload = {
             "model": model,
             "messages": [msg.to_dict() for msg in messages],
             "stream": True,
-            "options": {"temperature": temperature},
+            "options": options,
         }
 
         if think:

@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import Image from "next/image"
@@ -11,7 +10,6 @@ import { Separator } from "@/components/ui/separator"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { useHealthSWR } from "@/lib/hooks"
 import { useChatContext } from "@/lib/contexts/chat-context"
-import { IngestSheet } from "@/components/shell/ingest-sheet"
 import { cn } from "@/lib/utils"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 
@@ -20,12 +18,12 @@ interface NavbarProps {
 }
 
 export function Navbar({ onNewChat }: NavbarProps) {
-  const [ingestOpen, setIngestOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const prefersReducedMotion = useMotionPreference()
   const { clearChat } = useChatContext()
   const { data: health, error: healthError } = useHealthSWR()
+  const isIngest = pathname === "/ingest"
 
   const handleNewChat = () => {
     clearChat()
@@ -93,8 +91,11 @@ export function Navbar({ onNewChat }: NavbarProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIngestOpen(true)}
-                  className="h-12 w-12 rounded-2xl hover:bg-accent hover:scale-105 transition-all"
+                  onClick={() => router.push("/ingest")}
+                  className={cn(
+                    "h-12 w-12 rounded-2xl transition-all hover:scale-105",
+                    isIngest ? "bg-accent shadow-md" : "hover:bg-accent",
+                  )}
                 >
                   <Upload className="h-5 w-5" />
                   <span className="sr-only">Carica file</span>
@@ -175,9 +176,6 @@ export function Navbar({ onNewChat }: NavbarProps) {
           </div>
         </Container>
       </TooltipProvider>
-
-      {/* Modals */}
-      <IngestSheet open={ingestOpen} onOpenChange={setIngestOpen} />
     </>
   )
 }

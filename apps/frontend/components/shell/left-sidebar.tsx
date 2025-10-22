@@ -16,21 +16,19 @@ import { useLocalThreads, useHealthSWR } from "@/lib/hooks"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { useComposerContext } from "@/lib/contexts/composer-context"
 import { ThreadListSkeleton } from "@/components/chat/thread-list-skeleton"
-import { IngestSheet } from "@/components/shell/ingest-sheet"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 
 const quickLinks = [
   { title: "Nuova chat", icon: Plus, href: "/" },
-  { title: "Carica file", icon: Upload, action: "ingest" },
+  { title: "Carica file", icon: Upload, href: "/ingest" },
 ]
 
 export function LeftSidebar() {
   const [searchQuery, setSearchQuery] = useState("")
   const [isHydrated, setIsHydrated] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const [ingestOpen, setIngestOpen] = useState(false)
   const pathname = usePathname()
   const prefersReducedMotion = useMotionPreference()
 
@@ -215,25 +213,7 @@ export function LeftSidebar() {
         {/* Quick Links Footer */}
         <nav className="p-3 space-y-1" aria-label="Collegamenti rapidi">
           {quickLinks.map((link) => {
-            const isActive = link.href ? pathname === link.href : false
-            if (link.action) {
-              const handleClick = () => {
-                if (link.action === "ingest") {
-                  setIngestOpen(true)
-                }
-              }
-              return (
-                <Button
-                  key={link.title}
-                  variant="ghost"
-                  className="w-full justify-start gap-2 rounded-xl"
-                  onClick={handleClick}
-                >
-                  <link.icon className="h-4 w-4" aria-hidden="true" />
-                  {link.title}
-                </Button>
-              )
-            }
+            const isActive = pathname === link.href
             return (
               <Button
                 key={link.href}
@@ -241,7 +221,7 @@ export function LeftSidebar() {
                 className={cn("w-full justify-start gap-2 rounded-xl", isActive && "bg-accent")}
                 asChild
               >
-                <Link href={link.href!} aria-current={isActive ? "page" : undefined}>
+                <Link href={link.href} aria-current={isActive ? "page" : undefined}>
                   <link.icon className="h-4 w-4" aria-hidden="true" />
                   {link.title}
                 </Link>
@@ -263,8 +243,6 @@ export function LeftSidebar() {
         </div>
       </Container>
 
-      {/* Modals */}
-      <IngestSheet open={ingestOpen} onOpenChange={setIngestOpen} />
     </>
   )
 }

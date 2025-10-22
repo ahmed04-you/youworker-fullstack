@@ -23,7 +23,13 @@ interface ChatMarkdownProps {
 }
 
 const Paragraph = ({ className, ...props }: ComponentPropsWithoutRef<"p">) => (
-  <p className={cn("mb-4 leading-7 text-foreground/90 [&:not(:first-child)]:mt-4", className)} {...props} />
+  <p
+    className={cn(
+      "mb-4 leading-7 text-foreground/90 [&:not(:first-child)]:mt-4 last:mb-0",
+      className,
+    )}
+    {...props}
+  />
 )
 
 const Heading = (Tag: "h1" | "h2" | "h3" | "h4") =>

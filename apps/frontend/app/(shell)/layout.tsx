@@ -10,8 +10,7 @@ const BackgroundBeams = dynamic(
     ssr: false,
   },
 )
-import { RightPanel } from "@/components/shell/right-panel"
-import { MobileToolSheet } from "@/components/shell/mobile-tool-sheet"
+import { Navbar } from "@/components/shell/navbar"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 import { ComposerProvider } from "@/lib/contexts/composer-context"
 import { ChatProvider } from "@/lib/contexts/chat-context"
@@ -32,10 +31,9 @@ export default function ShellLayout({
             <div className="relative flex h-screen overflow-hidden">
               {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
 
-              <main className="relative z-10 flex-1 flex flex-col overflow-hidden">{children}</main>
+              <Navbar />
 
-              <RightPanel />
-              <MobileToolSheet />
+              <main className="relative z-10 flex-1 flex flex-col overflow-hidden">{children}</main>
 
               <Toaster />
             </div>

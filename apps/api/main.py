@@ -3,13 +3,15 @@ FastAPI backend for AI agent with dynamic MCP tools.
 
 Endpoints:
 - POST /v1/chat: Streaming chat with tool calling
+- POST /v1/voice-turn: Turn-based voice interaction (STT + agent + TTS)
 - POST /v1/ingest: Document ingestion
 """
 import asyncio
-from datetime import datetime
+import base64
 import json
 import logging
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, Form
@@ -17,8 +19,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from httpx import HTTPStatusError
 from pydantic import BaseModel
+from pydantic import Field
 
 from apps.api.config import settings
+from apps.api.audio_pipeline import (
+    FW_AVAILABLE as STT_AVAILABLE,
+    PIPER_AVAILABLE as TTS_AVAILABLE,
+    synthesize_speech,
+    transcribe_audio_pcm16,
+)
 from packages.llm import OllamaClient, ChatMessage
 from packages.agent import MCPRegistry, AgentLoop
 from packages.vectorstore import QdrantStore
@@ -238,6 +247,32 @@ class IngestResponse(BaseModel):
     errors: list[str] | None = None
 
 
+class VoiceTurnRequest(BaseModel):
+    """Turn-based voice interaction request."""
+
+    messages: list[dict[str, str]]
+    audio_b64: str
+    sample_rate: int = Field(default=16000, ge=8000, le=48000)
+    expect_audio: bool = True
+    enable_tools: bool = True
+    session_id: str | None = None
+    model: str | None = None
+
+
+class VoiceTurnResponse(BaseModel):
+    """Voice turn response payload."""
+
+    transcript: str
+    assistant_text: str
+    metadata: dict[str, Any]
+    audio_b64: str | None = None
+    audio_sample_rate: int | None = None
+    stt_confidence: float | None = None
+    stt_language: str | None = None
+    tool_events: list[dict[str, Any]] = Field(default_factory=list)
+    logs: list[dict[str, str]] = Field(default_factory=list)
+
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -245,6 +280,9 @@ async def health_check():
     return {
         "status": "healthy",
         "mcp_servers": healthy_servers,
+        "voice_mode": "turn_based",
+        "stt_available": STT_AVAILABLE,
+        "tts_available": TTS_AVAILABLE,
     }
 
 
@@ -452,6 +490,180 @@ async def chat_endpoint(request: ChatRequest, current_user=Depends(_get_current_
 
         response_text = final_text if final_text is not None else "".join(collected_chunks)
         return {"content": response_text}
+
+
+@app.post("/v1/voice-turn", response_model=VoiceTurnResponse)
+async def voice_turn_endpoint(request: VoiceTurnRequest, current_user=Depends(_get_current_user)):
+    """
+    Turn-based voice endpoint that handles audio transcription, agent reasoning,
+    and optional TTS synthesis.
+    """
+    if not agent_loop:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    try:
+        audio_bytes = base64.b64decode(request.audio_b64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid audio payload")
+
+    try:
+        stt_result = await transcribe_audio_pcm16(audio_bytes, request.sample_rate)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.error("Voice transcription failed: %s", exc)
+        raise HTTPException(status_code=500, detail="Transcription failed")
+
+    transcript = (stt_result.get("text") or "").strip()
+    if not transcript:
+        raise HTTPException(status_code=400, detail="Transcription produced empty text")
+
+    # Build conversation history and append the new user message
+    conversation: list[ChatMessage] = []
+    for msg in request.messages:
+        role = msg.get("role", "user") if isinstance(msg, dict) else "user"
+        content = msg.get("content", "") if isinstance(msg, dict) else ""
+        if role not in {"user", "assistant", "system"}:
+            role = "user"
+        conversation.append(ChatMessage(role=role, content=content))
+    conversation.append(ChatMessage(role="user", content=transcript))
+
+    agent_loop.model = request.model or settings.chat_model
+
+    # Persist user turn
+    chat_session_id: int | None = None
+    async with get_async_session() as db:
+        from packages.db.crud import get_or_create_session, add_message
+
+        chat_session = await get_or_create_session(
+            db,
+            user_id=current_user["id"],
+            external_id=request.session_id,
+            model=agent_loop.model,
+            enable_tools=request.enable_tools,
+        )
+        chat_session_id = chat_session.id
+        await add_message(
+            db,
+            session_id=chat_session.id,
+            role="user",
+            content=transcript,
+        )
+
+    final_text = ""
+    metadata: dict[str, Any] = {}
+    tool_events: list[dict[str, Any]] = []
+    logs: list[dict[str, str]] = []
+    pending_tool_run: int | None = None
+
+    async for event in agent_loop.run_until_completion(
+        messages=conversation,
+        enable_tools=request.enable_tools,
+        max_iterations=settings.max_agent_iterations,
+    ):
+        etype = event.get("event")
+        data = event.get("data", {}) or {}
+
+        if etype == "token":
+            final_text += data.get("text", "")
+
+        elif etype == "tool":
+            tool_events.append(data)
+            status = data.get("status")
+            ts = data.get("ts")
+            try:
+                parsed_ts = datetime.fromisoformat(ts) if ts else datetime.utcnow()
+            except Exception:
+                parsed_ts = datetime.utcnow()
+
+            if status == "start":
+                async with get_async_session() as db:
+                    from packages.db.crud import start_tool_run
+
+                    tr = await start_tool_run(
+                        db,
+                        user_id=current_user["id"],
+                        session_id=chat_session_id,
+                        tool_name=data.get("tool", ""),
+                        args=data.get("args"),
+                        start_ts=parsed_ts,
+                    )
+                    pending_tool_run = tr.id
+            else:
+                if pending_tool_run is not None:
+                    async with get_async_session() as db:
+                        from packages.db.crud import finish_tool_run
+
+                        latency_val = data.get("latency_ms")
+                        latency_ms = None
+                        if isinstance(latency_val, (int, float)):
+                            latency_ms = int(latency_val)
+
+                        status_str = status or "unknown"
+                        if status_str == "end":
+                            status_str = "success"
+
+                        await finish_tool_run(
+                            db,
+                            run_id=pending_tool_run,
+                            status=status_str,
+                            end_ts=parsed_ts,
+                            latency_ms=latency_ms,
+                            result_preview=data.get("result_preview"),
+                            tool_name=data.get("tool"),
+                        )
+                    pending_tool_run = None
+
+        elif etype == "log":
+            logs.append(
+                {
+                    "level": data.get("level", "info"),
+                    "msg": data.get("msg", ""),
+                }
+            )
+
+        elif etype == "done":
+            metadata = data.get("metadata", {}) or {}
+            if not final_text:
+                final_text = data.get("final_text", "") or ""
+
+    final_text = (final_text or "").strip()
+
+    if chat_session_id is not None and final_text:
+        async with get_async_session() as db:
+            from packages.db.crud import add_message
+
+            await add_message(
+                db,
+                session_id=chat_session_id,
+                role="assistant",
+                content=final_text,
+            )
+
+    audio_b64: str | None = None
+    audio_sample_rate: int | None = None
+
+    if request.expect_audio and final_text:
+        try:
+            synth_result = await synthesize_speech(final_text)
+            if synth_result:
+                wav_bytes, sr = synth_result
+                audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+                audio_sample_rate = sr
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Voice synthesis failed: %s", exc)
+
+    return VoiceTurnResponse(
+        transcript=transcript,
+        assistant_text=final_text,
+        metadata=metadata,
+        audio_b64=audio_b64,
+        audio_sample_rate=audio_sample_rate,
+        stt_confidence=stt_result.get("confidence"),
+        stt_language=stt_result.get("language"),
+        tool_events=tool_events,
+        logs=logs,
+    )
 
 
 @app.post("/v1/ingest")

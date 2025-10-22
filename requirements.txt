@@ -19,6 +19,11 @@ python-dateutil
 pytz
 tenacity
 
+# Voice mode dependencies
+numpy
+faster-whisper
+piper-tts
+
 # Document parsing
 pandas
 pdfplumber

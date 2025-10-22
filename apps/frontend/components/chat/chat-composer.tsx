@@ -12,34 +12,47 @@ import { useChatContext } from "@/lib/contexts/chat-context"
 import { useComposerContext } from "@/lib/contexts/composer-context"
 import { cn } from "@/lib/utils"
 import { useMode } from "@/lib/mode"
-import { AudioWSClient } from "@/lib/transport/audio-ws-client"
+import { VoiceRecorder } from "@/lib/voice-recorder"
+import { uint8ToBase64 } from "@/lib/audio-utils"
+
+interface VoiceTurnArgs {
+  audioBase64: string
+  sampleRate: number
+}
 
 interface ChatComposerProps {
   onSubmit: (content: string) => void
   onStop: () => void
+  onVoiceTurn?: (args: VoiceTurnArgs) => Promise<string | void>
   textareaRef?: React.RefObject<HTMLTextAreaElement>
 }
 
 const MAX_TEXTAREA_HEIGHT = 200
 
-export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProps) {
-  const { isStreaming, expectAudio, setExpectAudio, audioPlaying, suggestedPrompt, setSuggestedPrompt, ttsSessionId } = useChatContext()
+export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: ChatComposerProps) {
+  const {
+    isStreaming,
+    expectAudio,
+    setExpectAudio,
+    audioPlaying,
+    suggestedPrompt,
+    setSuggestedPrompt,
+  } = useChatContext()
   const { mode } = useMode()
   const { registerComposer } = useComposerContext()
   const [message, setMessage] = useState("")
   const localTextareaRef = useRef<HTMLTextAreaElement>(null)
   const composerRef = useMemo(() => textareaRef ?? localTextareaRef, [textareaRef])
 
-  // Voice Mode state
+  // Voice mode state
+  const recorderRef = useRef<VoiceRecorder | null>(null)
   const [recording, setRecording] = useState(false)
   const [connecting, setConnecting] = useState(false)
-  const [transcribing, setTranscribing] = useState(false)
+  const [processing, setProcessing] = useState(false)
   const [recordingError, setRecordingError] = useState<string | null>(null)
   const [audioLevel, setAudioLevel] = useState(0)
-  const audioClientRef = useRef<AudioWSClient | null>(null)
-  const isHoldingRef = useRef(false)
-  const shouldSubmitFinalRef = useRef(false)
-  const lastFinalRef = useRef<string | null>(null)
+  const [lastTranscript, setLastTranscript] = useState("")
+  const preventClickRef = useRef(false)
 
   useEffect(() => {
     if (suggestedPrompt) {
@@ -60,140 +73,26 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
     }
   }, [mode, setExpectAudio])
 
-  const submitFinalTranscript = useCallback((text: string) => {
-    const trimmed = text.trim()
-    if (!trimmed) return
-    onSubmit(trimmed)
-    lastFinalRef.current = null
-    shouldSubmitFinalRef.current = false
-    setMessage("")
-  }, [onSubmit])
-
-  // Initialize audio client for voice mode
   useEffect(() => {
-    if (mode !== "voice") return
+    if (mode !== "voice") {
+      setAudioLevel(0)
+      setRecording(false)
+      setProcessing(false)
+      setConnecting(false)
+      setLastTranscript("")
+      recorderRef.current?.dispose()
+      recorderRef.current = null
+      return
+    }
 
-    const client = new AudioWSClient(24000)
-    audioClientRef.current = client
-
-    client.openSTT({
-      onPartialTranscript: (text) => {
-        setMessage(text)
-        setTranscribing(true)
-      },
-      onFinalTranscript: (text) => {
-        const trimmed = text.trim()
-        setMessage(text)
-        setTranscribing(false)
-        if (trimmed) {
-          lastFinalRef.current = trimmed
-          if (shouldSubmitFinalRef.current) {
-            submitFinalTranscript(trimmed)
-          }
-        }
-      },
-      onSTTError: (error) => {
-        setRecording(false)
-        setConnecting(false)
-        setRecordingError(error.message)
-        toast.error("Errore nel riconoscimento vocale: " + error.message)
-      },
-      onRecordingStart: () => {
-        setRecording(true)
-        setRecordingError(null)
-        if (ttsSessionId && audioClientRef.current) {
-          audioClientRef.current.controlBargeIn("pause", ttsSessionId)
-        }
-      },
-      onRecordingStop: () => {
-        setRecording(false)
-        setTranscribing(false)
-        setAudioLevel(0)
-      },
-      onAudioLevel: (level) => setAudioLevel(level),
-    })
+    const recorder = new VoiceRecorder(16000)
+    recorderRef.current = recorder
 
     return () => {
-      client.close()
-      audioClientRef.current = null
+      recorder.dispose().catch(() => undefined)
+      recorderRef.current = null
     }
-  }, [mode, submitFinalTranscript, ttsSessionId])
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!message.trim() || isStreaming) return
-    onSubmit(message)
-    setMessage("")
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Enter sends (without Shift)
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault()
-      handleSubmit(e)
-    }
-
-    // Esc cancels streaming
-    if (e.key === "Escape" && isStreaming) {
-      e.preventDefault()
-      onStop()
-    }
-  }
-
-  // Voice Mode functions
-  const startRecording = async () => {
-    if (!audioClientRef.current) return
-
-    setRecordingError(null)
-    setConnecting(true)
-    isHoldingRef.current = true
-    shouldSubmitFinalRef.current = false
-    lastFinalRef.current = null
-    setMessage("")
-
-    try {
-      await audioClientRef.current.startRecording()
-      setConnecting(false)
-    } catch (err) {
-      setConnecting(false)
-      setRecording(false)
-      shouldSubmitFinalRef.current = false
-      isHoldingRef.current = false
-      
-      const error = err as Error
-      let errorMsg = error.message || "Impossibile avviare la registrazione. Riprova."
-
-      if (error.message?.includes("Permission")) {
-        errorMsg = "Accesso al microfono negato. Consenti i permessi."
-      } else if (error.message?.includes("NotFoundError")) {
-        errorMsg = "Nessun microfono rilevato. Collega un microfono."
-      } else if (error.message?.includes("WebSocket")) {
-        errorMsg = "Connessione al servizio audio non riuscita. Controlla la rete."
-      }
-
-      setRecordingError(errorMsg)
-      toast.error(errorMsg)
-    }
-  }
-
-  const stopRecording = () => {
-    if (audioClientRef.current) {
-      audioClientRef.current.stopRecording()
-    }
-    isHoldingRef.current = false
-    shouldSubmitFinalRef.current = true
-    if (lastFinalRef.current) {
-      submitFinalTranscript(lastFinalRef.current)
-    }
-  }
-
-  const handlePushToTalk = (isPressed: boolean) => {
-    if (isPressed && !recording && !isStreaming) {
-      startRecording()
-    } else if (!isPressed && recording) {
-      stopRecording()
-    }
-  }
+  }, [mode])
 
   const adjustTextareaHeight = useCallback(() => {
     const el = composerRef.current
@@ -212,7 +111,137 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
     adjustTextareaHeight()
   }, [adjustTextareaHeight])
 
-  // Text Mode UI
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!message.trim() || isStreaming) return
+    onSubmit(message)
+    setMessage("")
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSubmit(e)
+    }
+    if (e.key === "Escape" && isStreaming) {
+      e.preventDefault()
+      onStop()
+    }
+  }
+
+  const handleVoiceStart = useCallback(async () => {
+    if (mode !== "voice" || recording || processing || isStreaming || !recorderRef.current) {
+      return
+    }
+    if (!onVoiceTurn) {
+      toast.error("Modalità voce non disponibile")
+      return
+    }
+
+    preventClickRef.current = false
+    setRecordingError(null)
+    setLastTranscript("")
+    setConnecting(true)
+
+    try {
+      await recorderRef.current.start({
+        onAudioLevel: (level) => setAudioLevel(level),
+        onStart: () => {
+          setRecording(true)
+          setConnecting(false)
+        },
+        onStop: () => {
+          setRecording(false)
+          setAudioLevel(0)
+        },
+      })
+      // If start resolves before onStart fires (rare), ensure flags are set
+      if (!recording) {
+        setRecording(true)
+        setConnecting(false)
+      }
+    } catch (err) {
+      setConnecting(false)
+      setRecording(false)
+      setAudioLevel(0)
+      const error = err as Error
+      const message = error.message || "Impossibile avviare la registrazione. Riprova."
+      setRecordingError(message)
+      toast.error(message)
+    }
+  }, [isStreaming, mode, onVoiceTurn, processing, recording])
+
+  const handleVoiceStop = useCallback(async () => {
+    const recorder = recorderRef.current
+    if (mode !== "voice" || !recorder || !recorder.isRecording) {
+      return
+    }
+
+    setConnecting(false)
+
+    let pcm: Uint8Array
+    try {
+      pcm = await recorder.stop()
+    } catch (err) {
+      const message = (err as Error).message || "Errore durante la chiusura della registrazione."
+      setRecordingError(message)
+      toast.error(message)
+      return
+    }
+
+    setRecording(false)
+    setAudioLevel(0)
+
+    if (!onVoiceTurn) {
+      return
+    }
+
+    if (pcm.length === 0) {
+      toast.warning("Nessun audio registrato. Riprova.")
+      return
+    }
+
+    setProcessing(true)
+    try {
+      const transcript = await onVoiceTurn({
+        audioBase64: uint8ToBase64(pcm),
+        sampleRate: recorder.sampleRate,
+      })
+      if (typeof transcript === "string" && transcript.trim()) {
+        setLastTranscript(transcript.trim())
+      }
+    } catch (err) {
+      const message = (err as Error).message || "Errore durante l'elaborazione della richiesta vocale."
+      setRecordingError(message)
+      toast.error(message)
+    } finally {
+      setProcessing(false)
+    }
+  }, [mode, onVoiceTurn, recording])
+
+  const handlePressStart = (event: React.MouseEvent | React.TouchEvent) => {
+    preventClickRef.current = true
+    if ("touches" in event) {
+      event.preventDefault()
+    }
+    void handleVoiceStart()
+  }
+
+  const handlePressEnd = (event: React.MouseEvent | React.TouchEvent) => {
+    if ("touches" in event) {
+      event.preventDefault()
+    }
+    preventClickRef.current = true
+    void handleVoiceStop()
+  }
+
+  const handleButtonClick = (event: React.MouseEvent) => {
+    if (preventClickRef.current) {
+      event.preventDefault()
+      preventClickRef.current = false
+    }
+  }
+
   if (mode === "text") {
     return (
       <div className="relative w-full border-t border-border/50 bg-background/60 backdrop-blur-md">
@@ -238,13 +267,13 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
               />
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2 ml-3 mb-3">
+                <div className="ml-3 mb-3 flex items-center gap-2">
                   <Button
                     type="button"
                     onClick={() => setExpectAudio((v) => !v)}
                     aria-pressed={expectAudio}
                     className={cn(
-                      "h-11 w-11 rounded-2xl flex items-center justify-center transition-colors",
+                      "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors",
                       expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                     )}
                     title={expectAudio ? "Risposta audio attiva" : "Risposta audio disattivata"}
@@ -256,12 +285,13 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
                     {expectAudio ? "Audio attivo" : "Audio disattivato"}
                   </span>
                 </div>
+
                 {isStreaming ? (
                   <Button
                     type="button"
                     onClick={onStop}
                     variant="destructive"
-                    className="h-11 w-11 rounded-2xl flex items-center justify-center shadow-md hover:bg-destructive/90 mr-3 mb-3"
+                    className="mr-3 mb-3 flex h-11 w-11 items-center justify-center rounded-2xl shadow-md hover:bg-destructive/90"
                     title="Interrompi"
                     aria-label="Interrompi"
                   >
@@ -270,7 +300,7 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
                 ) : (
                   <Button
                     type="submit"
-                    className="h-11 w-11 rounded-2xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50 mr-3 mb-3 flex items-center justify-center"
+                    className="mr-3 mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50"
                     disabled={!message.trim()}
                     title="Invia"
                     aria-label="Invia"
@@ -280,7 +310,6 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
                 )}
               </div>
 
-              {/* Audio playback indicator */}
               {audioPlaying && (
                 <div className="flex items-center gap-2 px-5 pb-3 text-sm text-primary">
                   <Volume2 className="h-4 w-4 animate-pulse" />
@@ -294,7 +323,8 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
     )
   }
 
-  // Voice Mode UI
+  const buttonDisabled = (!recording && (processing || isStreaming)) || connecting
+
   return (
     <div className="relative w-full border-t border-border/50 bg-background/60 backdrop-blur-md">
       <Spotlight className="opacity-20" fill="hsl(var(--primary))" />
@@ -305,28 +335,40 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
         className="relative z-10 w-full"
       >
         <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10">
-          <div className="flex w-full flex-col gap-4 rounded-[24px] border border-border/60 bg-background/80 shadow-xl shadow-primary/5 backdrop-blur-md p-6">
-            
-            {/* Voice Controls */}
+          <div className="flex w-full flex-col gap-4 rounded-[24px] border border-border/60 bg-background/80 p-6 shadow-xl shadow-primary/5 backdrop-blur-md">
             <div className="flex flex-col items-center gap-4">
-              {/* Main Recording Button - Push to Talk */}
               <Button
                 type="button"
-                onMouseDown={() => handlePushToTalk(true)}
-                onMouseUp={() => handlePushToTalk(false)}
-                onMouseLeave={() => handlePushToTalk(false)}
-                disabled={connecting}
+                disabled={buttonDisabled}
+                onMouseDown={handlePressStart}
+                onMouseUp={handlePressEnd}
+                onMouseLeave={handlePressEnd}
+                onTouchStart={handlePressStart}
+                onTouchEnd={handlePressEnd}
+                onClick={handleButtonClick}
                 className={cn(
-                  "h-20 w-20 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg",
-                  recording 
-                    ? "bg-rose-600 text-white shadow-rose-600/30 scale-105" 
+                  "flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 shadow-lg",
+                  recording
+                    ? "scale-105 bg-rose-600 text-white shadow-rose-600/30"
                     : "bg-primary text-primary-foreground hover:bg-primary/90",
-                  connecting && "opacity-70 cursor-not-allowed"
+                  buttonDisabled && !recording && "cursor-not-allowed opacity-70",
                 )}
-                title={connecting ? "Connessione in corso..." : recording ? "Rilascia per fermare" : "Tieni premuto per parlare"}
-                aria-label={connecting ? "Connessione in corso..." : recording ? "Rilascia per fermare" : "Tieni premuto per parlare"}
+                title={
+                  recording
+                    ? "Rilascia per fermare"
+                    : buttonDisabled
+                      ? "Elaborazione in corso..."
+                      : "Tieni premuto per parlare"
+                }
+                aria-label={
+                  recording
+                    ? "Rilascia per fermare"
+                    : buttonDisabled
+                      ? "Elaborazione in corso..."
+                      : "Tieni premuto per parlare"
+                }
               >
-                {connecting ? (
+                {connecting || processing || isStreaming ? (
                   <Loader2 className="h-8 w-8 animate-spin" />
                 ) : (
                   <Mic className="h-8 w-8" />
@@ -335,50 +377,42 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
 
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">
-                  {recording 
-                    ? "Ascolto... rilascia per fermare" 
-                    : "Tieni premuto il pulsante e parla"
-                  }
+                  {recording
+                    ? "Ascolto... rilascia per fermare"
+                    : buttonDisabled
+                      ? "Attendi il completamento della risposta"
+                      : "Tieni premuto il pulsante e parla"}
                 </p>
               </div>
             </div>
 
-            {/* Voice Settings */}
-            <div className="flex items-center justify-between border-t border-border/50 pt-4">
-              <div className="text-sm text-muted-foreground">
-                Premi per parlare è sempre attivo. Rilascia per inviare.
-              </div>
-              <div className="flex items-center gap-2 text-sm text-primary">
-                <Volume2 className="h-4 w-4" />
-                <span>La risposta vocale verrà riprodotta automaticamente.</span>
-              </div>
+            <div className="flex items-center justify-start border-t border-border/50 pt-4 text-sm text-primary">
+              <Volume2 className="mr-2 h-4 w-4" />
+              <span>La risposta vocale verrà riprodotta automaticamente.</span>
             </div>
 
-            {/* Transcription Display */}
-            {message && (
-              <div className="bg-muted/50 rounded-lg p-3 border border-border/30">
-                <p className="text-sm text-foreground">{message}</p>
-                {transcribing && (
-                  <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                    <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-                    <span>Trascrizione in corso...</span>
-                  </div>
-                )}
+            {lastTranscript && (
+              <div className="rounded-lg border border-border/30 bg-muted/50 p-3">
+                <p className="text-sm text-foreground">{lastTranscript}</p>
               </div>
             )}
 
-            {/* Audio Level Visualization */}
+            {(processing || isStreaming) && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Elaborazione della richiesta...</span>
+              </div>
+            )}
+
             {recording && (
               <div className="flex items-center gap-2">
-                <div className="flex items-end gap-1 h-4 flex-1">
+                <div className="flex h-4 flex-1 items-end gap-1">
                   {Array.from({ length: 20 }).map((_, i) => (
                     <div
                       key={i}
                       className={cn(
                         "w-1 rounded-full transition-all duration-75",
-                        audioLevel > (i + 1) * 5
-                          ? "bg-rose-500"
-                          : "bg-muted-foreground/30"
+                        audioLevel > (i + 1) * 5 ? "bg-rose-500" : "bg-muted-foreground/30",
                       )}
                       style={{ height: `${Math.max(20, (i + 1) * 5)}%` }}
                     />
@@ -387,14 +421,13 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
               </div>
             )}
 
-            {/* Error Display */}
             {recordingError && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-destructive/10 text-destructive text-sm rounded-lg">
+              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{recordingError}</span>
                 <button
                   onClick={() => setRecordingError(null)}
-                  className="flex-shrink-0 hover:bg-destructive/20 rounded p-1 transition-colors"
+                  className="flex-shrink-0 rounded p-1 transition-colors hover:bg-destructive/20"
                   aria-label="Chiudi errore"
                 >
                   <X className="h-3 w-3" />
@@ -402,7 +435,6 @@ export function ChatComposer({ onSubmit, onStop, textareaRef }: ChatComposerProp
               </div>
             )}
 
-            {/* Audio Playback Indicator */}
             {audioPlaying && (
               <div className="flex items-center gap-2 text-sm text-primary">
                 <Volume2 className="h-4 w-4 animate-pulse" />

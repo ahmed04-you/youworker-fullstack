@@ -54,103 +54,74 @@ Features:
 - Named SSE events (`token`, `tool`, `log`, `heartbeat`, `done`)
 - UTF-8 encoding with periodic padding comments
 
-### Voice Mode: AudioWSClient
+### Voice Mode: Turn-based Voice Pipeline
 
-Uses WebSocket connections for audio streaming:
+Voice interactions now run through a single HTTP request per utterance:
 
-```typescript
-const audioClient = new AudioWSClient(24000)
-await audioClient.openSTT(callbacks)
-await audioClient.openTTS(callbacks)
-```
+1. The browser records audio with the `VoiceRecorder` AudioWorklet at 16kHz PCM16.
+2. When the user releases the push-to-talk button, the PCM buffer is
+   base64-encoded and sent to `POST /v1/voice-turn` together with the chat
+   history.
+3. The API service transcribes the audio (faster-whisper), executes the agent
+   loop, and optionally synthesizes a reply (Piper TTS).
+4. The response returns the transcript, assistant text, metadata, and an
+   optional WAV clip which the browser plays with a standard `Audio` element.
 
-Features:
-- 24kHz PCM16 audio streaming
-- 20ms frame chunks for low latency
-- Push-to-Talk and Auto-VAD modes
-- Barge-in support for voice interruptions
-- Real-time partial transcripts
-- Streaming TTS with pause/resume/cancel
+No persistent WebSocket connections are required—the entire turn is processed in
+a single request/response cycle.
 
 ## Voice Mode Features
 
 ### Speech-to-Text (STT)
 
-- **Provider**: faster-whisper with VAD support
-- **Sample Rate**: 24kHz PCM16
-- **Frame Size**: 20ms chunks
-- **Languages**: Auto-detect with Italian fallback
-- **VAD**: Voice Activity Detection for utterance segmentation
-- **Partial Transcripts**: Real-time streaming with confidence scores
-- **Final Transcripts**: Triggered by silence detection
+- **Provider**: faster-whisper (lazy-loaded inside the API service)
+- **Sample Rate**: 16kHz PCM16 input from the browser
+- **Transcription**: Batch transcription per utterance with average confidence
+- **Language Detection**: Automatic with whisper metadata
+- **Error Handling**: Returns HTTP 503 if the model is unavailable
 
 ### Text-to-Speech (TTS)
 
-- **Provider**: Piper TTS (default: it_IT-paola-medium)
-- **Sample Rate**: Matched to voice model (typically 22kHz or 24kHz)
-- **Streaming**: 80ms audio chunks
-- **Voices**: Configurable via environment variables
-- **Fallback**: Sine wave generator if Piper unavailable
+- **Provider**: Piper TTS (default voice: `it_IT-paola-medium`)
+- **Output**: WAV-encoded clip returned as base64
+- **Playback**: Browser `Audio` element handles the returned clip
+- **Fallback**: Short sine-wave tone if no TTS engine is available
 
-### Barge-in Control
+### Push-to-Talk UX
 
-Voice interruptions are handled gracefully:
-
-```typescript
-// Pause TTS when user starts speaking
-audioClient.controlBargeIn("pause")
-
-// Resume TTS
-audioClient.controlBargeIn("resume")
-
-// Cancel TTS completely
-audioClient.controlBargeIn("cancel")
-```
+- AudioWorklet-based recorder with live level meter
+- Press-and-hold button in voice mode (mouse and touch supported)
+- Automatic focus restore on completion
+- Graceful cancellation when the user loses focus mid-press
 
 ## Configuration
 
 ### Environment Variables
 
-#### STT Configuration
 ```bash
-STT_PROVIDER=faster-whisper          # STT provider
-STT_MODEL=large-v3                   # Whisper model size
-STT_DEVICE=auto                      # Device: auto, cpu, cuda
-STT_COMPUTE_TYPE=float16             # Compute type: float16, int8
-STT_VAD_ENABLED=true                 # Enable VAD
-STT_BEAM_SIZE=1                      # Beam size for decoding
-STT_MIN_SILENCE_MS=400               # Minimum silence for final
-STT_CHUNK_SIZE_MS=400                # Processing chunk size
-```
-
-#### TTS Configuration
-```bash
-TTS_PROVIDER=piper                   # TTS provider
-TTS_VOICE=it_IT-paola-medium         # Voice model
-TTS_MODEL_DIR=/app/models/tts        # Model directory
-```
-
-#### Audio Processing
-```bash
-AUDIO_SAMPLE_RATE=24000              # Default sample rate
-AUDIO_FRAME_MS=20                    # Frame size in milliseconds
+STT_MODEL=large-v3            # Whisper model name (lazy-loaded)
+STT_DEVICE=auto               # Device: auto, cpu, cuda
+STT_COMPUTE_TYPE=float16      # Precision: float16, int8, auto
+STT_BEAM_SIZE=1               # Beam search size for decoding
+TTS_PROVIDER=piper            # TTS backend
+TTS_VOICE=it_IT-paola-medium  # Default Piper voice
+TTS_MODEL_DIR=/app/models/tts # Directory containing Piper voices
 ```
 
 ## Cross-Browser Compatibility
 
 ### Supported Browsers
 
-- **Chrome**: Full support (SSE + WebSocket + AudioWorklet)
-- **Safari**: Full support (SSE + WebSocket + AudioWorklet)
-- **Firefox**: Full support (SSE + WebSocket + AudioWorklet)
+- **Chrome**: Full support (SSE + AudioWorklet)
+- **Safari**: Full support (SSE + AudioWorklet)
+- **Firefox**: Full support (SSE + AudioWorklet)
 
 ### Browser-Specific Considerations
 
 1. **HTTPS Required**: Microphone access requires secure context
 2. **User Gesture**: Audio context requires user interaction
 3. **AudioWorklet**: All modern browsers support AudioWorklet
-4. **WebSocket**: Standard WebSocket support across browsers
-5. **SSE**: Standard EventSource support across browsers
+4. **SSE**: Standard EventSource support across browsers (text mode)
 
 ### No Web Speech API
 
@@ -172,23 +143,22 @@ await cleanupTransports()
 
 // Manual cleanup
 sseClient.close()
-audioClient.close()
+voiceRecorder?.dispose()
 ```
 
 ### Global Resource Tracking
 
 Resources are tracked globally for emergency cleanup:
-- Active EventSource connections
-- WebSocket connections
+- Active EventSource connections (text mode)
+- VoiceRecorder instances
 - Audio contexts
 - Media streams
 
 ### Memory Management
 
-- Ring buffer limits (10 seconds max)
-- Session TTL (5 minutes default)
-- Automatic stale session cleanup
-- Audio chunk queue management
+- Recorder enforces push-to-talk (bounded utterance length)
+- VoiceRecorder disposes AudioContext and tracks after each turn
+- Audio elements revoke object URLs after playback
 
 ## Error Handling
 
@@ -203,9 +173,9 @@ Resources are tracked globally for emergency cleanup:
 
 - Microphone permission denied: User-friendly message
 - No microphone found: Clear error indication
-- STT service unavailable: Fallback handling
-- TTS service unavailable: Fallback sine wave
-- WebSocket disconnections: Automatic reconnection
+- STT model unavailable: Returns HTTP 503
+- TTS engine unavailable: Fallback sine wave
+- Upload failure: Recorder reset with retry prompt
 
 ## Performance Metrics
 
@@ -217,10 +187,10 @@ Resources are tracked globally for emergency cleanup:
 
 ### Voice Mode Metrics
 
-- **STT Latency**: Partial-to-final transcript time
-- **TTS Latency**: Time-to-first-audio
-- **Barge-in Latency**: Pause response time
-- **Audio Chunk Size**: 20ms frames for low latency
+- **STT Latency**: Time from upload to transcript
+- **Agent Latency**: Iterations to reach final answer
+- **TTS Latency**: Time to synthesize and start playback
+- **Turn RTT**: Total request duration (upload + processing)
 
 ## Testing
 
@@ -231,46 +201,22 @@ Resources are tracked globally for emergency cleanup:
 - Test concurrent mode operations
 - Validate cross-browser compatibility
 
-### Transport Tests
-
-- SSE reconnection behavior
-- WebSocket connection stability
-- Audio streaming performance
-- Barge-in functionality
-
 ### Integration Tests
 
-See `tests/integration/test_mode_switching.py` for comprehensive tests covering:
-- Mode switching functionality
-- Transport isolation
-- Cross-browser compatibility
-- Resource cleanup
-- Performance metrics
+- `tests/integration/test_chat_endpoints.py` ensures text-mode SSE streaming,
+  CORS behaviour, and voice endpoint error handling work end-to-end.
+- `tests/unit/test_voice_turn_success.py` stubs expensive dependencies to cover
+  a complete voice turn without loading real ML models.
 
-## Migration Guide
+## Operational Tips
 
-### From Hybrid Mode
-
-If migrating from a hybrid text+voice implementation:
-
-1. **Remove Web Speech API**: No longer needed
-2. **Update UI Components**: Use mode-specific rendering
-3. **Refactor Audio Logic**: Use AudioWSClient
-4. **Update SSE Logic**: Use SSEClient
-5. **Add Mode Toggle**: Implement mode switching UI
-
-### Configuration Migration
-
-Update environment variables to use new configuration format:
-
-```bash
-# Old format
-STT_COMPUTE=gpu
-
-# New format  
-STT_DEVICE=cuda
-STT_COMPUTE_TYPE=float16
-```
+- Expect a cold-start pause the first time `/v1/voice-turn` is invoked while
+  Whisper and Piper models load. You can warm them up by issuing a synthetic
+  request at startup.
+- Clients must run on HTTPS (or localhost) to acquire microphone permissions. A
+  reverse proxy or SSH tunnel is recommended for remote access.
+- Keep an eye on `apps/api/audio_pipeline.py` when swapping STT/TTS providers:
+  both loaders are pluggable and can be extended with additional backends.
 
 ## Troubleshooting
 

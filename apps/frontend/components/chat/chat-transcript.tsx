@@ -73,13 +73,11 @@ export function ChatTranscript() {
               </AvatarFallback>
             </Avatar>
             <div className="max-w-[90%] rounded-2xl bg-muted px-4 py-3 sm:max-w-[84%] lg:max-w-[80%]">
-              {streamingText ? (
+              {streamingText && (
                 <div className="flex items-start gap-2">
                   {/* For performance, render streaming text as plain text; parse markdown only for finalized messages */}
                   <p className="flex-1 text-sm leading-relaxed text-foreground/90 whitespace-pre-wrap">{streamingText}</p>
                 </div>
-              ) : (
-                <div className="text-xs text-muted-foreground">…</div>
               )}
             </div>
           </div>

@@ -1,39 +1,21 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import { toast } from "sonner"
 import { ChatTranscript } from "@/components/chat/chat-transcript"
 import { ChatComposer } from "@/components/chat/chat-composer"
 import { useChatContext } from "@/lib/contexts/chat-context"
-import { useStreamingChat, useHealthSWR } from "@/lib/hooks"
 import { generateId } from "@/lib/utils"
-import { stripMarkdownForSpeech } from "@/lib/markdown-utils"
 import { useMode } from "@/lib/mode"
+import { postVoiceTurn } from "@/lib/api"
+import { playBase64Wav } from "@/lib/audio-utils"
 import { SSEClient } from "@/lib/transport/sse-client"
-import { AudioWSClient } from "@/lib/transport/audio-ws-client"
 import { Button } from "@/components/ui/button"
-import { MessageSquare, Mic, Plus, Upload, History, Settings } from "lucide-react"
+import { MessageSquare, Mic } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useRouter, usePathname } from "next/navigation"
-import { IngestSheet } from "@/components/shell/ingest-sheet"
-
-const NAV_ITEMS = [
-  {
-    label: "Chat",
-    href: "/",
-    icon: MessageSquare,
-  },
-  {
-    label: "Cronologia",
-    href: "/history",
-    icon: History,
-  },
-  {
-    label: "Impostazioni",
-    href: "/settings",
-    icon: Settings,
-  },
-] as const
+import { RightPanel } from "@/components/shell/right-panel"
+import { MobileToolSheet } from "@/components/shell/mobile-tool-sheet"
+import type { ChatMessage } from "@/lib/types"
 
 export default function ChatPage() {
   const {
@@ -48,37 +30,15 @@ export default function ChatPage() {
     addToolEvent,
     setMetadata,
     setAudioPlaying,
-    setTtsSessionId,
     ensureSession,
-    clearChat,
   } = useChatContext()
 
   const { mode, setMode } = useMode()
-  const { start, stop, lastError } = useStreamingChat()
   const composerRef = useRef<HTMLTextAreaElement>(null)
-  const router = useRouter()
-  const pathname = usePathname()
-  const [ingestOpen, setIngestOpen] = useState(false)
-  const { data: health, error: healthError } = useHealthSWR()
   const tokenBufferRef = useRef("")
   const rafRef = useRef<number | null>(null)
   const sseClientRef = useRef<SSEClient | null>(null)
-  const audioClientRef = useRef<AudioWSClient | null>(null)
-  const statusBadgeClasses = cn(
-    "flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium",
-    healthError ? "border-rose-500/30 bg-rose-500/10 text-rose-500" : "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
-  )
-  const statusText = healthError ? "API offline" : health ? "API online" : "Verifica API…"
-
-  const handleNewChat = () => {
-    clearChat()
-    if (pathname !== "/") {
-      router.push("/")
-    }
-    setTimeout(() => {
-      composerRef.current?.focus()
-    }, 100)
-  }
+  const audioElementRef = useRef<HTMLAudioElement | null>(null)
 
   const flushTokens = () => {
     if (!tokenBufferRef.current) return
@@ -89,34 +49,27 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    if (lastError) {
-      toast.error(`Errore di streaming: ${lastError.message}`)
-    }
-  }, [lastError])
-
-  // Initialize transport clients based on mode
-  useEffect(() => {
-    if (mode === "text") {
-      sseClientRef.current = new SSEClient()
-    } else {
-      audioClientRef.current = new AudioWSClient(24000)
-    }
-
-    return () => {
-      // Cleanup on mode change or unmount
+    if (mode !== "text") {
       if (sseClientRef.current) {
         sseClientRef.current.close()
         sseClientRef.current = null
       }
-      if (audioClientRef.current) {
-        audioClientRef.current.close()
-        audioClientRef.current = null
+      return
+    }
+
+    const client = new SSEClient()
+    sseClientRef.current = client
+
+    return () => {
+      client.close()
+      if (sseClientRef.current === client) {
+        sseClientRef.current = null
       }
     }
   }, [mode, sessionId])
 
   const handleSubmit = async (content: string) => {
-    if (!content.trim() || isStreaming) return
+    if (mode !== "text" || !content.trim() || isStreaming) return
 
     // Append user message
     const userMessage = {
@@ -133,21 +86,15 @@ export default function ChatPage() {
     setIsStreaming(true)
     const activeSessionId = ensureSession()
 
-    if (mode === "text") {
-      // Use SSE for text mode
-      await handleTextModeSubmit([...messages, userMessage], activeSessionId)
-    } else {
-      // Use existing streaming chat for voice mode (TTS will be handled separately)
-      await handleVoiceModeSubmit([...messages, userMessage], activeSessionId)
-    }
+    await handleTextModeSubmit([...messages, userMessage], activeSessionId)
   }
 
-  const handleTextModeSubmit = async (messages: any[], sessionIdentifier: string) => {
+  const handleTextModeSubmit = async (history: ChatMessage[], sessionIdentifier: string) => {
     if (!sseClientRef.current) return
 
     try {
       await sseClientRef.current.open(
-        { messages, session_id: sessionIdentifier, stream: true, enable_tools: true },
+        { messages: history, session_id: sessionIdentifier, stream: true, enable_tools: true },
         {
           onToken: (data) => {
             tokenBufferRef.current += data.text
@@ -211,92 +158,137 @@ export default function ChatPage() {
     }
   }
 
-  const handleVoiceModeSubmit = async (messages: any[], sessionIdentifier: string) => {
-    // Use existing streaming chat for the agent loop, but handle TTS separately
-    await start(
-      messages,
-      {
-        onToken: (data) => {
-          tokenBufferRef.current += data.text
-          if (rafRef.current == null) {
-            rafRef.current = requestAnimationFrame(flushTokens)
-          }
-        },
-        onTool: (data) => {
-          addToolEvent({ event: "tool", data })
-        },
-        onLog: (data) => {
-          if (data.level === "error") {
-            toast.error(data.msg)
-          } else if (data.level === "warn") {
-            toast.warning(data.msg)
-          } else {
-            toast.info(data.msg)
-          }
-        },
-        onHeartbeat: () => {
-          // Heartbeat received, connection alive
-        },
-        onDone: async (data) => {
-          flushTokens()
-          const finalText = data.final_text || streamingText
-          const assistantMessage = {
-            role: "assistant" as const,
-            content: finalText,
-            id: generateId(),
-            createdAt: new Date().toISOString(),
-          }
+  const handleVoiceTurn = async ({ audioBase64, sampleRate }: { audioBase64: string; sampleRate: number }) => {
+    if (isStreaming) {
+      throw new Error("Una risposta è già in corso. Attendi il completamento precedente.")
+    }
 
-          setMessages((prev) => [...prev, assistantMessage])
-          setStreamingText("")
-          setIsStreaming(false)
-          setMetadata(data.metadata)
+    tokenBufferRef.current = ""
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
 
-          // Play audio response in voice mode
-          if (expectAudio && finalText.trim() && audioClientRef.current) {
-            try {
-              await audioClientRef.current.openTTS({
-                onTTSConnect: () => {
-                  setTtsSessionId(audioClientRef.current?.ttsSession || null)
-                  setAudioPlaying(true)
-                },
-                onTTSDone: () => {
-                  setAudioPlaying(false)
-                },
-                onTTSError: (error) => {
-                  console.error("TTS error:", error)
-                  setAudioPlaying(false)
-                },
-              })
+    setStreamingText("")
+    setIsStreaming(true)
+    const activeSessionId = ensureSession()
 
-              // Strip markdown for speech
-              const speechText = stripMarkdownForSpeech(finalText)
-              audioClientRef.current.sendSynthesize(speechText)
-            } catch (err) {
-              console.error("TTS playback failed:", err)
+    try {
+      const response = await postVoiceTurn({
+        messages,
+        audio_b64: audioBase64,
+        sample_rate: sampleRate,
+        expect_audio: expectAudio,
+        enable_tools: true,
+        session_id: activeSessionId,
+      })
+
+      const transcript = (response.transcript || "").trim()
+      const assistantText = response.assistant_text || ""
+      const now = new Date().toISOString()
+
+      const userMessage: ChatMessage = {
+        role: "user",
+        content: transcript,
+        id: generateId(),
+        createdAt: now,
+      }
+
+      const assistantMessage: ChatMessage = {
+        role: "assistant",
+        content: assistantText,
+        id: generateId(),
+        createdAt: new Date().toISOString(),
+      }
+
+      setMessages((prev) => [...prev, userMessage, assistantMessage])
+      setMetadata(response.metadata || {})
+      setStreamingText("")
+      setIsStreaming(false)
+
+      if (Array.isArray(response.tool_events)) {
+        response.tool_events.forEach((event) => {
+          addToolEvent({ event: "tool", data: event })
+        })
+      }
+
+      if (Array.isArray(response.logs)) {
+        response.logs.forEach((log) => {
+          if (!log?.msg) return
+          if (log.level === "error") {
+            toast.error(log.msg)
+          } else if (log.level === "warn") {
+            toast.warning(log.msg)
+          }
+        })
+      }
+
+      if (audioElementRef.current) {
+        try {
+          audioElementRef.current.pause()
+        } catch {
+          // ignore
+        }
+        audioElementRef.current = null
+      }
+
+      if (expectAudio && response.audio_b64) {
+        try {
+          setAudioPlaying(true)
+          const audioEl = await playBase64Wav(response.audio_b64)
+          audioElementRef.current = audioEl
+          audioEl.addEventListener(
+            "ended",
+            () => {
               setAudioPlaying(false)
-            }
-          }
-        },
-        onError: (error) => {
-          setIsStreaming(false)
-          setStreamingText("")
-          toast.error(`Errore: ${error.message}`)
-        },
-      },
-      sessionIdentifier,
-    )
+            },
+            { once: true },
+          )
+          audioEl.addEventListener(
+            "error",
+            () => {
+              setAudioPlaying(false)
+            },
+            { once: true },
+          )
+        } catch (err) {
+          setAudioPlaying(false)
+          toast.error("Riproduzione audio non riuscita.")
+        }
+      } else {
+        setAudioPlaying(false)
+      }
+
+      setTimeout(() => {
+        composerRef.current?.focus()
+      }, 100)
+
+      return transcript
+    } catch (error) {
+      setIsStreaming(false)
+      setStreamingText("")
+      const err = error instanceof Error ? error : new Error(String(error))
+      toast.error(err.message || "Errore durante la richiesta vocale.")
+      throw err
+    }
   }
 
   const handleStop = () => {
-    stop()
+    if (sseClientRef.current) {
+      sseClientRef.current.close()
+    }
     setIsStreaming(false)
     flushTokens()
     setStreamingText("")
 
-    // Also stop any active audio
-    if (audioClientRef.current) {
-      audioClientRef.current.controlBargeIn("cancel")
+    if (audioElementRef.current) {
+      try {
+        audioElementRef.current.pause()
+      } catch {
+        // ignore
+      }
+      audioElementRef.current = null
+      setAudioPlaying(false)
     }
 
     setTimeout(() => {
@@ -316,65 +308,12 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      {/* Toolbar */}
-      <div className="border-b border-border/50 bg-background/70 backdrop-blur-md">
-        <div className="flex flex-col gap-4 px-4 py-4 sm:px-6 lg:px-10">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-lg font-semibold">YouWorker.AI</h1>
-              <div className="flex flex-wrap items-center gap-1">
-                {NAV_ITEMS.map((item) => {
-                  const isActive = pathname === item.href
-                  return (
-                    <Button
-                      key={item.href}
-                      variant={isActive ? "default" : "ghost"}
-                      size="sm"
-                      onClick={() => router.push(item.href)}
-                      className={cn(
-                        "flex items-center gap-2 rounded-xl px-3 py-2 transition-colors",
-                        isActive && "bg-primary text-primary-foreground"
-                      )}
-                    >
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </Button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <span className={statusBadgeClasses}>
-              <span className={cn(
-                "inline-flex h-2 w-2 rounded-full",
-                healthError ? "bg-rose-500" : "bg-emerald-500",
-              )} />
-              {statusText}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                onClick={handleNewChat}
-                className="flex items-center gap-2 rounded-xl"
-              >
-                <Plus className="h-4 w-4" />
-                Nuova chat
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIngestOpen(true)}
-                className="flex items-center gap-2 rounded-xl"
-              >
-                <Upload className="h-4 w-4" />
-                Carica file
-              </Button>
-            </div>
-
+    <div className="flex h-full">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* Toolbar */}
+        <div className="border-b border-border/50 bg-background/70 backdrop-blur-md">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
+            <h1 className="text-lg font-semibold">YouWorker.AI</h1>
             <div className="flex items-center gap-2">
               <Button
                 variant={mode === "text" ? "default" : "outline"}
@@ -404,18 +343,29 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 min-h-0">
-        <ChatTranscript />
+        {isStreaming && (
+          <div className="mx-4 mt-3 sm:mx-6 lg:mx-10" aria-live="polite" role="status">
+            <div className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/40 px-4 py-2 text-xs text-muted-foreground shadow-sm">
+              <div className="h-2 w-2 rounded-full bg-primary/80" />
+              <span>Sto analizzando le informazioni per offrirti la risposta migliore…</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 min-h-0">
+          <ChatTranscript />
+        </div>
+
+        <ChatComposer
+          onSubmit={handleSubmit}
+          onStop={handleStop}
+          onVoiceTurn={handleVoiceTurn}
+          textareaRef={composerRef}
+        />
       </div>
-      
-      <ChatComposer 
-        onSubmit={handleSubmit} 
-        onStop={handleStop} 
-        textareaRef={composerRef} 
-      />
-      <IngestSheet open={ingestOpen} onOpenChange={setIngestOpen} />
+      <RightPanel />
+      <MobileToolSheet />
     </div>
   )
 }
