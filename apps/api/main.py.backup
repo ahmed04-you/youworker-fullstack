@@ -605,12 +605,12 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
         raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
-        audio_bytes = base64.b64decode(voice_request.audio_b64)
+        audio_bytes = base64.b64decode(request.audio_b64)
     except (ValueError, base64.binascii.Error) as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 audio payload: {e}")
 
     try:
-        stt_result = await transcribe_audio_pcm16(audio_bytes, voice_request.sample_rate)
+        stt_result = await transcribe_audio_pcm16(audio_bytes, request.sample_rate)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:  # pragma: no cover - defensive
@@ -623,7 +623,7 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
 
     # Build conversation history and append the new user message
     conversation: list[ChatMessage] = []
-    for msg in voice_request.messages:
+    for msg in request.messages:
         role = msg.get("role", "user") if isinstance(msg, dict) else "user"
         content = msg.get("content", "") if isinstance(msg, dict) else ""
         if role not in {"user", "assistant", "system"}:
@@ -631,7 +631,7 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
         conversation.append(ChatMessage(role=role, content=content))
     conversation.append(ChatMessage(role="user", content=transcript))
 
-    agent_loop.model = voice_request.model or settings.chat_model
+    agent_loop.model = request.model or settings.chat_model
 
     # Persist user turn
     chat_session_id: int | None = None
@@ -641,9 +641,9 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
         chat_session = await get_or_create_session(
             db,
             user_id=current_user["id"],
-            external_id=voice_request.session_id,
+            external_id=request.session_id,
             model=agent_loop.model,
-            enable_tools=voice_request.enable_tools,
+            enable_tools=request.enable_tools,
         )
         chat_session_id = chat_session.id
         await add_message(
@@ -661,7 +661,7 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
-        enable_tools=voice_request.enable_tools,
+        enable_tools=request.enable_tools,
         max_iterations=settings.max_agent_iterations,
     ):
         etype = event.get("event")
@@ -747,7 +747,7 @@ async def voice_turn_endpoint(request: Request, voice_request: VoiceTurnRequest,
     audio_b64: str | None = None
     audio_sample_rate: int | None = None
 
-    if voice_request.expect_audio and final_text:
+    if request.expect_audio and final_text:
         try:
             synth_result = await synthesize_speech(final_text)
             if synth_result:
@@ -781,15 +781,15 @@ async def ingest_endpoint(request: Request, ingest_request: IngestRequest, curre
     if not ingestion_pipeline:
         raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
 
-    logger.info(f"Ingestion request: path={ingest_request.path_or_url}, tags={ingest_request.tags}")
+    logger.info(f"Ingestion request: path={request.path_or_url}, tags={request.tags}")
 
     try:
-        target = ingest_request.path_or_url
-        from_web = ingest_request.from_web
-        recursive = ingest_request.recursive
+        target = request.path_or_url
+        from_web = request.from_web
+        recursive = request.recursive
 
         # Allow ingesting the fixed examples directory without exposing filesystem paths in the UI
-        if ingest_request.use_examples_dir:
+        if request.use_examples_dir:
             target = settings.ingest_examples_dir
             from_web = False
             # examples dir usually contains subfolders
@@ -820,7 +820,7 @@ async def ingest_endpoint(request: Request, ingest_request: IngestRequest, curre
             target,
             recursive=recursive,
             from_web=from_web,
-            tags=ingest_request.tags,
+            tags=request.tags,
         )
 
         error_messages = [
@@ -838,10 +838,10 @@ async def ingest_endpoint(request: Request, ingest_request: IngestRequest, curre
                 await record_ingestion_run(
                     db,
                     user_id=current_user["id"],
-                    target=ingest_request.path_or_url,
-                    from_web=ingest_request.from_web,
-                    recursive=ingest_request.recursive,
-                    tags=ingest_request.tags or [],
+                    target=request.path_or_url,
+                    from_web=request.from_web,
+                    recursive=request.recursive,
+                    tags=request.tags or [],
                     collection=None,
                     totals_files=result.total_files,
                     totals_chunks=result.total_chunks,
@@ -862,8 +862,8 @@ async def ingest_endpoint(request: Request, ingest_request: IngestRequest, curre
                         path=path,
                         mime=f.get("mime"),
                         bytes_size=f.get("size_bytes"),
-                        source="web" if ingest_request.from_web else "file",
-                        tags=ingest_request.tags or [],
+                        source="web" if request.from_web else "file",
+                        tags=request.tags or [],
                         collection=None,
                     )
         except (ValueError, TypeError, OSError) as persist_exc:

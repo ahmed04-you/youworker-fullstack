@@ -15,9 +15,9 @@ services:
     image: postgres:15
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: youworker
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-youworker}
     ports:
       - "5432:5432"
     volumes:
@@ -84,7 +84,7 @@ services:
       - ollama
       - postgres
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/youworker
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/youworker}
       QDRANT_URL: http://qdrant:6333
       OLLAMA_BASE_URL: http://ollama:11434
 
@@ -107,13 +107,13 @@ services:
       <<: *ollama-gpu-env
       APP_ENV: production
       API_PORT: 8001
-      FRONTEND_ORIGIN: "http://localhost:8000,http://127.0.0.1:8000,http://95.110.228.79:8000,http://93.41.222.40:8000"
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8000,http://127.0.0.1:8000}
       OLLAMA_BASE_URL: http://ollama:11434
       CHAT_MODEL: gpt-oss:latest
       EMBED_MODEL: embeddinggemma:300m
       QDRANT_URL: http://qdrant:6333
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/youworker
-      ROOT_API_KEY: dev-root-key
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/youworker}
+      ROOT_API_KEY: ${ROOT_API_KEY:-dev-root-key}
       MCP_SERVER_URLS: http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005
       INGEST_ACCELERATOR: ${INGEST_ACCELERATOR:-auto}
       INGEST_GPU_DEVICE: ${INGEST_GPU_DEVICE:-cuda}
