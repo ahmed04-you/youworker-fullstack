@@ -28,8 +28,8 @@ mkdir -p examples/ingestion
 # 4. Scarica modelli TTS se necessario
 if [ ! -d "data/models/piper-voices" ]; then
     echo "🎵 Download modelli TTS Piper..."
-    if [ -f "./ops/download-piper-models.sh" ]; then
-        ./ops/download-piper-models.sh
+    if [ -f "./scripts/download-piper-models.sh" ]; then
+        ./scripts/download-piper-models.sh
     else
         echo "⚠️  Script download modelli TTS non trovato"
     fi

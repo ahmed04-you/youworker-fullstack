@@ -26,18 +26,18 @@ def _make_wav(duration_ms: int = 50, sample_rate: int = 16000) -> bytes:
 @pytest.fixture
 def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     # Stub database session context manager
+    class FakeSession:
+        id = 1
+
     @asynccontextmanager
     async def fake_session() -> AsyncIterator[None]:
-        yield None
+        yield FakeSession()
 
     monkeypatch.setattr(main, "get_async_session", fake_session)
 
     # Stub CRUD helpers
     async def noop(*args: Any, **kwargs: Any) -> None:
         return None
-
-    class FakeSession:
-        id = 1
 
     async def fake_get_or_create_session(*args: Any, **kwargs: Any) -> FakeSession:
         return FakeSession()
@@ -50,6 +50,22 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     monkeypatch.setattr("packages.db.crud.start_tool_run", fake_start_tool_run)
     monkeypatch.setattr("packages.db.crud.finish_tool_run", noop)
+
+    class FakeUser:
+        id = 1
+        username = "root"
+        api_key = "dev-root-key"
+        is_root = True
+
+    async def fake_ensure_root_user(*args: Any, **kwargs: Any) -> FakeUser:
+        return FakeUser()
+
+    async def fake_grant_collection_access(*args: Any, **kwargs: Any) -> None:
+        return None
+
+    monkeypatch.setattr("packages.db.crud.ensure_root_user", fake_ensure_root_user)
+    monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
+    monkeypatch.setattr(main, "ensure_root_user", fake_ensure_root_user)
 
     # Stub transcription and synthesis
     async def fake_transcribe(audio_pcm: bytes, sample_rate: int) -> dict[str, Any]:
@@ -84,10 +100,19 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_agent_loop = main.agent_loop
     main.agent_loop = FakeAgentLoop()
 
-    with TestClient(main.app, lifespan="off") as client:
+    original_lifespan = main.app.router.lifespan_context
+
+    @asynccontextmanager
+    async def fake_lifespan(app):
+        yield
+
+    main.app.router.lifespan_context = fake_lifespan
+
+    with TestClient(main.app) as client:
         yield client
 
     # Restore globals after test
+    main.app.router.lifespan_context = original_lifespan
     main.agent_loop = original_agent_loop
     main.transcribe_audio_pcm16 = original_transcribe
     main.synthesize_speech = original_synthesize

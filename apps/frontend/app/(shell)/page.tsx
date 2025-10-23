@@ -175,7 +175,8 @@ export default function ChatPage() {
               composerRef.current?.focus()
             }, 100)
           },
-        }
+        },
+        sseClientRef.current ?? undefined,
       )
     } catch (error) {
       setIsStreaming(false)

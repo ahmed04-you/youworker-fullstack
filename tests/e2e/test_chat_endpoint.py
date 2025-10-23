@@ -1,15 +1,17 @@
-"""
-E2E tests for chat endpoint with tool calling.
+"""E2E tests for chat endpoint with tool calling."""
 
-Requirements:
-- Services must be running (`make compose-up`)
-- Ollama must have gpt-oss:20b model
-- MCP servers must be healthy
+import os
 
-Run with: pytest tests/e2e/ -v
-"""
-import pytest
 import httpx
+import pytest
+
+
+RUN_E2E_TESTS = os.getenv("RUN_E2E_TESTS") == "1"
+
+pytestmark = pytest.mark.skipif(
+    not RUN_E2E_TESTS,
+    reason="Set RUN_E2E_TESTS=1 to enable end-to-end tests against running services.",
+)
 
 
 API_BASE_URL = "http://localhost:8001"

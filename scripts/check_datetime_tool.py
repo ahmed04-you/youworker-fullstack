@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
-"""
-Test datetime MCP tool with logging.
-"""
+"""Manual smoke checks for the datetime MCP tool."""
 import sys
 from pathlib import Path
 import asyncio
@@ -11,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from packages.mcp import MCPClient
 
-async def test_datetime():
+async def check_datetime_tool():
     client = MCPClient(server_url="http://localhost:7003", server_id="datetime")
     try:
         await client.list_tools()
@@ -34,4 +32,4 @@ async def test_datetime():
         await client.close()
 
 if __name__ == "__main__":
-    asyncio.run(test_datetime())
+    asyncio.run(check_datetime_tool())

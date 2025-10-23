@@ -2,10 +2,18 @@
 
 import base64
 import time
+import os
 from typing import Iterable
 
 import pytest
 import requests
+
+RUN_API_TESTS = os.getenv("RUN_API_TESTS") == "1"
+
+pytestmark = pytest.mark.skipif(
+    not RUN_API_TESTS,
+    reason="Set RUN_API_TESTS=1 to enable integration tests against running services.",
+)
 
 
 @pytest.fixture

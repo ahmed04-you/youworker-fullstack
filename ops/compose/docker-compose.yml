@@ -98,6 +98,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:7002/health || exit 1"]
     environment:
       PYTHONUNBUFFERED: "1"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      QDRANT_URL: "http://qdrant:6333"
 
   mcp_datetime:
     build:
@@ -135,6 +137,9 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:7004/health || exit 1"]
     environment:
       PYTHONUNBUFFERED: "1"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      QDRANT_URL: "http://qdrant:6333"
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/youworker"
     volumes:
       - ../../data/uploads:/data/uploads
       - ../../examples/ingestion:/data/examples:ro
@@ -152,6 +157,8 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:7005/health || exit 1"]
     environment:
       PYTHONUNBUFFERED: "1"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      QDRANT_URL: "http://qdrant:6333"
 
   api:
     build:
@@ -164,6 +171,9 @@ services:
     environment:
       <<: *ollama-gpu-env
       PYTHONUNBUFFERED: "1"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      QDRANT_URL: "http://qdrant:6333"
+      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/youworker"
     restart: unless-stopped
     deploy: *ollama-gpu-deploy
     gpus: "all"
@@ -217,19 +227,28 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "if [ ! -f /etc/nginx/ssl/cert.pem ] || [ ! -f /etc/nginx/ssl/key.pem ]; then mkdir -p /etc/nginx/ssl && openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/nginx/ssl/key.pem -out /etc/nginx/ssl/cert.pem -subj \"/C=IT/ST=State/L=City/O=YouWorker/OU=IT/CN=${CERT_DOMAIN:-localhost}\" -addext \"subjectAltName=DNS:${CERT_DOMAIN:-localhost},IP:${CERT_IP:-127.0.0.1}\"; fi; exec nginx -g 'daemon off;'",
+      ]
     ports:
       - "8000:8000"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ../../data/nginx/ssl:/etc/nginx/ssl:ro
+      - ../../data/nginx/ssl:/etc/nginx/ssl
     depends_on:
       frontend:
         condition: service_healthy
       api:
         condition: service_healthy
+    environment:
+      CERT_DOMAIN: ${NGINX_CERT_DOMAIN:-95.110.228.79}
+      CERT_IP: ${NGINX_CERT_IP:-127.0.0.1}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8000/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8000/ || exit 1"]
     # Rimuoviamo la generazione automatica dei certificati dal container
     # e usiamo lo script esterno per maggiore controllo
 

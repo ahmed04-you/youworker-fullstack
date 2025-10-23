@@ -63,7 +63,7 @@ YouWorker.AI è un'applicazione full-stack che combina tecnologie web moderne co
 
 3. **Scarica i modelli TTS** (per modalità voce):
    ```bash
-   ./ops/download-piper-models.sh
+   ./scripts/download-piper-models.sh
    ```
 
 4. **Avvia tutti i servizi**:

@@ -1,7 +1,6 @@
-"""
-Configuration management for the API service.
-"""
-from pydantic_settings import BaseSettings
+"""Configuration management for the API service."""
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -37,9 +36,7 @@ class Settings(BaseSettings):
     ingest_examples_dir: str = "/data/examples"
     ingest_user_agent: str | None = None
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
 settings = Settings()

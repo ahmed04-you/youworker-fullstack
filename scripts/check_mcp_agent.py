@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Manual test script for verifying Agent + MCP tool calling end-to-end.
+Manual smoke checks for verifying Agent + MCP tool calling end-to-end.
 
 This script:
 1. Connects to real MCP servers
@@ -15,7 +15,7 @@ Usage:
     make run-mcp-datetime # Terminal 3
 
     # Run this test script
-    python scripts/test_mcp_agent.py
+    python scripts/check_mcp_agent.py
 """
 import asyncio
 import json

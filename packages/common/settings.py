@@ -1,8 +1,8 @@
-"""
-Settings management for the ingestion and processing pipeline.
-"""
+"""Settings management for the ingestion and processing pipeline."""
+
 from functools import lru_cache
-from pydantic_settings import BaseSettings
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -63,13 +63,12 @@ class Settings(BaseSettings):
 
     # MCP Servers
     mcp_server_urls: str = ""
+    mcp_refresh_interval: int = 90
 
     # Agent
     max_agent_iterations: int = 10
 
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
 @lru_cache()
