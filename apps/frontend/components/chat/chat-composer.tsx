@@ -11,7 +11,7 @@ import { Spotlight } from "@/components/aceternity/spotlight"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { useComposerContext } from "@/lib/contexts/composer-context"
 import { cn } from "@/lib/utils"
-import { useMode } from "@/lib/mode"
+import { useChatSettings } from "@/lib/mode"
 import { VoiceRecorder } from "@/lib/voice-recorder"
 import { uint8ToBase64 } from "@/lib/audio-utils"
 
@@ -32,13 +32,11 @@ const MAX_TEXTAREA_HEIGHT = 200
 export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: ChatComposerProps) {
   const {
     isStreaming,
-    expectAudio,
-    setExpectAudio,
     audioPlaying,
     suggestedPrompt,
     setSuggestedPrompt,
   } = useChatContext()
-  const { mode } = useMode()
+  const { expectAudio, setExpectAudio } = useChatSettings()
   const { registerComposer } = useComposerContext()
   const [message, setMessage] = useState("")
   const localTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -67,24 +65,8 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
     return () => registerComposer(null)
   }, [registerComposer, composerRef])
 
-  useEffect(() => {
-    if (mode === "voice") {
-      setExpectAudio(true)
-    }
-  }, [mode, setExpectAudio])
 
   useEffect(() => {
-    if (mode !== "voice") {
-      setAudioLevel(0)
-      setRecording(false)
-      setProcessing(false)
-      setConnecting(false)
-      setLastTranscript("")
-      recorderRef.current?.dispose()
-      recorderRef.current = null
-      return
-    }
-
     const recorder = new VoiceRecorder(16000)
     recorderRef.current = recorder
 
@@ -92,7 +74,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
       recorder.dispose().catch(() => undefined)
       recorderRef.current = null
     }
-  }, [mode])
+  }, [])
 
   const adjustTextareaHeight = useCallback(() => {
     const el = composerRef.current
@@ -130,11 +112,11 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
   }
 
   const handleVoiceStart = useCallback(async () => {
-    if (mode !== "voice" || recording || processing || isStreaming || !recorderRef.current) {
+    if (recording || processing || isStreaming || !recorderRef.current) {
       return
     }
     if (!onVoiceTurn) {
-      toast.error("Modalità voce non disponibile")
+      toast.error("Input vocale non disponibile")
       return
     }
 
@@ -169,11 +151,11 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
       setRecordingError(message)
       toast.error(message)
     }
-  }, [isStreaming, mode, onVoiceTurn, processing, recording])
+  }, [isStreaming, onVoiceTurn, processing, recording])
 
   const handleVoiceStop = useCallback(async () => {
     const recorder = recorderRef.current
-    if (mode !== "voice" || !recorder || !recorder.isRecording) {
+    if (!recorder || !recorder.isRecording) {
       return
     }
 
@@ -217,7 +199,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
     } finally {
       setProcessing(false)
     }
-  }, [mode, onVoiceTurn, recording])
+  }, [onVoiceTurn, recording])
 
   const handlePressStart = (event: React.MouseEvent | React.TouchEvent) => {
     preventClickRef.current = true
@@ -242,86 +224,6 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
     }
   }
 
-  if (mode === "text") {
-    return (
-      <div className="relative w-full border-t border-border/50 bg-background/60 backdrop-blur-md">
-        <Spotlight className="opacity-20" fill="hsl(var(--primary))" />
-        <motion.form
-          initial={{ y: 20, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ delay: 0.2 }}
-          onSubmit={handleSubmit}
-          className="relative z-10 w-full"
-        >
-          <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10">
-            <div className="flex w-full flex-col gap-4 rounded-[24px] border border-border/60 bg-background/80 shadow-xl shadow-primary/5 backdrop-blur-md">
-              <Textarea
-                ref={composerRef}
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Scrivi il tuo messaggio..."
-                className="min-h-[96px] w-full resize-none rounded-3xl border border-border/60 bg-background px-5 py-4 text-sm shadow-inner transition-[border-color,box-shadow] focus:border-primary/60 focus-visible:ring-0"
-                onKeyDown={handleKeyDown}
-                disabled={isStreaming}
-                style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
-              />
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="ml-3 mb-3 flex items-center gap-2">
-                  <Button
-                    type="button"
-                    onClick={() => setExpectAudio((v) => !v)}
-                    aria-pressed={expectAudio}
-                    className={cn(
-                      "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors",
-                      expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
-                    )}
-                    title={expectAudio ? "Audio attivo" : "Audio disattivato"}
-                    aria-label={expectAudio ? "Audio attivo" : "Audio disattivato"}
-                  >
-                    <Volume2 className="h-5 w-5" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground">
-                    {expectAudio ? "Risposta con audio" : "Risposta solo testo"}
-                  </span>
-                </div>
-
-                {isStreaming ? (
-                  <Button
-                    type="button"
-                    onClick={onStop}
-                    variant="destructive"
-                    className="mr-3 mb-3 flex h-11 w-11 items-center justify-center rounded-2xl shadow-md hover:bg-destructive/90"
-                    title="Interrompi"
-                    aria-label="Interrompi"
-                  >
-                    <Square className="h-5 w-5" />
-                  </Button>
-                ) : (
-                  <Button
-                    type="submit"
-                    className="mr-3 mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50"
-                    disabled={!message.trim()}
-                    title="Invia"
-                    aria-label="Invia"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                )}
-              </div>
-
-              {audioPlaying && (
-                <div className="flex items-center gap-2 px-5 pb-3 text-sm text-primary">
-                  <Volume2 className="h-4 w-4 animate-pulse" />
-                  <span>Riproduzione risposta audio...</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </motion.form>
-      </div>
-    )
-  }
 
   const buttonDisabled = (!recording && (processing || isStreaming)) || connecting
 
@@ -335,77 +237,134 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
         className="relative z-10 w-full"
       >
         <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-10">
-          <div className="flex w-full flex-col gap-4 rounded-[24px] border border-border/60 bg-background/80 p-6 shadow-xl shadow-primary/5 backdrop-blur-md">
-            <div className="flex flex-col items-center gap-4">
-              <Button
-                type="button"
-                disabled={buttonDisabled}
-                onMouseDown={handlePressStart}
-                onMouseUp={handlePressEnd}
-                onMouseLeave={handlePressEnd}
-                onTouchStart={handlePressStart}
-                onTouchEnd={handlePressEnd}
-                onClick={handleButtonClick}
-                className={cn(
-                  "flex h-20 w-20 items-center justify-center rounded-full transition-all duration-200 shadow-lg",
-                  recording
-                    ? "scale-105 bg-rose-600 text-white shadow-rose-600/30"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                  buttonDisabled && !recording && "cursor-not-allowed opacity-70",
-                )}
-                title={
-                  recording
-                    ? "Rilascia per fermare"
-                    : buttonDisabled
-                      ? "Elaborazione in corso..."
-                      : "Tieni premuto per parlare"
-                }
-                aria-label={
-                  recording
-                    ? "Rilascia per fermare"
-                    : buttonDisabled
-                      ? "Elaborazione in corso..."
-                      : "Tieni premuto per parlare"
-                }
-              >
-                {connecting || processing || isStreaming ? (
-                  <Loader2 className="h-8 w-8 animate-spin" />
-                ) : (
-                  <Mic className="h-8 w-8" />
-                )}
-              </Button>
+          <div className="flex w-full flex-col gap-4 rounded-[24px] border border-border/60 bg-background/80 shadow-xl shadow-primary/5 backdrop-blur-md">
+            {/* Text input area */}
+            <div className="px-6 pt-6">
+              <Textarea
+                ref={composerRef}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Scrivi il tuo messaggio o usa il pulsante vocale..."
+                className="min-h-[96px] w-full resize-none rounded-3xl border border-border/60 bg-background px-5 py-4 text-sm shadow-inner transition-[border-color,box-shadow] focus:border-primary/60 focus-visible:ring-0"
+                onKeyDown={handleKeyDown}
+                disabled={isStreaming}
+                style={{ maxHeight: MAX_TEXTAREA_HEIGHT }}
+              />
+            </div>
 
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">
-                  {recording
-                    ? "Ascolto... rilascia per fermare"
-                    : buttonDisabled
-                      ? "Attendi il completamento della risposta"
-                      : "Tieni premuto il pulsante e parla"}
-                </p>
+            {/* Voice input instructions */}
+            <div className="px-6 pb-2">
+              <p className="text-center text-sm text-muted-foreground">
+                {recording
+                  ? "Ascolto... rilascia per fermare"
+                  : buttonDisabled
+                    ? "Attendi il completamento della risposta"
+                    : "Tieni premuto il pulsante microfono e parla"}
+              </p>
+            </div>
+
+            {/* Controls and status */}
+            <div className="flex flex-col gap-3 border-t border-border/50 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  onClick={() => setExpectAudio((v) => !v)}
+                  aria-pressed={expectAudio}
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors",
+                    expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+                  )}
+                  title={expectAudio ? "Risposta con audio" : "Risposta solo testo"}
+                  aria-label={expectAudio ? "Risposta con audio" : "Risposta solo testo"}
+                >
+                  <Volume2 className="h-5 w-5" />
+                </Button>
+                <span className="text-xs text-muted-foreground">
+                  {expectAudio ? "Risposta con audio" : "Risposta solo testo"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Mic button with same styling as send button */}
+                <Button
+                  type="button"
+                  disabled={buttonDisabled}
+                  onMouseDown={handlePressStart}
+                  onMouseUp={handlePressEnd}
+                  onMouseLeave={handlePressEnd}
+                  onTouchStart={handlePressStart}
+                  onTouchEnd={handlePressEnd}
+                  onClick={handleButtonClick}
+                  className={cn(
+                    "flex h-11 w-11 items-center justify-center rounded-2xl shadow-md transition-all duration-200",
+                    recording
+                      ? "bg-rose-600 text-white shadow-rose-600/30 hover:bg-rose-600/90"
+                      : "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
+                  )}
+                  title={
+                    recording
+                      ? "Rilascia per fermare"
+                      : buttonDisabled
+                        ? "Elaborazione in corso..."
+                        : "Tieni premuto per parlare"
+                  }
+                  aria-label={
+                    recording
+                      ? "Rilascia per fermare"
+                      : buttonDisabled
+                        ? "Elaborazione in corso..."
+                        : "Tieni premuto per parlare"
+                  }
+                >
+                  {connecting || processing || isStreaming ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Mic className="h-5 w-5" />
+                  )}
+                </Button>
+
+                {isStreaming ? (
+                  <Button
+                    type="button"
+                    onClick={onStop}
+                    variant="destructive"
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl shadow-md hover:bg-destructive/90"
+                    title="Interrompi"
+                    aria-label="Interrompi"
+                  >
+                    <Square className="h-5 w-5" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    onClick={handleSubmit}
+                    className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50"
+                    disabled={!message.trim() || recording}
+                    title="Invia"
+                    aria-label="Invia"
+                  >
+                    <Send className="h-5 w-5" />
+                  </Button>
+                )}
               </div>
             </div>
 
-            <div className="flex items-center justify-start border-t border-border/50 pt-4 text-sm text-primary">
-              <Volume2 className="mr-2 h-4 w-4" />
-              <span>La risposta vocale viene sempre riprodotta in modalità Voce.</span>
-            </div>
-
+            {/* Status indicators */}
             {lastTranscript && (
-              <div className="rounded-lg border border-border/30 bg-muted/50 p-3">
+              <div className="mx-6 mb-4 rounded-lg border border-border/30 bg-muted/50 p-3">
                 <p className="text-sm text-foreground">{lastTranscript}</p>
               </div>
             )}
 
             {(processing || isStreaming) && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="mx-6 mb-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Elaborazione della richiesta...</span>
               </div>
             )}
 
             {recording && (
-              <div className="flex items-center gap-2">
+              <div className="mx-6 mb-4 flex items-center gap-2">
                 <div className="flex h-4 flex-1 items-end gap-1">
                   {Array.from({ length: 20 }).map((_, i) => (
                     <div
@@ -422,7 +381,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
             )}
 
             {recordingError && (
-              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <div className="mx-6 mb-4 flex items-center gap-2 rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 <AlertCircle className="h-4 w-4 flex-shrink-0" />
                 <span className="flex-1">{recordingError}</span>
                 <button
@@ -436,9 +395,9 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
             )}
 
             {audioPlaying && (
-              <div className="flex items-center gap-2 text-sm text-primary">
+              <div className="mx-6 mb-4 flex items-center gap-2 text-sm text-primary">
                 <Volume2 className="h-4 w-4 animate-pulse" />
-                <span>Riproduzione risposta vocale...</span>
+                <span>Riproduzione risposta audio...</span>
               </div>
             )}
           </div>

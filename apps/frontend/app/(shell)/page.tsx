@@ -6,8 +6,8 @@ import { ChatTranscript } from "@/components/chat/chat-transcript"
 import { ChatComposer } from "@/components/chat/chat-composer"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { generateId } from "@/lib/utils"
-import { useMode } from "@/lib/mode"
-import { postVoiceTurn } from "@/lib/api"
+import { useChatSettings } from "@/lib/mode"
+import { postUnifiedChat } from "@/lib/api"
 import { playBase64Wav } from "@/lib/audio-utils"
 import { SSEClient } from "@/lib/transport/sse-client"
 import { Button } from "@/components/ui/button"
@@ -23,7 +23,6 @@ export default function ChatPage() {
     streamingText,
     isStreaming,
     sessionId,
-    expectAudio,
     setMessages,
     setStreamingText,
     setIsStreaming,
@@ -33,7 +32,7 @@ export default function ChatPage() {
     ensureSession,
   } = useChatContext()
 
-  const { mode, setMode } = useMode()
+  const { expectAudio, setExpectAudio } = useChatSettings()
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const tokenBufferRef = useRef("")
   const rafRef = useRef<number | null>(null)
@@ -49,14 +48,6 @@ export default function ChatPage() {
   }
 
   useEffect(() => {
-    if (mode !== "text") {
-      if (sseClientRef.current) {
-        sseClientRef.current.close()
-        sseClientRef.current = null
-      }
-      return
-    }
-
     const client = new SSEClient()
     sseClientRef.current = client
 
@@ -66,10 +57,10 @@ export default function ChatPage() {
         sseClientRef.current = null
       }
     }
-  }, [mode, sessionId])
+  }, [sessionId])
 
   const handleSubmit = async (content: string) => {
-    if (mode !== "text" || !content.trim() || isStreaming) return
+    if (!content.trim() || isStreaming) return
 
     // Append user message
     const userMessage = {
@@ -86,15 +77,26 @@ export default function ChatPage() {
     setIsStreaming(true)
     const activeSessionId = ensureSession()
 
-    await handleTextModeSubmit([...messages, userMessage], activeSessionId)
+    await handleUnifiedChatSubmit([...messages, userMessage], activeSessionId, content.trim(), null)
   }
 
-  const handleTextModeSubmit = async (history: ChatMessage[], sessionIdentifier: string) => {
-    if (!sseClientRef.current) return
-
+  const handleUnifiedChatSubmit = async (
+    history: ChatMessage[],
+    sessionIdentifier: string,
+    textInput: string | null,
+    audioBase64: string | null
+  ) => {
     try {
-      await sseClientRef.current.open(
-        { messages: history, session_id: sessionIdentifier, stream: true, enable_tools: true },
+      await postUnifiedChat(
+        {
+          messages: history,
+          text_input: textInput,
+          audio_b64: audioBase64,
+          expect_audio: expectAudio,
+          enable_tools: true,
+          session_id: sessionIdentifier,
+          stream: true,
+        },
         {
           onToken: (data) => {
             tokenBufferRef.current += data.text
@@ -119,7 +121,8 @@ export default function ChatPage() {
           },
           onDone: async (data) => {
             flushTokens()
-            const finalText = data.final_text || streamingText
+            // For unified chat, the final text is in the content field
+            const finalText = data.content || data.final_text || streamingText
             const assistantMessage = {
               role: "assistant" as const,
               content: finalText,
@@ -131,6 +134,34 @@ export default function ChatPage() {
             setStreamingText("")
             setIsStreaming(false)
             setMetadata(data.metadata)
+
+            // Handle audio response if available (for unified chat responses)
+            if (data.audio_b64 && expectAudio) {
+              try {
+                setAudioPlaying(true)
+                const audioEl = await playBase64Wav(data.audio_b64)
+                audioElementRef.current = audioEl
+                audioEl.addEventListener(
+                  "ended",
+                  () => {
+                    setAudioPlaying(false)
+                  },
+                  { once: true },
+                )
+                audioEl.addEventListener(
+                  "error",
+                  () => {
+                    setAudioPlaying(false)
+                  },
+                  { once: true },
+                )
+              } catch (err) {
+                setAudioPlaying(false)
+                toast.error("Riproduzione audio non riuscita.")
+              }
+            } else {
+              setAudioPlaying(false)
+            }
 
             setTimeout(() => {
               composerRef.current?.focus()
@@ -169,98 +200,12 @@ export default function ChatPage() {
     const activeSessionId = ensureSession()
 
     try {
-      // Voice mode ALWAYS expects audio response
-      const response = await postVoiceTurn({
-        messages,
-        audio_b64: audioBase64,
-        sample_rate: sampleRate,
-        expect_audio: true,
-        enable_tools: true,
-        session_id: activeSessionId,
-      })
-
-      const transcript = (response.transcript || "").trim()
-      const assistantText = response.assistant_text || ""
-      const now = new Date().toISOString()
-
-      const userMessage: ChatMessage = {
-        role: "user",
-        content: transcript,
-        id: generateId(),
-        createdAt: now,
-      }
-
-      const assistantMessage: ChatMessage = {
-        role: "assistant",
-        content: assistantText,
-        id: generateId(),
-        createdAt: new Date().toISOString(),
-      }
-
-      setMessages((prev) => [...prev, userMessage, assistantMessage])
-      setMetadata(response.metadata || {})
-      setStreamingText("")
-      setIsStreaming(false)
-
-      if (Array.isArray(response.tool_events)) {
-        response.tool_events.forEach((event) => {
-          addToolEvent({ event: "tool", data: event })
-        })
-      }
-
-      if (Array.isArray(response.logs)) {
-        response.logs.forEach((log) => {
-          if (!log?.msg) return
-          if (log.level === "error") {
-            toast.error(log.msg)
-          } else if (log.level === "warn") {
-            toast.warning(log.msg)
-          }
-        })
-      }
-
-      if (audioElementRef.current) {
-        try {
-          audioElementRef.current.pause()
-        } catch {
-          // ignore
-        }
-        audioElementRef.current = null
-      }
-
-      // Voice mode always plays audio response
-      if (response.audio_b64) {
-        try {
-          setAudioPlaying(true)
-          const audioEl = await playBase64Wav(response.audio_b64)
-          audioElementRef.current = audioEl
-          audioEl.addEventListener(
-            "ended",
-            () => {
-              setAudioPlaying(false)
-            },
-            { once: true },
-          )
-          audioEl.addEventListener(
-            "error",
-            () => {
-              setAudioPlaying(false)
-            },
-            { once: true },
-          )
-        } catch (err) {
-          setAudioPlaying(false)
-          toast.error("Riproduzione audio non riuscita.")
-        }
-      } else {
-        setAudioPlaying(false)
-      }
-
+      // Use the unified chat endpoint
+      await handleUnifiedChatSubmit(messages, activeSessionId, null, audioBase64)
+      
       setTimeout(() => {
         composerRef.current?.focus()
       }, 100)
-
-      return transcript
     } catch (error) {
       setIsStreaming(false)
       setStreamingText("")
@@ -293,16 +238,6 @@ export default function ChatPage() {
     }, 100)
   }
 
-  const handleModeToggle = async (newMode: "text" | "voice") => {
-    if (isStreaming) {
-      toast.error("Impossibile cambiare modalità durante una risposta in corso")
-      return
-    }
-    if (mode === newMode) {
-      return
-    }
-    setMode(newMode)
-  }
 
   return (
     <div className="flex h-full">
@@ -311,33 +246,6 @@ export default function ChatPage() {
         <div className="border-b border-border/50 bg-background/70 backdrop-blur-md">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-10">
             <h1 className="text-lg font-semibold">YouWorker.AI</h1>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={mode === "text" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleModeToggle("text")}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl",
-                  mode === "text" && "bg-primary text-primary-foreground"
-                )}
-              >
-                <MessageSquare className="h-4 w-4" />
-                Testo
-              </Button>
-
-              <Button
-                variant={mode === "voice" ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleModeToggle("voice")}
-                className={cn(
-                  "flex items-center gap-2 rounded-xl",
-                  mode === "voice" && "bg-primary text-primary-foreground"
-                )}
-              >
-                <Mic className="h-4 w-4" />
-                Voce
-              </Button>
-            </div>
           </div>
         </div>
 

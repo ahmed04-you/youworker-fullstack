@@ -253,10 +253,10 @@ async def synthesize_speech(
 
     if voice:
         def _run_voice() -> Tuple[bytes, int]:
-            chunks: list[bytes] = []
-            for chunk in voice.synthesize_stream_raw(cleaned):
-                chunks.append(chunk)
-            pcm = b"".join(chunks)
+            # Use synthesize method which returns a numpy array
+            audio_array = voice.synthesize(cleaned)
+            # Convert to int16 PCM
+            pcm = (audio_array * 32767.0).astype(np.int16).tobytes()
             sr = getattr(getattr(voice, "config", None), "sample_rate", None)
             if sr is None:
                 sr = getattr(voice, "sample_rate", None) or 24000

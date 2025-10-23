@@ -318,6 +318,34 @@ class IngestResponse(BaseModel):
     errors: list[str] | None = None
 
 
+class UnifiedChatRequest(BaseModel):
+    """Unified chat request that supports both text and audio input."""
+
+    messages: list[dict[str, str]]
+    text_input: str | None = None
+    audio_b64: str | None = None
+    sample_rate: int = Field(default=16000, ge=8000, le=48000)
+    expect_audio: bool = False
+    enable_tools: bool = True
+    session_id: str | None = None
+    model: str | None = None
+    stream: bool = True
+
+
+class UnifiedChatResponse(BaseModel):
+    """Unified chat response payload."""
+
+    content: str
+    transcript: str | None = None
+    metadata: dict[str, Any]
+    audio_b64: str | None = None
+    audio_sample_rate: int | None = None
+    stt_confidence: float | None = None
+    stt_language: str | None = None
+    tool_events: list[dict[str, Any]] = Field(default_factory=list)
+    logs: list[dict[str, str]] = Field(default_factory=list)
+
+
 class VoiceTurnRequest(BaseModel):
     """Turn-based voice interaction request."""
 
@@ -592,6 +620,350 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest, current_use
 
         response_text = final_text if final_text is not None else "".join(collected_chunks)
         return {"content": response_text}
+
+
+@app.post("/v1/unified-chat", response_model=UnifiedChatResponse)
+@limiter.limit("30/minute")
+async def unified_chat_endpoint(request: Request, unified_request: UnifiedChatRequest, current_user=Depends(_get_current_user)):
+    """
+    Unified chat endpoint that supports both text and audio input.
+    
+    Handles three scenarios:
+    1. Text input only -> uses chat streaming
+    2. Audio input only -> transcribes and processes
+    3. Both text and audio -> prioritizes text input
+    
+    Always returns text response, optionally with audio.
+    """
+    if not agent_loop:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+
+    # Determine input type and process accordingly
+    if unified_request.text_input and unified_request.text_input.strip():
+        # Text input takes precedence
+        text_content = unified_request.text_input.strip()
+        transcript = None
+        stt_confidence = None
+        stt_language = None
+    elif unified_request.audio_b64:
+        # Audio input only
+        try:
+            audio_bytes = base64.b64decode(unified_request.audio_b64)
+        except (ValueError, base64.binascii.Error) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 audio payload: {e}")
+
+        try:
+            stt_result = await transcribe_audio_pcm16(audio_bytes, unified_request.sample_rate)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail=str(exc))
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.error("Voice transcription failed: %s", exc)
+            raise HTTPException(status_code=500, detail="Transcription failed")
+
+        text_content = (stt_result.get("text") or "").strip()
+        transcript = text_content
+        stt_confidence = stt_result.get("confidence")
+        stt_language = stt_result.get("language")
+        
+        if not text_content:
+            raise HTTPException(status_code=400, detail="Transcription produced empty text")
+    else:
+        raise HTTPException(status_code=400, detail="Either text_input or audio_b64 must be provided")
+
+    # Build conversation history and append the new user message
+    conversation: list[ChatMessage] = []
+    for msg in unified_request.messages:
+        role = msg.get("role", "user") if isinstance(msg, dict) else "user"
+        content = msg.get("content", "") if isinstance(msg, dict) else ""
+        if role not in {"user", "assistant", "system"}:
+            role = "user"
+        conversation.append(ChatMessage(role=role, content=content))
+    conversation.append(ChatMessage(role="user", content=text_content))
+
+    agent_loop.model = unified_request.model or settings.chat_model
+
+    # Persist user turn
+    chat_session_id: int | None = None
+    async with get_async_session() as db:
+        from packages.db.crud import get_or_create_session, add_message
+
+        chat_session = await get_or_create_session(
+            db,
+            user_id=current_user["id"],
+            external_id=unified_request.session_id,
+            model=agent_loop.model,
+            enable_tools=unified_request.enable_tools,
+        )
+        chat_session_id = chat_session.id
+        await add_message(
+            db,
+            session_id=chat_session.id,
+            role="user",
+            content=text_content,
+        )
+
+    final_text = ""
+    metadata: dict[str, Any] = {}
+    tool_events: list[dict[str, Any]] = []
+    logs: list[dict[str, str]] = []
+    pending_tool_run: int | None = None
+
+    if unified_request.stream:
+        # Streaming response - similar to chat endpoint
+        collected_chunks: list[str] = []
+
+        def format_sse(event: dict[str, Any]) -> str:
+            event_name = event.get("event", "message")
+            payload = event.get("data", {})
+            # Add padding comment to force browser flush
+            padding = ": " + (" " * 2048) + "\n"
+            return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n{padding}\n"
+
+        async def generate():
+            """Generate SSE stream."""
+            try:
+                last_tool_run_id = [None]
+
+                async for event in agent_loop.run_until_completion(
+                    messages=conversation,
+                    enable_tools=unified_request.enable_tools,
+                    max_iterations=settings.max_agent_iterations,
+                ):
+                    # Persist tool runs
+                    if event.get("event") == "tool":
+                        data = event.get("data", {})
+                        if data.get("status") == "start":
+                            async with get_async_session() as db:
+                                from packages.db.crud import start_tool_run
+                                tr = await start_tool_run(
+                                    db,
+                                    user_id=current_user["id"],
+                                    session_id=chat_session_id,
+                                    tool_name=data.get("tool"),
+                                    args=data.get("args"),
+                                    start_ts=datetime.fromisoformat(data.get("ts")),
+                                )
+                                last_tool_run_id[0] = tr.id
+                        elif data.get("status") == "end":
+                            async with get_async_session() as db:
+                                from packages.db.crud import finish_tool_run
+                                if last_tool_run_id[0] is not None:
+                                    await finish_tool_run(
+                                        db,
+                                        run_id=last_tool_run_id[0],
+                                        status="success",
+                                        end_ts=datetime.fromisoformat(data.get("ts")),
+                                        latency_ms=int(data.get("latency_ms")) if data.get("latency_ms") is not None else None,
+                                        result_preview=(data.get("result_preview") or None),
+                                        tool_name=data.get("tool"),
+                                    )
+                    elif event.get("event") == "token":
+                        text = event.get("data", {}).get("text", "")
+                        collected_chunks.append(text)
+                        yield format_sse(event)
+                    elif event.get("event") == "done":
+                        final = event.get("data", {}).get("final_text") or ""
+                        if not final_text:  # final_text is defined in outer scope
+                            final_text = "".join(collected_chunks) + final
+                        metadata = event.get("data", {}).get("metadata", {}) or {}
+                        
+                        # Persist assistant final message
+                        async with get_async_session() as db:
+                            from packages.db.crud import add_message
+                            await add_message(
+                                db,
+                                session_id=chat_session_id,
+                                role="assistant",
+                                content=final_text if final_text else "".join(collected_chunks),
+                            )
+                        
+                        # Generate audio if requested
+                        audio_b64 = None
+                        audio_sample_rate = None
+                        if unified_request.expect_audio and final_text:
+                            try:
+                                synth_result = await synthesize_speech(final_text)
+                                if synth_result:
+                                    wav_bytes, sr = synth_result
+                                    audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+                                    audio_sample_rate = sr
+                            except Exception as exc:  # pragma: no cover - defensive
+                                logger.error("Voice synthesis failed: %s", exc)
+                        
+                        response = UnifiedChatResponse(
+                            content=final_text if final_text else "".join(collected_chunks),
+                            transcript=transcript,
+                            metadata=metadata,
+                            audio_b64=audio_b64,
+                            audio_sample_rate=audio_sample_rate,
+                            stt_confidence=stt_confidence,
+                            stt_language=stt_language,
+                            tool_events=tool_events,
+                            logs=logs,
+                        )
+                        yield format_sse({"event": "done", "data": response.model_dump()})
+                    
+                    elif event.get("event") == "log":
+                        log_data = event.get("data", {})
+                        logs.append({
+                            "level": log_data.get("level", "info"),
+                            "msg": log_data.get("msg", ""),
+                        })
+                        yield format_sse(event)
+                    
+                    # Force immediate flush
+                    await asyncio.sleep(0)
+
+            except HTTPStatusError as e:
+                error_msg = f"Ollama error ({e.response.status_code}): {e.response.text.strip()}"
+                logger.error("Error during unified chat: %s", error_msg)
+                yield format_sse({"event": "log", "data": {"level": "error", "msg": error_msg}})
+                error_response = UnifiedChatResponse(
+                    content=f"Errore: {error_msg}",
+                    transcript=transcript,
+                    metadata={"status": "error", "error": error_msg},
+                    audio_b64=None,
+                    audio_sample_rate=None,
+                    stt_confidence=stt_confidence,
+                    stt_language=stt_language,
+                    tool_events=tool_events,
+                    logs=logs,
+                )
+                yield format_sse({"event": "done", "data": error_response.model_dump()})
+            except Exception as e:
+                error_msg = str(e)
+                logger.error("Error during unified chat: %s", error_msg)
+                yield format_sse({"event": "log", "data": {"level": "error", "msg": error_msg}})
+                error_response = UnifiedChatResponse(
+                    content=f"Errore: {error_msg}",
+                    transcript=transcript,
+                    metadata={"status": "error", "error": error_msg},
+                    audio_b64=None,
+                    audio_sample_rate=None,
+                    stt_confidence=stt_confidence,
+                    stt_language=stt_language,
+                    tool_events=tool_events,
+                    logs=logs,
+                )
+                yield format_sse({"event": "done", "data": error_response.model_dump()})
+
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+    else:
+        # Non-streaming response
+        async for event in agent_loop.run_until_completion(
+            messages=conversation,
+            enable_tools=unified_request.enable_tools,
+            max_iterations=settings.max_agent_iterations,
+        ):
+            etype = event.get("event")
+            data = event.get("data", {}) or {}
+
+            if etype == "token":
+                final_text += data.get("text", "")
+            elif etype == "tool":
+                tool_events.append(data)
+                status = data.get("status")
+                ts = data.get("ts")
+                try:
+                    parsed_ts = datetime.fromisoformat(ts) if ts else datetime.utcnow()
+                except (ValueError, TypeError) as e:
+                    logger.warning(f"Invalid timestamp format: {e}, using current time")
+                    parsed_ts = datetime.utcnow()
+
+                if status == "start":
+                    async with get_async_session() as db:
+                        from packages.db.crud import start_tool_run
+                        tr = await start_tool_run(
+                            db,
+                            user_id=current_user["id"],
+                            session_id=chat_session_id,
+                            tool_name=data.get("tool", ""),
+                            args=data.get("args"),
+                            start_ts=parsed_ts,
+                        )
+                        pending_tool_run = tr.id
+                else:
+                    if pending_tool_run is not None:
+                        async with get_async_session() as db:
+                            from packages.db.crud import finish_tool_run
+                            latency_val = data.get("latency_ms")
+                            latency_ms = None
+                            if isinstance(latency_val, (int, float)):
+                                latency_ms = int(latency_val)
+
+                            status_str = status or "unknown"
+                            if status_str == "end":
+                                status_str = "success"
+
+                            await finish_tool_run(
+                                db,
+                                run_id=pending_tool_run,
+                                status=status_str,
+                                end_ts=parsed_ts,
+                                latency_ms=latency_ms,
+                                result_preview=data.get("result_preview"),
+                                tool_name=data.get("tool"),
+                            )
+                        pending_tool_run = None
+
+            elif etype == "log":
+                logs.append(
+                    {
+                        "level": data.get("level", "info"),
+                        "msg": data.get("msg", ""),
+                    }
+                )
+
+            elif etype == "done":
+                metadata = data.get("metadata", {}) or {}
+                if not final_text:
+                    final_text = data.get("final_text", "") or ""
+
+        final_text = (final_text or "").strip()
+
+        if chat_session_id is not None and final_text:
+            async with get_async_session() as db:
+                from packages.db.crud import add_message
+                await add_message(
+                    db,
+                    session_id=chat_session_id,
+                    role="assistant",
+                    content=final_text,
+                )
+
+        # Generate audio if requested
+        audio_b64 = None
+        audio_sample_rate = None
+
+        if unified_request.expect_audio and final_text:
+            try:
+                synth_result = await synthesize_speech(final_text)
+                if synth_result:
+                    wav_bytes, sr = synth_result
+                    audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
+                    audio_sample_rate = sr
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("Voice synthesis failed: %s", exc)
+
+        return UnifiedChatResponse(
+            content=final_text,
+            transcript=transcript,
+            metadata=metadata,
+            audio_b64=audio_b64,
+            audio_sample_rate=audio_sample_rate,
+            stt_confidence=stt_confidence,
+            stt_language=stt_language,
+            tool_events=tool_events,
+            logs=logs,
+        )
 
 
 @app.post("/v1/voice-turn", response_model=VoiceTurnResponse)

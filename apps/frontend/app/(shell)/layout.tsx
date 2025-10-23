@@ -13,8 +13,8 @@ const BackgroundBeams = dynamic(
 import { Navbar } from "@/components/shell/navbar"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 import { ComposerProvider } from "@/lib/contexts/composer-context"
-import { ChatProvider } from "@/lib/contexts/chat-context"
-import { ModeProvider } from "@/lib/mode"
+import { ChatProvider as ChatContextProvider } from "@/lib/contexts/chat-context"
+import { ChatProvider } from "@/lib/mode"
 
 export default function ShellLayout({
   children,
@@ -25,8 +25,8 @@ export default function ShellLayout({
 
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="youworker-theme">
-      <ModeProvider>
-        <ChatProvider>
+      <ChatProvider>
+        <ChatContextProvider>
           <ComposerProvider>
             <div className="relative flex h-screen overflow-hidden">
               {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
@@ -38,8 +38,8 @@ export default function ShellLayout({
               <Toaster />
             </div>
           </ComposerProvider>
-        </ChatProvider>
-      </ModeProvider>
+        </ChatContextProvider>
+      </ChatProvider>
     </ThemeProvider>
   )
 }
