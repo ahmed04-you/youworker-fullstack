@@ -10,6 +10,12 @@ x-ollama-gpu-env: &ollama-gpu-env
   NVIDIA_VISIBLE_DEVICES: "all"
   NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
 
+x-healthcheck-defaults: &healthcheck-defaults
+  interval: 30s
+  timeout: 10s
+  retries: 3
+  start_period: 40s
+
 services:
   postgres:
     image: postgres:15
@@ -20,13 +26,28 @@ services:
       - "5432:5432"
     volumes:
       - ../../data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-youworker}"]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-youworker}
+
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
     ports:
       - "6333:6333"
+      - "6334:6334"  # Porta per l'API REST di Qdrant
     volumes:
       - ../../data/qdrant:/qdrant/storage
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/health || exit 1"]
+    environment:
+      QDRANT__SERVICE__HTTP_PORT: 6333
+      QDRANT__SERVICE__GRPC_PORT: 6334
 
   ollama:
     image: ollama/ollama:latest
@@ -38,6 +59,12 @@ services:
       - ../../data/ollama:/root/.ollama
     environment:
       <<: *ollama-gpu-env
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_ORIGINS: "*"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      start_period: 120s  # Ollama può richiedere più tempo per avviarsi
 
   mcp_web:
     build:
@@ -47,6 +74,11 @@ services:
     restart: unless-stopped
     ports:
       - "7001:7001"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7001/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
 
   mcp_semantic:
     build:
@@ -57,8 +89,15 @@ services:
     ports:
       - "7002:7002"
     depends_on:
-      - qdrant
-      - ollama
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7002/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
 
   mcp_datetime:
     build:
@@ -68,6 +107,11 @@ services:
     restart: unless-stopped
     ports:
       - "7003:7003"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7003/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
 
   mcp_ingest:
     build:
@@ -80,9 +124,20 @@ services:
     ports:
       - "7004:7004"
     depends_on:
-      - qdrant
-      - ollama
-      - postgres
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7004/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ../../data/uploads:/data/uploads
+      - ../../examples/ingestion:/data/examples:ro
 
   mcp_units:
     build:
@@ -92,6 +147,11 @@ services:
     restart: unless-stopped
     ports:
       - "7005:7005"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7005/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
 
   api:
     build:
@@ -103,6 +163,7 @@ services:
       - ../../.env
     environment:
       <<: *ollama-gpu-env
+      PYTHONUNBUFFERED: "1"
     restart: unless-stopped
     deploy: *ollama-gpu-deploy
     gpus: "all"
@@ -114,21 +175,24 @@ services:
       - ../../data/models:/app/models:ro
     depends_on:
       ollama:
-        condition: service_started
+        condition: service_healthy
       qdrant:
-        condition: service_started
+        condition: service_healthy
       postgres:
-        condition: service_started
+        condition: service_healthy
       mcp_web:
-        condition: service_started
+        condition: service_healthy
       mcp_semantic:
-        condition: service_started
+        condition: service_healthy
       mcp_datetime:
-        condition: service_started
+        condition: service_healthy
       mcp_ingest:
-        condition: service_started
+        condition: service_healthy
       mcp_units:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
 
   frontend:
     build:
@@ -143,7 +207,12 @@ services:
     restart: unless-stopped
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+    environment:
+      NODE_ENV: "production"
 
   nginx:
     image: nginx:alpine
@@ -152,25 +221,29 @@ services:
       - "8000:8000"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ../../data/nginx/ssl:/etc/nginx/ssl
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        apk add --no-cache openssl
-        if [ ! -f /etc/nginx/ssl/cert.pem ]; then
-          mkdir -p /etc/nginx/ssl
-          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout /etc/nginx/ssl/key.pem \
-            -out /etc/nginx/ssl/cert.pem \
-            -subj "/C=IT/ST=State/L=City/O=YouWorker/OU=IT/CN=95.110.228.79" \
-            -addext "subjectAltName=IP:95.110.228.79"
-          chmod 600 /etc/nginx/ssl/key.pem
-          chmod 644 /etc/nginx/ssl/cert.pem
-          echo "Self-signed certificate generated"
-        else
-          echo "Certificate already exists"
-        fi
-        exec nginx -g "daemon off;"
+      - ../../data/nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
-      - frontend
-      - api
+      frontend:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+    # Rimuoviamo la generazione automatica dei certificati dal container
+    # e usiamo lo script esterno per maggiore controllo
+
+networks:
+  default:
+    name: youworker-network
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+  qdrant_data:
+    driver: local
+  ollama_data:
+    driver: local
+  nginx_ssl:
+    driver: local

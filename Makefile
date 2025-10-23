@@ -1,7 +1,7 @@
 COMPOSE_FILE ?= ops/compose/docker-compose.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_FILE)
 
-.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format
+.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl
 
 # Default target
 help:
@@ -19,6 +19,8 @@ help:
 	@echo "  status           - Show service status"
 	@echo "  dev-frontend     - Run frontend in development mode"
 	@echo "  frontend-logs    - View frontend logs"
+	@echo "  ssl-setup        - Generate SSL certificates"
+	@echo "  start-ssl        - Start services with SSL setup"
 
 # Start all services
 compose-up:
@@ -126,3 +128,30 @@ frontend-logs:
 # Build frontend for production
 build-frontend:
 	cd apps/frontend && npm run build
+
+# SSL certificate generation
+ssl-setup:
+	@echo "Generating SSL certificates..."
+	./scripts/generate-ssl-cert.sh localhost 127.0.0.1
+
+# Start with SSL setup
+start-ssl:
+	@echo "Starting YouWorker.AI with SSL..."
+	./scripts/start-with-ssl.sh localhost 127.0.0.1
+
+# Start with SSL for production domain
+start-ssl-prod:
+	@echo "Starting YouWorker.AI with SSL for production..."
+	./scripts/start-with-ssl.sh $(DOMAIN) $(IP)
+
+# Create necessary directories
+setup-dirs:
+	@echo "Creating necessary directories..."
+	mkdir -p data/{postgres,qdrant,ollama,nginx/ssl,uploads,models}
+	mkdir -p examples/ingestion
+
+# Full setup (directories + SSL + start)
+setup-full: setup-dirs ssl-setup compose-up
+	@echo "Full setup completed!"
+	@echo "Access YouWorker.AI at: https://localhost:8000"
+	@echo "API documentation at: https://localhost:8001/docs"
