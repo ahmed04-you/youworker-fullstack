@@ -1,176 +1,313 @@
-# YouWorker Full-Stack
+# YouWorker.AI
 
-Modern conversational assistant that pairs a Next.js frontend with a FastAPI backend, dynamic MCP tools, and an optional voice mode. This repository contains everything required to run the product locally or in Docker.
+**Assistente conversazionale AI con interazione vocale e testuale, ricerca semantica e integrazione estensibile di strumenti.**
 
-## Highlights
+YouWorker.AI è un'applicazione full-stack che combina tecnologie web moderne con modelli AI locali per offrire un'esperienza conversazionale potente e orientata alla privacy. Costruito con Next.js, FastAPI e il Model Context Protocol (MCP).
 
-- **Two interaction modes**  
-  - *Text*: classic chat UI with Server-Sent Events (SSE) token streaming.  
-  - *Voice*: push-to-talk capture, server-side transcription (faster-whisper), agent reasoning, and optional Piper TTS playback in a single round trip.
-- **Agent orchestration**  
-  - Ollama-powered reasoning (`gpt-oss:20b` by default).  
-  - Strict single-tool stepper guarantees one tool call per turn.  
-  - Real-time tool discovery via Model Context Protocol (MCP).
-- **Knowledge ingestion**  
-  - Docling-based pipeline for uploading local files or URLs.  
-  - Embeddings stored in Qdrant for semantic retrieval.
-- **Production-ready defaults**  
-  - FastAPI with typed schemas, async SQLAlchemy, Qdrant, and Ollama.  
-  - Next.js 15 / React 18 client with Tailwind UI and toast notifications.  
-  - Docker Compose stack with optional GPU acceleration.
+---
 
-## Architecture Overview
+## ✨ Caratteristiche Principali
 
+### 🎙️ **Doppia Modalità di Interazione**
+- **Modalità Testo**: Risposte in streaming real-time con Server-Sent Events
+- **Modalità Voce**: Input vocale push-to-talk con riconoscimento e sintesi vocale italiana
+
+### 🤖 **Sistema Agente Intelligente**
+- Alimentato da modelli Ollama locali (privacy-first, nessuna API esterna)
+- Scoperta dinamica degli strumenti via Model Context Protocol (MCP)
+- Architettura single-tool stepper per comportamento affidabile e prevedibile
+- Risposte in streaming con feedback sull'esecuzione degli strumenti
+
+### 📚 **Gestione della Conoscenza**
+- Ingestione documenti da file e URL
+- Ricerca semantica con embedding vettoriali
+- Supporto per PDF, file di testo e contenuti web
+- Database vettoriale Qdrant per ricerca rapida per similarità
+
+### 🛠️ **Sistema Strumenti Estensibile**
+- **Ricerca Web**: Recupero e riassunto contenuti web in tempo reale
+- **Query Semantica**: Recupero documenti RAG-powered
+- **Data e Ora**: Operazioni calendario con timezone
+- **Conversione Unità**: Calcoli quantità fisiche
+- **Strumenti Personalizzati**: Facile integrazione via protocollo MCP
+
+### 🎨 **UI/UX Moderna**
+- Interfaccia pulita e responsive costruita con Next.js 15 e Tailwind CSS
+- Visualizzazione real-time esecuzione strumenti
+- Indicatori livello audio e controlli riproduzione
+- Design mobile-friendly
+
+---
+
+## 🚀 Avvio Rapido
+
+### Prerequisiti
+
+- **Docker** e **Docker Compose** (consigliato)
+- **GPU NVIDIA** (opzionale, per modelli accelerati)
+- **Python 3.11+** e **Node.js 20+** (per sviluppo locale)
+
+### Installazione con Docker (Consigliato)
+
+1. **Clona il repository**:
+   ```bash
+   git clone <url-repository>
+   cd youworker-fullstack
+   ```
+
+2. **Configura l'ambiente**:
+   ```bash
+   cp .env.example .env
+   # Modifica .env con le tue preferenze
+   ```
+
+3. **Scarica i modelli TTS** (per modalità voce):
+   ```bash
+   ./ops/download-piper-models.sh
+   ```
+
+4. **Avvia tutti i servizi**:
+   ```bash
+   make compose-up
+   ```
+
+5. **Accedi all'applicazione**:
+   - **Frontend**: http://localhost:8000
+   - **API**: http://localhost:8001
+   - **Documentazione API**: http://localhost:8001/docs
+
+### Sequenza di Avvio
+
+Lo stack Docker Compose avvia i servizi in questo ordine:
+
+1. **PostgreSQL** - Storage sessioni e dati utente
+2. **Qdrant** - Database vettoriale per ricerca semantica
+3. **Ollama** - Server modelli linguistici locali
+4. **Server MCP** - Fornitori di strumenti (web, semantic, datetime, ingest, units)
+5. **API** - Backend FastAPI
+6. **Frontend** - Applicazione web Next.js
+
+**Il primo avvio può richiedere 5-10 minuti** mentre Ollama scarica i modelli richiesti (gpt-oss, embeddinggemma).
+
+---
+
+## ⚙️ Configurazione
+
+### Variabili d'Ambiente Essenziali
+
+| Variabile | Descrizione | Default |
+|-----------|-------------|---------|
+| `CHAT_MODEL` | Modello chat Ollama | `gpt-oss:latest` |
+| `EMBED_MODEL` | Modello embedding | `embeddinggemma:300m` |
+| `ROOT_API_KEY` | Chiave autenticazione API | `dev-root-key` |
+| `OLLAMA_BASE_URL` | URL servizio Ollama | `http://ollama:11434` |
+| `QDRANT_URL` | URL servizio Qdrant | `http://qdrant:6333` |
+| `DATABASE_URL` | Connessione PostgreSQL | Auto-configurato |
+
+### Configurazione Vocale
+
+| Variabile | Descrizione | Default |
+|-----------|-------------|---------|
+| `STT_MODEL` | Dimensione modello Whisper | `small` |
+| `STT_DEVICE` | Dispositivo compute | `cuda` |
+| `STT_LANGUAGE` | Lingua riconoscimento vocale | `it` |
+| `TTS_VOICE` | Modello voce Piper | `it_IT-paola-medium` |
+| `TTS_PROVIDER` | Motore TTS | `piper` |
+
+### Configurazione Frontend
+
+| Variabile | Descrizione | Default |
+|-----------|-------------|---------|
+| `NEXT_PUBLIC_API_KEY` | Chiave API browser | Deve corrispondere a `ROOT_API_KEY` |
+| `NEXT_PUBLIC_API_PORT` | Porta API | `8000` |
+
+---
+
+## 📖 Guida all'Uso
+
+### Modalità Chat Testuale
+
+1. Clicca il pulsante **"Testo"** nell'intestazione
+2. Digita il tuo messaggio nel compositore
+3. Premi Invio o clicca Invia
+4. Osserva le risposte in streaming real-time e le esecuzioni degli strumenti
+
+**Funzionalità**:
+- Streaming token in tempo reale
+- Visualizzazione esecuzione strumenti
+- Risposte contestuali
+- Riproduzione audio opzionale (attiva icona altoparlante)
+
+### Modalità Voce
+
+1. Clicca il pulsante **"Voce"** nell'intestazione
+2. **Tieni premuto** il pulsante microfono e parla
+3. **Rilascia** quando hai finito di parlare
+4. Ascolta la risposta vocale dell'AI
+
+**Funzionalità**:
+- Registrazione push-to-talk
+- Visualizzazione livello audio in tempo reale
+- Trascrizione automatica italiana
+- Risposte text-to-speech naturali
+
+**Nota**: La modalità voce richiede HTTPS in produzione (i browser limitano l'accesso al microfono ai contesti sicuri). Usa `localhost` per lo sviluppo.
+
+### Ingestione Documenti
+
+1. Naviga alla pagina **Ingest**
+2. Carica file o fornisci URL
+3. Seleziona il tipo di documento (auto-rilevato per i file)
+4. Clicca "Ingest" per elaborare
+
+**Formati supportati**:
+- Documenti PDF
+- File di testo
+- Pagine web (via URL)
+
+---
+
+## 🛠️ Strumenti Disponibili
+
+### Ricerca Web
+- `fetch_url`: Scarica e analizza pagine web
+- `search_duckduckgo`: Cerca sul web
+- `http_request`: Richieste HTTP personalizzate
+
+### Query Semantica
+- `semantic_search`: Trova documenti rilevanti per significato
+- `list_collections`: Sfoglia collezioni documenti
+- `get_collection_stats`: Visualizza metadati collezione
+
+### Data e Ora
+- `get_current_datetime`: Ottieni ora corrente in qualsiasi timezone
+- `convert_timezone`: Converti tra timezone
+- `calculate_time_difference`: Calcola differenze temporali
+
+### Ingestione Documenti
+- `ingest_file`: Carica ed elabora documenti
+- `ingest_url`: Elabora contenuti web
+- `list_ingested_documents`: Visualizza file elaborati
+
+### Conversione Unità
+- `convert_units`: Converti tra unità (lunghezza, massa, temperatura, ecc.)
+
+---
+
+## 🧪 Sviluppo
+
+### Setup Sviluppo Locale
+
+#### Backend
+```bash
+# Crea ambiente virtuale
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# Installa dipendenze
+pip install -r requirements.txt
+
+# Avvia server sviluppo
+uvicorn apps.api.main:app --reload --port 8001
 ```
-┌──────────────────────────────────────────┐
-│ Frontend (Next.js 15)                    │
-│ - Text mode (SSE)                        │
-│ - Voice mode (AudioWorklet + fetch)      │
-│ http://localhost:8000                    │
-└──────────────────────────────┬───────────┘
-                               │
-┌───────────────────────────────▼──────────┐
-│ API (FastAPI)                            │
-│ - /v1/chat (SSE)                         │
-│ - /v1/voice-turn (voice pipeline)        │
-│ - /v1/ingest (document upload)           │
-│ http://localhost:8001                    │
-└───────────────────────────────┬──────────┘
-                               │
-┌───────────────────────────────▼──────────┐
-│ Agent Loop                               │
-│ - Ollama client                          │
-│ - Single-tool stepper                    │
-│ - MCP registry                           │
-└───────────────┬───────────────┬──────────┘
-                │               │
-       ┌────────┘       ┌───────▼───────┐
-       │                │  MCP Servers  │
-       │                │  (web, vector,│
-       │                │   datetime…)  │
-       │                └───────┬───────┘
-       │                        │
-┌──────▼──────┐        ┌────────▼────────┐
-│ Qdrant      │        │ Ollama          │
-│ Vector DB   │        │ Model hosting   │
-└─────────────┘        └─────────────────┘
+
+#### Frontend
+```bash
+cd apps/frontend
+
+# Installa dipendenze
+npm install
+
+# Avvia server sviluppo
+npm run dev
 ```
 
-## Getting Started
+Accedi al server di sviluppo su http://localhost:3000
 
-### Prerequisites
-
-- Docker & Docker Compose *(recommended for quickest start)*  
-- Alternatively, Python 3.11+, Node.js 20, and `npm` for bare-metal development  
-- Optional GPU with NVIDIA drivers if you want accelerated Ollama / Whisper
-
-### Run with Docker
+### Esecuzione Test
 
 ```bash
-# Build and start every service
-make compose-up
-
-# Follow logs
-make compose-logs
-
-# Stop everything
-make compose-down
-```
-
-Services will start in this order:
-
-1. **Ollama** – serves chat & embedding models.  
-2. **Qdrant** – semantic vector database.  
-3. **MCP servers** – web search, semantic query, datetime utilities.  
-4. **API** – FastAPI backend (http://localhost:8001).  
-5. **Frontend** – Next.js application (http://localhost:8000).
-
-The default root API key is `dev-root-key`. Configure your browser client with `NEXT_PUBLIC_API_KEY` if you expose the app elsewhere.
-
-### Local Development (without Docker)
-
-1. **Backend**
-   ```bash
-   python -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   uvicorn apps.api.main:app --reload --port 8001
-   ```
-   Ensure PostgreSQL, Qdrant, Ollama, and the MCP servers are reachable or adjust `apps/api/config.py`.
-
-2. **Frontend**
-   ```bash
-   cd apps/frontend
-   npm install
-   npm run dev
-   ```
-   The frontend proxies API calls to `http://localhost:8001` by default.
-
-### Essential Environment Variables
-
-| Variable | Description | Default |
-|---------|-------------|---------|
-| `ROOT_API_KEY` | Required by protected API endpoints | `dev-root-key` |
-| `OLLAMA_BASE_URL` | Ollama host | `http://localhost:11434` |
-| `QDRANT_URL` | Qdrant host | `http://localhost:6333` |
-| `DATABASE_URL` | Async SQLAlchemy URL | `postgresql+asyncpg://postgres:postgres@localhost:5432/youworker` |
-| `STT_MODEL` | Whisper model to load lazily | `large-v3` |
-| `TTS_VOICE` | Piper voice ID | `it_IT-paola-medium` |
-| `NEXT_PUBLIC_API_BASE_URL` | Frontend API base URL | auto-detected |
-| `NEXT_PUBLIC_API_KEY` | Browser token (must match `ROOT_API_KEY`) | – |
-
-## Voice Mode Pipeline
-
-1. User presses and holds the microphone button.  
-2. `VoiceRecorder` captures PCM16 audio via an AudioWorklet at 16 kHz.  
-3. Releasing the button base64-encodes the audio and POSTs it to `/v1/voice-turn`.  
-4. The API:
-   - Runs lazy-loaded faster-whisper transcription.
-   - Executes the agent loop (tool calls, reasoning).  
-   - Optionally synthesizes a WAV clip with Piper TTS (or a sine fallback).  
-5. Response returns transcript, assistant text, metadata, and optional audio clip.  
-6. Frontend plays the WAV clip with a regular `Audio` element and updates the transcript.
-
-If Whisper or Piper are unavailable, the API surfaces a clear 503 error; clients may retry or fall back to text mode.
-
-## Testing
-
-```bash
+# Esegui tutti i test
 pytest
+
+# Esegui con coverage
+pytest --cov=apps --cov=packages --cov-report=html
+
+# Esegui suite test specifica
+pytest tests/unit/
+pytest tests/integration/
 ```
 
-Key suites:
+---
 
-- `tests/unit/test_voice_turn_success.py` – end-to-end voice-turn success path (stubs heavy dependencies).  
-- `tests/integration/test_chat_endpoints.py` – smoke tests for text SSE chat, voice endpoint failures, and CORS.
-
-## Project Structure
+## 📁 Struttura Progetto
 
 ```
-apps/
-  api/              FastAPI service (chat, voice, ingest)
-  frontend/         Next.js client
-  mcp_servers/      Auxiliary MCP servers (web, semantic, datetime, ingestion)
-packages/
-  agent/            Single-tool stepper + registry
-  llm/              Ollama client wrapper
-  mcp/              Generic MCP client over WebSocket
-  ingestion/        Docling ingest pipeline
-docs/               Architecture & mode reference
-ops/                Dockerfiles and docker-compose stack
-tests/              Pytest suites (integration + unit)
+youworker-fullstack/
+├── apps/
+│   ├── api/                    # Backend FastAPI
+│   ├── frontend/               # Applicazione Next.js
+│   └── mcp_servers/            # Servizi fornitori strumenti
+├── packages/
+│   ├── agent/                  # Orchestrazione agente
+│   ├── llm/                    # Client Ollama
+│   ├── mcp/                    # Client protocollo MCP
+│   ├── ingestion/              # Pipeline documenti
+│   ├── vectorstore/            # Wrapper Qdrant
+│   ├── db/                     # Modelli database
+│   └── common/                 # Utility condivise
+├── ops/
+│   ├── docker/                 # Dockerfile
+│   └── compose/                # Configurazioni Docker Compose
+├── docs/                       # Documentazione
+├── tests/                      # Suite test
+└── data/                       # Dati persistenti (git-ignored)
 ```
 
-## Voice Mode Requirements
+---
 
-- Piper voice models should be downloaded into `/app/models/tts` when running under Docker (`ops/compose/docker-compose.yml` mounts `data/models`).  
-- Faster-whisper loads lazily on first use; ensure the chosen model is available or override `STT_MODEL`/`STT_DEVICE`.
+## 🔒 Sicurezza
 
-## Contributing
+- **Autenticazione API**: Tutti gli endpoint richiedono autenticazione con chiave API
+- **Rate Limiting**: Limitazione integrata su endpoint sensibili
+- **Validazione Input**: Validazione completa richieste con Pydantic
+- **Configurazione CORS**: Whitelist origini stretta
+- **Prevenzione SQL Injection**: Query parametrizzate via SQLAlchemy
+- **Protezione Path Traversal**: Percorsi file validati
+- **Gestione Segreti**: Configurazione basata su variabili d'ambiente
 
-1. Fork and clone the repository.  
-2. Create a virtual environment and install dependencies.  
-3. Run the test suite (`pytest`) before submitting a PR.  
-4. Follow the single-tool stepper rule when adding new agent capabilities.
+---
 
-Enjoy building with YouWorker! If you hit issues, open an issue with logs and reproduction steps.
+## 🤝 Contribuire
+
+Leggi [CONTRIBUTING.md](CONTRIBUTING.md) per le linee guida.
+
+### Flusso di Lavoro Sviluppo
+
+1. Crea un branch per la funzionalità
+2. Apporta le modifiche e aggiungi test
+3. Esegui la suite di test (`pytest`)
+4. Esegui il commit delle modifiche
+5. Apri una Pull Request
+
+---
+
+## 📄 Licenza
+
+Questo progetto è concesso in licenza MIT - vedi il file [LICENSE](LICENSE) per i dettagli.
+
+---
+
+## 🙏 Ringraziamenti
+
+- **Ollama** - Hosting LLM locale
+- **Piper TTS** - Sintesi vocale di alta qualità
+- **Faster Whisper** - Riconoscimento vocale efficiente
+- **Model Context Protocol** - Framework integrazione strumenti
+- **Qdrant** - Ricerca similarità vettoriale
+- **Next.js** - Framework React
+- **FastAPI** - Framework web Python moderno
+
+---
+
+**Costruito con ❤️ dal team YouWorker.AI**

@@ -14,10 +14,8 @@ services:
   postgres:
     image: postgres:15
     restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-youworker}
+    env_file:
+      - ../../.env
     ports:
       - "5432:5432"
     volumes:
@@ -77,16 +75,14 @@ services:
       dockerfile: ops/docker/Dockerfile.mcp_ingest
     command: ["uvicorn", "apps.mcp_servers.ingest.server:app", "--host", "0.0.0.0", "--port", "7004"]
     restart: unless-stopped
+    env_file:
+      - ../../.env
     ports:
       - "7004:7004"
     depends_on:
       - qdrant
       - ollama
       - postgres
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/youworker}
-      QDRANT_URL: http://qdrant:6333
-      OLLAMA_BASE_URL: http://ollama:11434
 
   mcp_units:
     build:
@@ -103,20 +99,10 @@ services:
       dockerfile: ops/docker/Dockerfile.api
       args:
         ENABLE_GPU_TORCH: ${ENABLE_GPU_TORCH:-0}
+    env_file:
+      - ../../.env
     environment:
       <<: *ollama-gpu-env
-      APP_ENV: production
-      API_PORT: 8001
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8000,http://127.0.0.1:8000}
-      OLLAMA_BASE_URL: http://ollama:11434
-      CHAT_MODEL: gpt-oss:latest
-      EMBED_MODEL: embeddinggemma:300m
-      QDRANT_URL: http://qdrant:6333
-      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:postgres@postgres:5432/youworker}
-      ROOT_API_KEY: ${ROOT_API_KEY:-dev-root-key}
-      MCP_SERVER_URLS: http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005
-      INGEST_ACCELERATOR: ${INGEST_ACCELERATOR:-auto}
-      INGEST_GPU_DEVICE: ${INGEST_GPU_DEVICE:-cuda}
     restart: unless-stopped
     deploy: *ollama-gpu-deploy
     gpus: "all"
@@ -125,6 +111,7 @@ services:
     volumes:
       - ../../examples/ingestion:/data/examples:ro
       - ../../data/uploads:/data/uploads
+      - ../../data/models:/app/models:ro
     depends_on:
       ollama:
         condition: service_started
@@ -149,14 +136,41 @@ services:
       dockerfile: ops/docker/Dockerfile.frontend
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
-        NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8001}
+        NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8000}
         NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-dev-root-key}
-    environment:
-      NEXT_INTERNAL_API_BASE_URL: http://api:8001
-      NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-dev-root-key}
+    env_file:
+      - ../../.env
     restart: unless-stopped
-    ports:
-      - "8000:3000"
     depends_on:
       api:
         condition: service_started
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../../data/nginx/ssl:/etc/nginx/ssl
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        apk add --no-cache openssl
+        if [ ! -f /etc/nginx/ssl/cert.pem ]; then
+          mkdir -p /etc/nginx/ssl
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+            -keyout /etc/nginx/ssl/key.pem \
+            -out /etc/nginx/ssl/cert.pem \
+            -subj "/C=IT/ST=State/L=City/O=YouWorker/OU=IT/CN=95.110.228.79" \
+            -addext "subjectAltName=IP:95.110.228.79"
+          chmod 600 /etc/nginx/ssl/key.pem
+          chmod 644 /etc/nginx/ssl/cert.pem
+          echo "Self-signed certificate generated"
+        else
+          echo "Certificate already exists"
+        fi
+        exec nginx -g "daemon off;"
+    depends_on:
+      - frontend
+      - api

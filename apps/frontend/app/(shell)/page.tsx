@@ -132,11 +132,6 @@ export default function ChatPage() {
             setIsStreaming(false)
             setMetadata(data.metadata)
 
-            // No TTS in text mode unless explicitly enabled
-            if (expectAudio && finalText.trim()) {
-              toast.info("Attiva la modalità voce per ascoltare la risposta")
-            }
-
             setTimeout(() => {
               composerRef.current?.focus()
             }, 100)
@@ -174,11 +169,12 @@ export default function ChatPage() {
     const activeSessionId = ensureSession()
 
     try {
+      // Voice mode ALWAYS expects audio response
       const response = await postVoiceTurn({
         messages,
         audio_b64: audioBase64,
         sample_rate: sampleRate,
-        expect_audio: expectAudio,
+        expect_audio: true,
         enable_tools: true,
         session_id: activeSessionId,
       })
@@ -232,7 +228,8 @@ export default function ChatPage() {
         audioElementRef.current = null
       }
 
-      if (expectAudio && response.audio_b64) {
+      // Voice mode always plays audio response
+      if (response.audio_b64) {
         try {
           setAudioPlaying(true)
           const audioEl = await playBase64Wav(response.audio_b64)

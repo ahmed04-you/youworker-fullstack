@@ -159,9 +159,15 @@ def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
 async def transcribe_audio_pcm16(
     audio_pcm: bytes,
     sample_rate: int,
+    language: str | None = None,
 ) -> dict[str, Any]:
     """
     Transcribe PCM16 mono audio and return text plus metadata.
+
+    Args:
+        audio_pcm: Raw PCM16 audio bytes
+        sample_rate: Sample rate of the input audio
+        language: Optional language code (e.g., "it", "en"). If None, uses STT_LANGUAGE env var.
 
     Returns:
         {"text": str, "language": Optional[str], "confidence": Optional[float]}
@@ -179,6 +185,19 @@ async def transcribe_audio_pcm16(
     except ValueError:
         beam_size = 1
 
+    # Get language from parameter or environment variable
+    if language is None:
+        language = os.getenv("STT_LANGUAGE")
+
+    # Normalize language hint (handle "auto", "detect", empty strings)
+    if language:
+        language = language.strip().lower()
+        if language in {"", "auto", "detect", "automatic"}:
+            language = None
+        elif "," in language:
+            # Take first language from comma-separated list
+            language = language.split(",", 1)[0].strip() or None
+
     def _run() -> dict[str, Any]:
         # Convert PCM16 to float32 [-1, 1]
         arr = np.frombuffer(audio_pcm, dtype=np.int16).astype(np.float32) / 32768.0
@@ -189,6 +208,7 @@ async def transcribe_audio_pcm16(
             beam_size=beam_size,
             vad_filter=False,
             word_timestamps=False,
+            language=language,
         )
 
         text_parts = []

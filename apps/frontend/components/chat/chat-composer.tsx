@@ -276,13 +276,13 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                       "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors",
                       expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                     )}
-                    title={expectAudio ? "Risposta audio attiva" : "Risposta audio disattivata"}
-                    aria-label={expectAudio ? "Risposta audio attiva" : "Risposta audio disattivata"}
+                    title={expectAudio ? "Audio attivo" : "Audio disattivato"}
+                    aria-label={expectAudio ? "Audio attivo" : "Audio disattivato"}
                   >
                     <Volume2 className="h-5 w-5" />
                   </Button>
                   <span className="text-xs text-muted-foreground">
-                    {expectAudio ? "Audio attivo" : "Audio disattivato"}
+                    {expectAudio ? "Risposta con audio" : "Risposta solo testo"}
                   </span>
                 </div>
 
@@ -388,7 +388,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
 
             <div className="flex items-center justify-start border-t border-border/50 pt-4 text-sm text-primary">
               <Volume2 className="mr-2 h-4 w-4" />
-              <span>La risposta vocale verrà riprodotta automaticamente.</span>
+              <span>La risposta vocale viene sempre riprodotta in modalità Voce.</span>
             </div>
 
             {lastTranscript && (
