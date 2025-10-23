@@ -200,7 +200,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setToolEvents([])
     setMetadata({})
     setAudioPlaying(false)
-  }, [setMessages, setToolEvents, setMetadata])
+  }, [setAudioPlaying, setMessages, setToolEvents, setMetadata])
 
   const setActiveThreadId = useCallback(
     (id: string) => {

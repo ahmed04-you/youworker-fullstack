@@ -55,10 +55,21 @@ for (const key of Object.keys(process.env)) {
   }
 }
 
+const CACHE_HEADERS = [
+  {
+    key: "Cache-Control",
+    value: "public, max-age=31536000, immutable",
+  },
+]
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: "standalone",
   env: exposedEnv,
+  experimental: {
+    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+  },
+  compress: true,
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -66,7 +77,69 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   images: {
+    formats: ["image/webp", "image/avif"],
     unoptimized: true,
+  },
+  webpack: (config, { dev, isServer }) => {
+    if (!dev && !isServer) {
+      config.optimization = {
+        ...config.optimization,
+        splitChunks: {
+          chunks: "all",
+          cacheGroups: {
+            vendor: {
+              test: /[\\/]node_modules[\\/]/,
+              name: "vendors",
+              chunks: "all",
+            },
+            lucide: {
+              test: /[\\/]node_modules[\\/]lucide-react[\\/]/,
+              name: "lucide",
+              chunks: "all",
+            },
+            radix: {
+              test: /[\\/]node_modules[\\/]@radix-ui[\\/]/,
+              name: "radix",
+              chunks: "all",
+            },
+            ui: {
+              test: /[\\/]components[\\/]ui[\\/]/,
+              name: "ui",
+              chunks: "all",
+            },
+            chat: {
+              test: /[\\/]components[\\/]chat[\\/]/,
+              name: "chat",
+              chunks: "all",
+            },
+          },
+        },
+      }
+    }
+    return config
+  },
+  async headers() {
+    return [
+      {
+        source: "/_next/static/(.*)",
+        headers: CACHE_HEADERS,
+      },
+      {
+        source: "/api/(.*)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-store, must-revalidate",
+          },
+        ],
+      },
+    ]
+  },
+  async redirects() {
+    return []
+  },
+  async rewrites() {
+    return []
   },
 }
 

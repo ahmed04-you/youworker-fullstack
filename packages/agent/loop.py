@@ -16,9 +16,8 @@ from packages.agent.registry import MCPRegistry
 
 logger = logging.getLogger(__name__)
 
-
-# Prompt di sistema contestuale (italiano) che mantiene disciplina single-tool
-AGENT_SYSTEM_PROMPT = """Sei YouWorker.AI, l'assistente professionale di YouWorker.
+AGENT_SYSTEM_PROMPTS: dict[str, str] = {
+    "it": """Sei YouWorker.AI, l'assistente professionale di YouWorker.
 Parli esclusivamente in italiano, con un tono chiaro, concreto e orientato all'azione.
 
 Contesto e aspettative:
@@ -35,7 +34,36 @@ Linee guida di stile:
 - Mantieni le risposte sintetiche ma complete; usa elenco puntato o tabelle solo se aiutano la comprensione.
 - Se citi codice o comandi, utilizza blocchi formattati e specifica sempre il contesto (file, directory o prerequisiti).
 - In caso di limiti, incertezze o necessità di ulteriori dati dall'utente, esplicitali in modo proattivo e suggerisci i prossimi passi più efficaci.
-"""
+""",
+    "en": """You are YouWorker.AI, the professional assistant for YouWorker.
+Respond exclusively in English with a clear, actionable tone.
+
+Context & expectations:
+- Track the entire conversation and reference prior context when it helps continuity.
+- When the user mentions documents, code, or previous tool results, integrate those details into your answer.
+- Provide reasoning, hypotheses, and concrete recommendations only when they are backed by available information.
+
+Tool usage policy (single-tool discipline):
+1. In each assistant turn you may call at most ONE tool.
+2. If multiple steps are required, explain your next action, trigger exactly ONE tool, wait for its result in the following message, and only then consider another tool call.
+3. Do not invent tools: mention or use only those defined in the provided schema. If no tools are available, state it transparently.
+
+Style guidelines:
+- Keep responses succinct yet complete; use bullet points or tables only when they genuinely aid comprehension.
+- When sharing code or commands, use formatted blocks and always specify the relevant context (file, directory, prerequisites).
+- When limits or uncertainties exist, highlight them proactively and suggest the most effective next steps.
+""",
+}
+
+DEFAULT_AGENT_LANGUAGE = "it"
+
+
+def resolve_system_prompt(language: str | None) -> str:
+    """Return the system prompt for the requested language, falling back gracefully."""
+    if not language:
+        return AGENT_SYSTEM_PROMPTS[DEFAULT_AGENT_LANGUAGE]
+    normalized = language.strip().lower()
+    return AGENT_SYSTEM_PROMPTS.get(normalized, AGENT_SYSTEM_PROMPTS[DEFAULT_AGENT_LANGUAGE])
 
 
 @dataclass
@@ -70,6 +98,7 @@ class AgentLoop:
         ollama_client: OllamaClient,
         registry: MCPRegistry,
         model: str = "gpt-oss:20b",
+        default_language: str = DEFAULT_AGENT_LANGUAGE,
     ):
         """
         Initialize agent loop.
@@ -82,11 +111,20 @@ class AgentLoop:
         self.ollama_client = ollama_client
         self.registry = registry
         self.model = model
+        self.default_language = self._normalize_language(default_language)
+
+    @staticmethod
+    def _normalize_language(language: str | None) -> str:
+        if not language:
+            return DEFAULT_AGENT_LANGUAGE
+        candidate = language.strip().lower()
+        return candidate or DEFAULT_AGENT_LANGUAGE
 
     async def run_turn_stepper(
         self,
         messages: list[ChatMessage],
         enable_tools: bool = True,
+        language: str | None = None,
     ) -> AsyncIterator[dict]:
         """
         Execute a single agent turn with strict single-tool stepper.
@@ -96,15 +134,21 @@ class AgentLoop:
         Args:
             messages: Conversation history
             enable_tools: Whether to enable tool calling
+            language: Preferred assistant language for this turn
 
         Yields:
             Streaming events:
             - {"type": "chunk", "content": str} for each content chunk from LLM
             - {"type": "complete", "result": AgentTurnResult} when turn is complete
         """
-        # Ensure system prompt is present
-        if not messages or messages[0].role != "system":
-            messages.insert(0, ChatMessage(role="system", content=AGENT_SYSTEM_PROMPT))
+        selected_language = self._normalize_language(language or self.default_language)
+        system_prompt = resolve_system_prompt(selected_language)
+
+        # Ensure system prompt is present (override to guarantee consistency)
+        if messages and messages[0].role == "system":
+            messages[0] = ChatMessage(role="system", content=system_prompt)
+        else:
+            messages.insert(0, ChatMessage(role="system", content=system_prompt))
 
         # Get tools from registry
         tools = self.registry.to_llm_tools() if enable_tools else None
@@ -208,6 +252,7 @@ class AgentLoop:
         messages: list[ChatMessage],
         enable_tools: bool = True,
         max_iterations: int = 10,
+        language: str | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Run agent until completion, handling tool calls automatically.
@@ -238,7 +283,9 @@ class AgentLoop:
             turn_result = None
             final_content = ""
 
-            async for event in self.run_turn_stepper(conversation, enable_tools=enable_tools):
+            async for event in self.run_turn_stepper(
+                conversation, enable_tools=enable_tools, language=language
+            ):
                 if event["type"] == "chunk":
                     # Stream content chunk immediately to client
                     yield {"event": "token", "data": {"text": event["content"]}}

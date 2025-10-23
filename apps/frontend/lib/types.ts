@@ -61,6 +61,7 @@ export interface UnifiedChatRequestPayload {
   stream?: boolean
   model?: string | null
   sample_rate?: number
+  assistant_language?: string | null
 }
 
 export interface UnifiedChatResponsePayload {
@@ -72,7 +73,8 @@ export interface UnifiedChatResponsePayload {
   stt_confidence?: number | null
   stt_language?: string | null
   tool_events?: ToolEventPayload[]
-  logs?: Array<{ level: string; msg: string }>
+  logs?: Array<{ level: string; msg: string; assistant_language?: string }>
+  assistant_language?: string | null
 }
 
 export interface UnifiedChatStreamCallbacks {
@@ -161,5 +163,18 @@ export interface HealthResponse {
     }
     database: string
     agent: string
+    ollama: {
+      base_url: string
+      auto_pull: boolean
+      ready: boolean
+      models: Record<
+        string,
+        {
+          name: string
+          available: boolean
+        }
+      >
+      missing: string[]
+    }
   }
 }

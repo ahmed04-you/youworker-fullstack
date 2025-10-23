@@ -1,8 +1,10 @@
-# YouWorker.AI v1.0.0
+# YouWorker.AI v0.1.0-alpha
 
 **Assistente conversazionale AI con interazione vocale e testuale, ricerca semantica e integrazione estensibile di strumenti.**
 
-YouWorker.AI è una piattaforma AI all'avanguardia che combina tecnologie web moderne con modelli linguistici locali per fornire un'esperienza conversazionale potente, sicura e orientata alla privacy. La nostra architettura basata su Next.js, FastAPI e Model Context Protocol (MCP) offre un'integrazione senza soluzione di continuità tra interfaccia utente moderna e capacità AI avanzate.
+> **Nota**: Questo progetto è attualmente in fase di sviluppo attivo (versione alpha). La prima release stabile non è ancora disponibile.
+
+YouWorker.AI è una piattaforma AI in sviluppo che combina tecnologie web moderne con modelli linguistici locali per fornire un'esperienza conversazionale potente, sicura e orientata alla privacy. L'architettura basata su Next.js, FastAPI e Model Context Protocol (MCP) offre un'integrazione senza soluzione di continuità tra interfaccia utente moderna e capacità AI avanzate.
 
 ---
 
@@ -156,6 +158,7 @@ La configurazione di base funziona subito, ma puoi personalizzare:
 |--------------|--------------|-------------------|
 | `CHAT_MODEL` | Intelligenza dell'AI | `gpt-oss:latest` |
 | `ROOT_API_KEY` | Sicurezza accessi | Genera una chiave unica |
+| `JWT_SECRET` | Firma dei token JWT | Imposta un segreto distinto |
 | `TTS_VOICE` | Tipo di voce vocale | `it_IT-paola-medium` |
 
 ### Configurazione Vocale Avanzata
@@ -171,6 +174,7 @@ La configurazione di base funziona subito, ma puoi personalizzare:
 | Variabile | Scopo | Raccomandazione |
 |-----------|-------|-----------------|
 | `ROOT_API_KEY` | Chiave master | Usa una chiave forte in produzione |
+| `JWT_SECRET` | Firma dei token JWT | Mantieni un valore diverso dal ROOT_API_KEY |
 | `FRONTEND_ORIGIN` | Domini permessi | Limita ai tuoi domini |
 | `NEXT_PUBLIC_API_KEY` | Chiave frontend | Uguale a ROOT_API_KEY |
 
@@ -328,26 +332,6 @@ youworker-fullstack/
 - **Prevenzione SQL Injection**: Query parametrizzate via SQLAlchemy
 - **Protezione Path Traversal**: Percorsi file validati
 - **Gestione Segreti**: Configurazione basata su variabili d'ambiente
-
----
-
-## 🤝 Contribuire
-
-Leggi [CONTRIBUTING.md](CONTRIBUTING.md) per le linee guida.
-
-### Flusso di Lavoro Sviluppo
-
-1. Crea un branch per la funzionalità
-2. Apporta le modifiche e aggiungi test
-3. Esegui la suite di test (`pytest`)
-4. Esegui il commit delle modifiche
-5. Apri una Pull Request
-
----
-
-## 📄 Licenza
-
-Questo progetto è concesso in licenza MIT - vedi il file [LICENSE](LICENSE) per i dettagli.
 
 ---
 

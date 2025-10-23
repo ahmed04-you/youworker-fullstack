@@ -1,5 +1,7 @@
 "use client"
 
+/* eslint-disable react/display-name */
+
 import {
   useCallback,
   useEffect,
@@ -206,12 +208,17 @@ export const ChatMarkdown = memo(function ChatMarkdown({ content, className }: C
         tr: ({ className, ...props }) => (
           <tr className={cn("transition-colors hover:bg-muted/30", className)} {...props} />
         ),
-        img: ({ className, ...props }) => (
-          <img
-            loading="lazy"
-            className={cn("my-4 max-w-full rounded-lg border border-border/40 shadow-sm", className)}
-            {...props}
-          />
+        img: ({ className, alt, ...props }) => (
+          <>
+            {/* Markdown images can be remote or dynamic; Next/Image is not suitable here */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              loading="lazy"
+              alt={typeof alt === "string" ? alt : ""}
+              className={cn("my-4 max-w-full rounded-lg border border-border/40 shadow-sm", className)}
+              {...props}
+            />
+          </>
         ),
       }}
     >

@@ -129,7 +129,15 @@ def test_health_endpoint_lists_voice_capabilities(api_base_url: str) -> None:
     assert response.status_code == 200
 
     payload = response.json()
-    assert payload["status"] == "healthy"
-    assert payload["voice_mode"] == "turn_based"
-    assert "stt_available" in payload
-    assert "tts_available" in payload
+    assert payload["status"] in {"healthy", "degraded"}
+
+    components = payload.get("components", {})
+    assert isinstance(components, dict)
+
+    voice = components.get("voice", {})
+    assert voice.get("mode") == "turn_based"
+    assert "stt_available" in voice
+    assert "tts_available" in voice
+
+    ollama = components.get("ollama", {})
+    assert "base_url" in ollama

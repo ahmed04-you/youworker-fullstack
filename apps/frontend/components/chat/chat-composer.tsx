@@ -14,6 +14,7 @@ import { cn } from "@/lib/utils"
 import { useChatSettings } from "@/lib/mode"
 import { VoiceRecorder } from "@/lib/voice-recorder"
 import { uint8ToBase64 } from "@/lib/audio-utils"
+import { useI18n } from "@/lib/i18n"
 
 interface VoiceTurnArgs {
   audioBase64: string
@@ -38,6 +39,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
   } = useChatContext()
   const { expectAudio, setExpectAudio } = useChatSettings()
   const { registerComposer } = useComposerContext()
+  const { t } = useI18n()
   const [message, setMessage] = useState("")
   const localTextareaRef = useRef<HTMLTextAreaElement>(null)
   const composerRef = useMemo(() => textareaRef ?? localTextareaRef, [textareaRef])
@@ -116,7 +118,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
       return
     }
     if (!onVoiceTurn) {
-      toast.error("Input vocale non disponibile")
+      toast.error(t("composer.voice.unavailable"))
       return
     }
 
@@ -147,11 +149,11 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
       setRecording(false)
       setAudioLevel(0)
       const error = err as Error
-      const message = error.message || "Impossibile avviare la registrazione. Riprova."
-      setRecordingError(message)
-      toast.error(message)
+      const messageText = error.message || t("composer.voice.start_error")
+      setRecordingError(messageText)
+      toast.error(messageText)
     }
-  }, [isStreaming, onVoiceTurn, processing, recording])
+  }, [isStreaming, onVoiceTurn, processing, recording, t])
 
   const handleVoiceStop = useCallback(async () => {
     const recorder = recorderRef.current
@@ -165,9 +167,9 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
     try {
       pcm = await recorder.stop()
     } catch (err) {
-      const message = (err as Error).message || "Errore durante la chiusura della registrazione."
-      setRecordingError(message)
-      toast.error(message)
+      const messageText = (err as Error).message || t("composer.voice.stop_error")
+      setRecordingError(messageText)
+      toast.error(messageText)
       return
     }
 
@@ -179,7 +181,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
     }
 
     if (pcm.length === 0) {
-      toast.warning("Nessun audio registrato. Riprova.")
+      toast.warning(t("composer.voice.no_audio"))
       return
     }
 
@@ -193,13 +195,13 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
         setLastTranscript(transcript.trim())
       }
     } catch (err) {
-      const message = (err as Error).message || "Errore durante l'elaborazione della richiesta vocale."
-      setRecordingError(message)
-      toast.error(message)
+      const messageText = (err as Error).message || t("composer.voice.error")
+      setRecordingError(messageText)
+      toast.error(messageText)
     } finally {
       setProcessing(false)
     }
-  }, [onVoiceTurn, recording])
+  }, [onVoiceTurn, t])
 
   const handlePressStart = (event: React.MouseEvent | React.TouchEvent) => {
     preventClickRef.current = true
@@ -244,7 +246,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                 ref={composerRef}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
-                placeholder="Scrivi il tuo messaggio o usa il pulsante vocale..."
+                placeholder={t("composer.placeholder")}
                 className="min-h-[96px] w-full resize-none rounded-3xl border border-border/60 bg-background px-5 py-4 text-sm shadow-inner transition-[border-color,box-shadow] focus:border-primary/60 focus-visible:ring-0"
                 onKeyDown={handleKeyDown}
                 disabled={isStreaming}
@@ -256,10 +258,10 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
             <div className="px-6 pb-2">
               <p className="text-center text-sm text-muted-foreground">
                 {recording
-                  ? "Ascolto... rilascia per fermare"
+                  ? t("composer.voice.recording")
                   : buttonDisabled
-                    ? "Attendi il completamento della risposta"
-                    : "Tieni premuto il pulsante microfono e parla"}
+                    ? t("composer.voice.waiting")
+                    : t("composer.voice.ready")}
               </p>
             </div>
 
@@ -274,13 +276,13 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                     "flex h-11 w-11 items-center justify-center rounded-2xl transition-colors",
                     expectAudio ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
                   )}
-                  title={expectAudio ? "Risposta con audio" : "Risposta solo testo"}
-                  aria-label={expectAudio ? "Risposta con audio" : "Risposta solo testo"}
+                  title={expectAudio ? t("composer.audio.enabled") : t("composer.audio.disabled")}
+                  aria-label={expectAudio ? t("composer.audio.enabled") : t("composer.audio.disabled")}
                 >
                   <Volume2 className="h-5 w-5" />
                 </Button>
                 <span className="text-xs text-muted-foreground">
-                  {expectAudio ? "Risposta con audio" : "Risposta solo testo"}
+                  {expectAudio ? t("composer.audio.enabled") : t("composer.audio.disabled")}
                 </span>
               </div>
 
@@ -303,17 +305,17 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                   )}
                   title={
                     recording
-                      ? "Rilascia per fermare"
+                      ? t("chat.actions.release_to_stop")
                       : buttonDisabled
-                        ? "Elaborazione in corso..."
-                        : "Tieni premuto per parlare"
+                        ? t("composer.processing")
+                        : t("chat.actions.hold_to_talk")
                   }
                   aria-label={
                     recording
-                      ? "Rilascia per fermare"
+                      ? t("chat.actions.release_to_stop")
                       : buttonDisabled
-                        ? "Elaborazione in corso..."
-                        : "Tieni premuto per parlare"
+                        ? t("composer.processing")
+                        : t("chat.actions.hold_to_talk")
                   }
                 >
                   {connecting || processing || isStreaming ? (
@@ -329,8 +331,8 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                     onClick={onStop}
                     variant="destructive"
                     className="flex h-11 w-11 items-center justify-center rounded-2xl shadow-md hover:bg-destructive/90"
-                    title="Interrompi"
-                    aria-label="Interrompi"
+                    title={t("chat.actions.stop")}
+                    aria-label={t("chat.actions.stop")}
                   >
                     <Square className="h-5 w-5" />
                   </Button>
@@ -340,8 +342,8 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                     onClick={handleSubmit}
                     className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md hover:bg-primary/90 disabled:opacity-50"
                     disabled={!message.trim() || recording}
-                    title="Invia"
-                    aria-label="Invia"
+                    title={t("chat.actions.send")}
+                    aria-label={t("chat.actions.send")}
                   >
                     <Send className="h-5 w-5" />
                   </Button>
@@ -359,7 +361,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
             {(processing || isStreaming) && (
               <div className="mx-6 mb-4 flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Elaborazione della richiesta...</span>
+                <span>{t("composer.processing")}</span>
               </div>
             )}
 
@@ -387,7 +389,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
                 <button
                   onClick={() => setRecordingError(null)}
                   className="flex-shrink-0 rounded p-1 transition-colors hover:bg-destructive/20"
-                  aria-label="Chiudi errore"
+                  aria-label={t("common.close")}
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -397,7 +399,7 @@ export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: Cha
             {audioPlaying && (
               <div className="mx-6 mb-4 flex items-center gap-2 text-sm text-primary">
                 <Volume2 className="h-4 w-4 animate-pulse" />
-                <span>Riproduzione risposta audio...</span>
+                <span>{t("composer.voice.playing")}</span>
               </div>
             )}
           </div>

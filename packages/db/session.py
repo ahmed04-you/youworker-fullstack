@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -16,6 +18,22 @@ class Base(DeclarativeBase):
 
 _engine = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
+
+
+def _run_alembic_migrations(database_url: str) -> None:
+    """Run Alembic migrations up to head for the configured database."""
+    from alembic import command
+    from alembic.config import Config
+
+    base_path = Path(__file__).resolve().parents[2]
+    alembic_dir = base_path / "ops" / "alembic"
+    ini_path = alembic_dir / "alembic.ini"
+
+    os.environ["DATABASE_URL"] = database_url
+
+    alembic_cfg = Config(str(ini_path))
+    alembic_cfg.set_main_option("script_location", str(alembic_dir))
+    command.upgrade(alembic_cfg, "head")
 
 
 async def init_db(settings: Settings) -> None:
@@ -44,14 +62,20 @@ async def init_db(settings: Settings) -> None:
         pool_recycle=3600,
     )
     _session_factory = async_sessionmaker(bind=_engine, expire_on_commit=False)
-    # Fail hard if DB is down and run migrations to head
+
+    # Run database migrations to ensure schema is up to date.
     try:
-        # TODO: Fix Alembic migration hanging issue
-        # For now, just ensure tables exist using SQLAlchemy
-        async with _engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+
+    try:
+        if loop and loop.is_running():
+            await loop.run_in_executor(None, _run_alembic_migrations, database_url)
+        else:
+            _run_alembic_migrations(database_url)
     except Exception as exc:
-        raise
+        raise RuntimeError("Failed to run database migrations") from exc
 
 
 @asynccontextmanager

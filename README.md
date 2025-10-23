@@ -1,8 +1,10 @@
-# YouWorker.AI
+# YouWorker.AI v0.1.0-alpha
 
 **Assistente conversazionale AI con interazione vocale e testuale, ricerca semantica e integrazione estensibile di strumenti.**
 
-YouWorker.AI è un'applicazione full-stack che combina tecnologie web moderne con modelli AI locali per offrire un'esperienza conversazionale potente e orientata alla privacy. Costruito con Next.js, FastAPI e il Model Context Protocol (MCP).
+> **Nota**: Questo progetto è attualmente in fase di sviluppo attivo (versione alpha). La prima release stabile non è ancora disponibile.
+
+YouWorker.AI è un'applicazione full-stack in sviluppo che combina tecnologie web moderne con modelli AI locali per offrire un'esperienza conversazionale potente e orientata alla privacy. Costruito con Next.js, FastAPI e il Model Context Protocol (MCP).
 
 ---
 
@@ -17,6 +19,7 @@ YouWorker.AI è un'applicazione full-stack che combina tecnologie web moderne co
 - Scoperta dinamica degli strumenti via Model Context Protocol (MCP)
 - Architettura single-tool stepper per comportamento affidabile e prevedibile
 - Risposte in streaming con feedback sull'esecuzione degli strumenti
+- Lingua dell'assistente configurabile (italiano o inglese) direttamente dalle impostazioni
 
 ### 📚 **Gestione della Conoscenza**
 - Ingestione documenti da file e URL
@@ -71,10 +74,16 @@ YouWorker.AI è un'applicazione full-stack che combina tecnologie web moderne co
    make compose-up
    ```
 
+   > ℹ️ L'API verifica automaticamente la presenza dei modelli Ollama richiesti (`CHAT_MODEL`, `EMBED_MODEL`).
+   > Se mancano e `OLLAMA_AUTO_PULL=1`, verranno scaricati al primo avvio (il download può essere molto lungo).
+   > Imposta `OLLAMA_AUTO_PULL=0` per gestire manualmente `ollama pull`.
+
 5. **Accedi all'applicazione**:
    - **Frontend**: http://localhost:8000
    - **API**: http://localhost:8001
    - **Documentazione API**: http://localhost:8001/docs
+   - **Analytics Dashboard**: http://localhost:8000/analytics
+   - **Grafana** (opzionale): http://localhost:3001 (user: `admin`, password: `admin`)
 
 ### Sequenza di Avvio
 
@@ -97,9 +106,11 @@ Lo stack Docker Compose avvia i servizi in questo ordine:
 
 | Variabile | Descrizione | Default |
 |-----------|-------------|---------|
-| `CHAT_MODEL` | Modello chat Ollama | `gpt-oss:latest` |
+| `CHAT_MODEL` | Modello chat Ollama | `gpt-oss:20b` |
 | `EMBED_MODEL` | Modello embedding | `embeddinggemma:300m` |
+| `OLLAMA_AUTO_PULL` | Scarica automaticamente i modelli mancanti al primo avvio (`0` per disabilitare) | `1` |
 | `ROOT_API_KEY` | Chiave autenticazione API | `dev-root-key` |
+| `JWT_SECRET` | Chiave separata per firmare i token JWT | `dev-jwt-secret` |
 | `OLLAMA_BASE_URL` | URL servizio Ollama | `http://ollama:11434` |
 | `QDRANT_URL` | URL servizio Qdrant | `http://qdrant:6333` |
 | `DATABASE_URL` | Connessione PostgreSQL | Auto-configurato |
@@ -114,12 +125,64 @@ Lo stack Docker Compose avvia i servizi in questo ordine:
 | `TTS_VOICE` | Modello voce Piper | `it_IT-paola-medium` |
 | `TTS_PROVIDER` | Motore TTS | `piper` |
 
+### Configurazione Agente
+
+| Variabile | Descrizione | Default |
+|-----------|-------------|---------|
+| `MAX_AGENT_ITERATIONS` | Iterazioni massime consentite per singola risposta | `10` |
+| `AGENT_DEFAULT_LANGUAGE` | Lingua predefinita dell'assistente (`it`, `en`) | `it` |
+
 ### Configurazione Frontend
 
 | Variabile | Descrizione | Default |
 |-----------|-------------|---------|
 | `NEXT_PUBLIC_API_KEY` | Chiave API browser | Deve corrispondere a `ROOT_API_KEY` |
 | `NEXT_PUBLIC_API_PORT` | Porta API | `8000` |
+
+---
+
+## 📈 Monitoraggio e Analisi Dati
+
+YouWorker.AI offre **due soluzioni** per visualizzare e analizzare i dati del database PostgreSQL:
+
+### 1. Dashboard Analitica Integrata
+
+Una dashboard moderna costruita con React e Recharts, accessibile direttamente dall'interfaccia web:
+
+- **Accesso**: Clicca l'icona Analytics (📊) nella barra laterale o naviga a `/analytics`
+- **Metriche in tempo reale** con aggiornamento automatico ogni 30 secondi
+- **Visualizzazioni disponibili**:
+  - Utilizzo token (input/output) nel tempo
+  - Performance strumenti (success rate, latency)
+  - Statistiche di ingestione (file, chunks, collezioni)
+  - Attività sessioni e distribuzione modelli
+- **Intervalli temporali**: 7/30/90 giorni o ultimo anno
+- **API Endpoints**: `/v1/analytics/*` (overview, tokens-timeline, tool-performance, ingestion-stats, session-activity)
+
+### 2. Dashboard Grafana (BI Esterno)
+
+Grafana offre un'esperienza di Business Intelligence professionale con connessione diretta a PostgreSQL:
+
+**Avvio Grafana**:
+```bash
+docker-compose up -d grafana prometheus
+```
+
+**Accesso**: http://localhost:3001 (user: `admin`, password: `admin`)
+
+**Caratteristiche**:
+- Dashboard pre-configurate con provisioning automatico
+- Query SQL personalizzabili su PostgreSQL
+- Integrazione Prometheus per metriche API (endpoint `/metrics`)
+- Alerting configurabile su soglie critiche
+- Export/import dashboard in JSON
+- Metriche disponibili: sessioni, token, tool execution, ingestion trends
+
+**Data Sources Auto-Configurati**:
+- PostgreSQL (`postgres:5432/youworker`)
+- Prometheus (`http://prometheus:9090`)
+
+**Persistenza**: I dati Grafana sono salvati in `data/grafana/`
 
 ---
 
@@ -137,6 +200,7 @@ Lo stack Docker Compose avvia i servizi in questo ordine:
 - Visualizzazione esecuzione strumenti
 - Risposte contestuali
 - Riproduzione audio opzionale (attiva icona altoparlante)
+- Cambia al volo la lingua delle risposte (Italiano o Inglese) dalle impostazioni
 
 ### Modalità Voce
 
@@ -275,26 +339,6 @@ youworker-fullstack/
 - **Prevenzione SQL Injection**: Query parametrizzate via SQLAlchemy
 - **Protezione Path Traversal**: Percorsi file validati
 - **Gestione Segreti**: Configurazione basata su variabili d'ambiente
-
----
-
-## 🤝 Contribuire
-
-Leggi [CONTRIBUTING.md](CONTRIBUTING.md) per le linee guida.
-
-### Flusso di Lavoro Sviluppo
-
-1. Crea un branch per la funzionalità
-2. Apporta le modifiche e aggiungi test
-3. Esegui la suite di test (`pytest`)
-4. Esegui il commit delle modifiche
-5. Apri una Pull Request
-
----
-
-## 📄 Licenza
-
-Questo progetto è concesso in licenza MIT - vedi il file [LICENSE](LICENSE) per i dettagli.
 
 ---
 

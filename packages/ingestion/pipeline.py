@@ -288,6 +288,7 @@ class IngestionPipeline:
             if isinstance(tag_values, (list, tuple, set)):
                 chunk_tags.update(tag for tag in tag_values if isinstance(tag, str))
             combined_tags = sorted(chunk_tags)
+            metadata = self._prune_metadata(metadata)
             payload = {
                 "id": chunk.id,
                 "chunk_id": chunk.chunk_id,
@@ -1007,6 +1008,39 @@ class IngestionPipeline:
         if not blocks:
             return ""
         return "### Embedded Charts\n\n" + "\n\n".join(blocks)
+
+    def _prune_metadata(self, metadata: dict | None, *, max_bytes: int = 6000) -> dict:
+        """Ensure metadata payload is reasonably small for vector store storage."""
+        if not metadata:
+            return {}
+
+        def _encoded_size(value: dict) -> int:
+            try:
+                serialized = json.dumps(value, ensure_ascii=False, default=str)
+            except (TypeError, ValueError):
+                return max_bytes + 1
+            return len(serialized.encode("utf-8"))
+
+        working = dict(metadata)
+        if _encoded_size(working) <= max_bytes:
+            return working
+
+        # Trim large collections first
+        for key in ("pages", "tables", "images", "charts"):
+            value = working.get(key)
+            if isinstance(value, list) and len(value) > 3:
+                working[key] = value[:3]
+        if _encoded_size(working) <= max_bytes:
+            return working
+
+        # Gradually drop keys by ascending size heuristic until within budget
+        for key in sorted(list(working.keys())):
+            working.pop(key, None)
+            if _encoded_size(working) <= max_bytes:
+                return working
+
+        # Worst case: return empty metadata to avoid oversized payloads
+        return {}
 
     def _table_to_markdown(self, table: object) -> str:
         grid = None

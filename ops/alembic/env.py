@@ -3,8 +3,8 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from alembic import context
 
 from packages.db.session import Base
@@ -20,7 +20,13 @@ if config.config_file_name is not None:
 
 
 def get_url() -> str:
-    return os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker")
+    raw_url = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker")
+    url = make_url(raw_url)
+    drivername = url.drivername
+    if drivername.endswith("+asyncpg"):
+        drivername = drivername.replace("+asyncpg", "+psycopg")
+        url = url.set(drivername=drivername)
+    return str(url)
 
 
 target_metadata = Base.metadata
@@ -54,4 +60,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

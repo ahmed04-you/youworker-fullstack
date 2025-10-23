@@ -4,6 +4,7 @@ import type React from "react"
 import dynamic from "next/dynamic"
 import { ThemeProvider } from "@/components/providers/theme-provider"
 import { Toaster } from "@/components/ui/sonner"
+import { ErrorBoundary } from "@/components/ui/error-boundary"
 const BackgroundBeams = dynamic(
   () => import("@/components/aceternity/background-beams").then((mod) => mod.BackgroundBeams),
   {
@@ -11,10 +12,12 @@ const BackgroundBeams = dynamic(
   },
 )
 import { Navbar } from "@/components/shell/navbar"
+import { MobileNavigationBar } from "@/components/shell/mobile-navigation"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
 import { ComposerProvider } from "@/lib/contexts/composer-context"
 import { ChatProvider as ChatContextProvider } from "@/lib/contexts/chat-context"
 import { ChatProvider } from "@/lib/mode"
+import { I18nProvider } from "@/lib/i18n"
 
 export default function ShellLayout({
   children,
@@ -26,19 +29,26 @@ export default function ShellLayout({
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="youworker-theme">
       <ChatProvider>
-        <ChatContextProvider>
-          <ComposerProvider>
-            <div className="relative flex h-screen overflow-hidden">
-              {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
+        <I18nProvider>
+          <ChatContextProvider>
+            <ComposerProvider>
+              <ErrorBoundary>
+                <div className="relative flex min-h-screen overflow-hidden">
+                  {!prefersReducedMotion && <BackgroundBeams className="opacity-10" />}
 
-              <Navbar />
+                  <Navbar />
 
-              <main className="relative z-10 flex-1 flex flex-col overflow-hidden">{children}</main>
+                  <main className="relative z-10 flex flex-1 flex-col overflow-hidden pb-16 lg:pb-0">
+                    {children}
+                  </main>
 
-              <Toaster />
-            </div>
-          </ComposerProvider>
-        </ChatContextProvider>
+                  <MobileNavigationBar />
+                  <Toaster />
+                </div>
+              </ErrorBoundary>
+            </ComposerProvider>
+          </ChatContextProvider>
+        </I18nProvider>
       </ChatProvider>
     </ThemeProvider>
   )

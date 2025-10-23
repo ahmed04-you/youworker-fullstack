@@ -1,10 +1,10 @@
-"""
-Ollama client with streaming, thinking traces, and tool calling support.
-"""
+"""Ollama client with streaming, thinking traces, and tool calling support."""
+
+import asyncio
 import json
 import logging
-from typing import AsyncIterator, Any
 from dataclasses import dataclass, field
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -69,10 +69,18 @@ class OllamaClient:
     - Accumulation of streamed tool calls
     """
 
-    def __init__(self, base_url: str = "http://localhost:11434", timeout: float = 300.0):
+    def __init__(
+        self,
+        base_url: str = "http://localhost:11434",
+        timeout: float = 300.0,
+        auto_pull: bool = True,
+    ):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
         self.client = httpx.AsyncClient(timeout=timeout)
+        self.auto_pull = auto_pull
+        self._ensured_models: set[str] = set()
+        self._ensure_lock = asyncio.Lock()
 
     async def close(self):
         """Close the HTTP client."""
@@ -117,12 +125,14 @@ class OllamaClient:
         if tools:
             payload["tools"] = tools
 
-        logger.debug(f"Sending chat request to Ollama: model={model}, messages={len(messages)}")
+        logger.debug("Sending chat request to Ollama: model=%s, messages=%s", model, len(messages))
 
         # Accumulators for tool calls (they come in chunks)
         tool_calls_accumulator: dict[int, dict[str, Any]] = {}
 
         try:
+            await self._ensure_model_available(model)
+
             async with self.client.stream(
                 "POST",
                 f"{self.base_url}/api/chat",
@@ -164,6 +174,72 @@ class OllamaClient:
         except Exception as e:
             logger.error(f"Unexpected error during chat stream: {e}")
             raise
+
+    async def _ensure_model_available(self, model: str) -> None:
+        """Ensure the specified model is available locally, optionally pulling it."""
+        if not model:
+            return
+
+        if model in self._ensured_models:
+            return
+
+        async with self._ensure_lock:
+            if model in self._ensured_models:
+                return
+
+            exists = await self._model_exists(model)
+            if exists:
+                self._ensured_models.add(model)
+                return
+
+            if not self.auto_pull:
+                raise RuntimeError(
+                    f"Ollama model '{model}' is not installed. "
+                    "Install it with `ollama pull {model}` or enable auto-pull."
+                )
+
+            logger.info("Pulling Ollama model '%s' (this may take some time)...", model)
+            try:
+                pull_resp = await self.client.post(
+                    f"{self.base_url}/api/pull",
+                    json={"name": model, "stream": False},
+                    timeout=None,
+                )
+                pull_resp.raise_for_status()
+            except httpx.HTTPError as exc:
+                logger.error("Failed to pull Ollama model '%s': %s", model, exc)
+                raise
+
+            logger.info("Model '%s' downloaded successfully", model)
+            self._ensured_models.add(model)
+
+    async def _model_exists(self, model: str) -> bool:
+        if not model:
+            return True
+
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/api/show",
+                json={"name": model},
+            )
+        except httpx.HTTPError as exc:
+            logger.error("Failed to query Ollama model '%s': %s", model, exc)
+            raise
+
+        if response.status_code == 200:
+            return True
+        if response.status_code == 404:
+            return False
+
+        response.raise_for_status()
+        return False
+
+    async def model_exists(self, model: str) -> bool:
+        """Public helper to check if a model is already available."""
+        try:
+            return await self._model_exists(model)
+        except httpx.HTTPError:
+            return False
 
     def _parse_chunk(
         self, data: dict[str, Any], tool_calls_accumulator: dict[int, dict[str, Any]]
@@ -253,6 +329,7 @@ class OllamaClient:
         payload = {"model": model, "prompt": text}
 
         try:
+            await self._ensure_model_available(model)
             response = await self.client.post(f"{self.base_url}/api/embeddings", json=payload)
             response.raise_for_status()
             data = response.json()

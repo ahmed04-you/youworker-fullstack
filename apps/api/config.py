@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ollama_base_url: str = "http://localhost:11434"
     chat_model: str = "gpt-oss:20b"
     embed_model: str = "embeddinggemma:300m"
+    ollama_auto_pull: bool = True
 
     # Qdrant
     qdrant_url: str = "http://localhost:6333"
@@ -26,10 +27,12 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     frontend_origin: str = "http://localhost:8000"
     root_api_key: str = "dev-root-key"
+    jwt_secret: str = "dev-jwt-secret"
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker"
 
     # Agent
     max_agent_iterations: int = 10
+    agent_default_language: str = "it"
 
     # Ingestion paths
     ingest_upload_root: str = "/data/uploads"

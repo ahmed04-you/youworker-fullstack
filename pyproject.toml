@@ -16,7 +16,9 @@ pydantic = "^2.9.2"
 pydantic-settings = "^2.6.1"
 python-multipart = "^0.0.17"
 slowapi = "^0.1.9"
+prometheus-fastapi-instrumentator = "^7.0.0"
 websockets = ">=12,<16"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 
 # LLM & MCP
 httpx = "^0.28.1"
@@ -27,6 +29,7 @@ qdrant-client = "^1.12.1"
 sqlalchemy = "^2.0.36"
 asyncpg = "^0.30.0"
 alembic = "^1.13.3"
+psycopg = {extras = ["binary"], version = "^3.1.18"}
 
 # Ingestion
 docling = "^2.15.0"

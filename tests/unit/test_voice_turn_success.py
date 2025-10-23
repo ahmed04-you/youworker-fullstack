@@ -66,6 +66,9 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("packages.db.crud.ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
     monkeypatch.setattr(main, "ensure_root_user", fake_ensure_root_user)
+    monkeypatch.setattr("apps.api.auth.security.ensure_root_user", fake_ensure_root_user)
+    monkeypatch.setattr("apps.api.auth.security.get_async_session", fake_session)
+    monkeypatch.setattr("apps.api.routes.chat.get_async_session", fake_session)
 
     # Stub transcription and synthesis
     async def fake_transcribe(audio_pcm: bytes, sample_rate: int) -> dict[str, Any]:
@@ -81,6 +84,8 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_synthesize = main.synthesize_speech
     monkeypatch.setattr(main, "transcribe_audio_pcm16", fake_transcribe)
     monkeypatch.setattr(main, "synthesize_speech", fake_synthesize)
+    monkeypatch.setattr("apps.api.audio_pipeline.transcribe_audio_pcm16", fake_transcribe)
+    monkeypatch.setattr("apps.api.audio_pipeline.synthesize_speech", fake_synthesize)
 
     # Stub agent loop
     async def fake_agent_loop(**_: Any) -> AsyncIterator[dict[str, Any]]:

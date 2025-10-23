@@ -1,7 +1,7 @@
 COMPOSE_FILE ?= ops/compose/docker-compose.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_FILE)
 
-.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl
+.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup
 
 # Default target
 help:
@@ -109,6 +109,7 @@ setup-env:
 			echo "QDRANT_URL=http://localhost:6333" >> .env; \
 			echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/youworker" >> .env; \
 			echo "ROOT_API_KEY=dev-root-key" >> .env; \
+			echo "JWT_SECRET=dev-jwt-secret" >> .env; \
 			echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005" >> .env; \
 		echo "MCP_REFRESH_INTERVAL=90" >> .env; \
 		echo "LOG_LEVEL=INFO" >> .env; \
@@ -116,6 +117,19 @@ setup-env:
 	else \
 		echo ".env file already exists"; \
 	fi
+
+# Run database migrations using Alembic
+db-migrate:
+	@if [ -z "$$DATABASE_URL" ]; then \
+		if [ -f .env ]; then \
+			export DATABASE_URL=$$(grep -E '^DATABASE_URL=' .env | tail -1 | cut -d'=' -f2-); \
+		fi; \
+	fi; \
+	if [ -z "$$DATABASE_URL" ]; then \
+		echo "DATABASE_URL not set. Export DATABASE_URL or add it to .env"; \
+		exit 1; \
+	fi; \
+	DATABASE_URL=$$DATABASE_URL alembic -c ops/alembic/alembic.ini upgrade head
 
 # Development: run frontend locally (requires API running)
 dev-frontend:
@@ -155,3 +169,31 @@ setup-full: setup-dirs ssl-setup compose-up
 	@echo "Full setup completed!"
 	@echo "Access YouWorker.AI at: https://localhost:8000"
 	@echo "API documentation at: https://localhost:8001/docs"
+
+# Create database backup
+backup:
+	@echo "Creating database backup..."
+	@mkdir -p data/backups
+	$(COMPOSE_CMD) exec -T postgres pg_dump -U $${POSTGRES_USER:-postgres} $${POSTGRES_DB:-youworker} > data/backups/postgres_backup_$(shell date +%Y%m%d_%H%M%S).sql
+	@echo "Backup created in data/backups/"
+
+# Restore database from backup
+restore:
+	@if [ -z "$(BACKUP_FILE)" ]; then echo "Usage: make restore BACKUP_FILE=<path_to_backup>"; exit 1; fi
+	@echo "Restoring database from $(BACKUP_FILE)..."
+	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS youworker_temp;"
+	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "CREATE DATABASE youworker_temp;"
+	$(COMPOSE_CMD) exec -T postgres psql -U postgres youworker_temp < $(BACKUP_FILE)
+	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS youworker;"
+	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "ALTER DATABASE youworker_temp RENAME TO youworker;"
+	@echo "Database restored from $(BACKUP_FILE)"
+
+# Setup automated backups
+setup-backup:
+	@echo "Setting up automated backups..."
+	@mkdir -p data/backups
+	@chmod +x ops/scripts/backup-database.sh
+	@echo "Adding cron job for daily backups..."
+	@crontab -l 2>/dev/null; crontab -; echo "0 2 * * * $(shell pwd)/ops/scripts/backup-database.sh >> $(shell pwd)/data/backups/backup.log 2>&1" | crontab -
+	@echo "Automated backups configured. Backups will run daily at 2:00 AM."
+	@echo "Backup directory: $(shell pwd)/data/backups"

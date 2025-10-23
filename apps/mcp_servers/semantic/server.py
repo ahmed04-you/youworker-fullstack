@@ -49,7 +49,8 @@ async def startup():
     vector_store = QdrantStore(url=qdrant_url)
 
     logger.info(f"Connecting to Ollama at {ollama_url}")
-    ollama_client = OllamaClient(base_url=ollama_url)
+    auto_pull = os.environ.get("OLLAMA_AUTO_PULL", "1").lower() not in {"0", "false", "no"}
+    ollama_client = OllamaClient(base_url=ollama_url, auto_pull=auto_pull)
 
     logger.info("Semantic server ready")
 

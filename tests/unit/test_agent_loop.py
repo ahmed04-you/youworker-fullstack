@@ -40,6 +40,7 @@ def agent_loop(mock_ollama_client, mock_registry):
         ollama_client=mock_ollama_client,
         registry=mock_registry,
         model="gpt-oss:20b",
+        default_language="it",
     )
 
 
@@ -66,7 +67,7 @@ async def test_agent_enforces_single_tool_rule(agent_loop, mock_ollama_client):
 
     # Consume streaming generator and capture final result
     result = None
-    async for event in agent_loop.run_turn_stepper(messages):
+    async for event in agent_loop.run_turn_stepper(messages, language="it"):
         if event["type"] == "complete":
             result = event["result"]
 
@@ -92,7 +93,7 @@ async def test_agent_handles_no_tool_calls(agent_loop, mock_ollama_client):
 
     # Consume streaming generator and capture final result
     result = None
-    async for event in agent_loop.run_turn_stepper(messages):
+    async for event in agent_loop.run_turn_stepper(messages, language="it"):
         if event["type"] == "complete":
             result = event["result"]
 
@@ -131,7 +132,7 @@ async def test_agent_run_until_completion_without_tools(agent_loop, mock_ollama_
     messages = [ChatMessage(role="user", content="What is 2+2?")]
     events = []
 
-    async for event in agent_loop.run_until_completion(messages, enable_tools=False):
+    async for event in agent_loop.run_until_completion(messages, enable_tools=False, language="it"):
         events.append(event)
 
     # Should have token events and done event
@@ -189,7 +190,7 @@ async def test_agent_tool_error_handling(agent_loop, mock_registry):
 async def test_agent_system_prompt_injection(agent_loop, mock_ollama_client):
     """Test that system prompt is automatically added."""
     from packages.llm.ollama import StreamChunk
-    from packages.agent.loop import AGENT_SYSTEM_PROMPT
+    from packages.agent.loop import resolve_system_prompt
 
     captured_messages = []
 
@@ -200,13 +201,35 @@ async def test_agent_system_prompt_injection(agent_loop, mock_ollama_client):
     mock_ollama_client.chat_stream = mock_stream
 
     messages = [ChatMessage(role="user", content="Test")]
-    async for _ in agent_loop.run_turn_stepper(messages):
+    async for _ in agent_loop.run_turn_stepper(messages, language="it"):
         pass
 
     # System prompt should be first message
     assert len(captured_messages) > 0
     assert captured_messages[0][0].role == "system"
-    assert "YouWorker" in captured_messages[0][0].content
+    assert captured_messages[0][0].content == resolve_system_prompt("it")
+
+
+@pytest.mark.asyncio
+async def test_agent_respects_requested_language(agent_loop, mock_ollama_client):
+    """Agent should switch system prompt when a different language is requested."""
+    from packages.llm.ollama import StreamChunk
+    from packages.agent.loop import resolve_system_prompt
+
+    captured_messages = []
+
+    async def mock_stream(*args, **kwargs):
+        captured_messages.append(kwargs.get("messages", []))
+        yield StreamChunk(content="Response", done=True)
+
+    mock_ollama_client.chat_stream = mock_stream
+
+    messages = [ChatMessage(role="user", content="Hi there")]
+    async for _ in agent_loop.run_turn_stepper(messages, language="en"):
+        pass
+
+    assert len(captured_messages) > 0
+    assert captured_messages[0][0].content == resolve_system_prompt("en")
 
 
 @pytest.mark.asyncio
