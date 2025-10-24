@@ -134,7 +134,9 @@ def _extract_scanned_pdf(
                 try:
                     page_image = page.to_image(resolution=300).original
                 except Exception as exc:  # pragma: no cover
-                    logger.warning("ocr-page-render-failed", path=str(path), page=idx, error=str(exc))
+                    logger.warning(
+                        "ocr-page-render-failed", path=str(path), page=idx, error=str(exc)
+                    )
                     continue
                 try:
                     text = run_ocr_image(page_image)
@@ -165,7 +167,9 @@ def run_ocr_image(image: Image.Image) -> str:
     Tesseract is a robust, CPU-based OCR engine that doesn't require GPU acceleration.
     """
     if not PYTESSERACT_AVAILABLE:
-        raise RuntimeError("pytesseract is not available for OCR. Install it with: uv add pytesseract")
+        raise RuntimeError(
+            "pytesseract is not available for OCR. Install it with: uv add pytesseract"
+        )
 
     logger.info("ocr-run", engine="tesseract", device="cpu")
 

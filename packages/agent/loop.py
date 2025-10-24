@@ -4,6 +4,7 @@ Agent loop with strict single-tool stepper pattern.
 CRITICAL: The agent must emit AT MOST ONE tool call per assistant message and STOP.
 It continues only after a new completion request that includes the tool result.
 """
+
 import json
 import logging
 import time
@@ -125,6 +126,7 @@ class AgentLoop:
         messages: list[ChatMessage],
         enable_tools: bool = True,
         language: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[dict]:
         """
         Execute a single agent turn with strict single-tool stepper.
@@ -158,12 +160,14 @@ class AgentLoop:
         content_buffer = ""
         tool_calls_buffer: list[ToolCall] = []
 
-        logger.info(f"Starting agent turn with {len(messages)} messages, tools_enabled={enable_tools}")
+        logger.info(
+            f"Starting agent turn with {len(messages)} messages, tools_enabled={enable_tools}"
+        )
 
         # Stream chat completion
         async for chunk in self.ollama_client.chat_stream(
             messages=messages,
-            model=self.model,
+            model=model or self.model,
             tools=tools,
             think="high",
         ):
@@ -205,7 +209,7 @@ class AgentLoop:
                     content=content_buffer,
                     tool_calls=[selected_tool_call],
                     requires_followup=True,
-                )
+                ),
             }
             return
 
@@ -218,7 +222,7 @@ class AgentLoop:
                 content=content_buffer,
                 tool_calls=None,
                 requires_followup=False,
-            )
+            ),
         }
 
     async def execute_tool_call(self, tool_call: ToolCall) -> str:
@@ -253,6 +257,7 @@ class AgentLoop:
         enable_tools: bool = True,
         max_iterations: int = 10,
         language: str | None = None,
+        model: str | None = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         """
         Run agent until completion, handling tool calls automatically.
@@ -284,7 +289,10 @@ class AgentLoop:
             final_content = ""
 
             async for event in self.run_turn_stepper(
-                conversation, enable_tools=enable_tools, language=language
+                conversation,
+                enable_tools=enable_tools,
+                language=language,
+                model=model,
             ):
                 if event["type"] == "chunk":
                     # Stream content chunk immediately to client
@@ -342,7 +350,7 @@ class AgentLoop:
                 tool_calls_executed += 1
 
                 # Include a small result preview to allow persistence without huge payloads
-                preview = (tool_result or "")
+                preview = tool_result or ""
                 if isinstance(preview, str) and len(preview) > 2000:
                     preview = preview[:2000]
 

@@ -14,6 +14,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
+RUN useradd --create-home --uid 1001 appuser
+
 COPY requirements/mcp-web.txt /app/requirements.txt
 
 RUN /root/.local/bin/uv pip install --system --no-cache-dir --upgrade pip \
@@ -24,6 +26,10 @@ RUN /root/.local/bin/uv pip install --system --no-cache-dir --upgrade pip \
 COPY apps/__init__.py /app/apps/__init__.py
 COPY apps/mcp_servers /app/apps/mcp_servers
 
+RUN chown -R appuser:appuser /app
+
 EXPOSE 7001
+
+USER appuser
 
 CMD ["uvicorn", "apps.mcp_servers.web.server:app", "--host", "0.0.0.0", "--port", "7001"]

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     root_api_key: str = "dev-root-key"
     jwt_secret: str = "dev-jwt-secret"
+    frontend_origin: str = "http://localhost:8000"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker"
@@ -58,6 +59,8 @@ class Settings(BaseSettings):
 
     # Ingest HTTP settings
     ingest_user_agent: str | None = None
+    ingest_upload_root: str = "/data/uploads"
+    ingest_examples_dir: str = "/data/examples"
 
     # Web crawling
     crawl_max_depth: int = 2
@@ -69,6 +72,7 @@ class Settings(BaseSettings):
 
     # Agent
     max_agent_iterations: int = 10
+    agent_default_language: str = "it"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 

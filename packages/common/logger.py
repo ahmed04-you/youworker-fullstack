@@ -1,6 +1,7 @@
 """
 Logging utilities for structured logging across the application.
 """
+
 import logging
 import sys
 

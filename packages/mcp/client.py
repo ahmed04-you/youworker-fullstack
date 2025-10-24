@@ -4,6 +4,7 @@ MCP (Model Context Protocol) client for dynamic tool discovery and invocation.
 This implementation uses JSON-RPC 2.0 over WebSocket with a minimal
 `initialize` handshake and the `tools/list` and `tools/call` methods.
 """
+
 import asyncio
 import json
 import logging
@@ -95,14 +96,16 @@ class MCPClient:
             path = "/mcp"
         # If a user already provided a non-empty path, respect it
 
-        self.ws_url = urlunparse((
-            ws_scheme,
-            parsed.netloc,
-            path,
-            "",
-            "",
-            "",
-        ))
+        self.ws_url = urlunparse(
+            (
+                ws_scheme,
+                parsed.netloc,
+                path,
+                "",
+                "",
+                "",
+            )
+        )
 
         self._healthy = True
         self._ws: Any | None = None
@@ -155,7 +158,7 @@ class MCPClient:
         if "error" in resp:
             raise RuntimeError(f"MCP initialize failed: {resp['error']}")
         self._initialized = True
-        
+
         # record activity for heartbeat
         self._last_ws_activity = time.time()
 
@@ -186,7 +189,9 @@ class MCPClient:
     def is_healthy(self) -> bool:
         return self._healthy
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), reraise=True)
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), reraise=True
+    )
     async def list_tools(self) -> list[MCPTool]:
         """Discover tools from the MCP server via WebSocket."""
         try:
@@ -201,7 +206,9 @@ class MCPClient:
             self._healthy = False
             raise
 
-    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), reraise=True)
+    @retry(
+        stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), reraise=True
+    )
     async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
         """Execute a tool on the MCP server via WebSocket."""
         # Strip server prefix if present
@@ -209,9 +216,7 @@ class MCPClient:
             tool_name = tool_name[len(self.server_id) + 1 :]
 
         try:
-            result = await self._send_rpc(
-                "tools/call", {"name": tool_name, "arguments": arguments}
-            )
+            result = await self._send_rpc("tools/call", {"name": tool_name, "arguments": arguments})
             self._healthy = True
             return self._parse_result(result)
         except Exception as e:
@@ -342,7 +347,9 @@ class MCPClient:
                     continue
                 if "error" in msg:
                     err = msg["error"]
-                    fut.set_exception(MCPRpcError(err.get("code"), err.get("message", ""), err.get("data")))
+                    fut.set_exception(
+                        MCPRpcError(err.get("code"), err.get("message", ""), err.get("data"))
+                    )
                 else:
                     fut.set_result(msg.get("result", {}))
         except Exception:

@@ -26,7 +26,9 @@ logger = get_logger(__name__)
 _settings = get_settings()
 
 _DOCLING_ACCELERATOR = resolve_accelerator(
-    preference=coerce_preference(_settings.ingest_docling_accelerator, _settings.ingest_accelerator),
+    preference=coerce_preference(
+        _settings.ingest_docling_accelerator, _settings.ingest_accelerator
+    ),
     explicit_device=_settings.ingest_docling_device or _settings.ingest_gpu_device,
 )
 _DOCLING_CHOICE: AcceleratorChoice | None = None
@@ -39,6 +41,7 @@ def _active_docling_choice() -> AcceleratorChoice:
 def _set_docling_choice(choice: AcceleratorChoice) -> None:
     global _DOCLING_CHOICE
     _DOCLING_CHOICE = choice
+
 
 EXCEL_MIME_TYPES = {
     "application/vnd.ms-excel",
@@ -318,7 +321,9 @@ def _export_markdown(result: Any) -> Optional[str]:
     if hasattr(document, "export_to_markdown"):
         candidates.append(("export_to_markdown", document.export_to_markdown))
     if hasattr(document, "export_to_string"):
-        candidates.append(("export_to_string", lambda: document.export_to_string(format="markdown")))
+        candidates.append(
+            ("export_to_string", lambda: document.export_to_string(format="markdown"))
+        )
     if hasattr(document, "export"):
         candidates.append(("export", lambda: document.export(format="markdown")))
 
@@ -483,7 +488,9 @@ def _serialize_table(table_data: Any) -> Any:
     return table_data
 
 
-def _process_picture_item(item: Any, document: Any, *, fallback_text: str) -> tuple[str, dict[str, Any]]:
+def _process_picture_item(
+    item: Any, document: Any, *, fallback_text: str
+) -> tuple[str, dict[str, Any]]:
     """Build text and metadata for a Docling PictureItem."""
     metadata: dict[str, Any] = {}
     text_parts: list[str] = []
@@ -673,7 +680,9 @@ def _extract_excel_tables(
         try:
             frame.to_csv(buffer, index=False)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("excel-sheet-export-error", path=str(path), sheet=sheet_title, error=str(exc))
+            logger.warning(
+                "excel-sheet-export-error", path=str(path), sheet=sheet_title, error=str(exc)
+            )
             continue
 
         text = buffer.getvalue().strip()

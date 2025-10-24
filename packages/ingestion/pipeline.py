@@ -134,7 +134,9 @@ class IngestionPipeline:
             semaphore = asyncio.Semaphore(concurrency)
             tasks = [
                 asyncio.create_task(
-                    self._process_item_task(idx, item, tags=tags, from_web=from_web, semaphore=semaphore)
+                    self._process_item_task(
+                        idx, item, tags=tags, from_web=from_web, semaphore=semaphore
+                    )
                 )
                 for idx, item in enumerate(items)
             ]
@@ -505,7 +507,9 @@ class IngestionPipeline:
 
         chunk_counter = 0
         prepared: list[DocChunk] = []
-        ranges = chunk_token_ranges(tokens, size=self._config.chunk_size, overlap=self._config.chunk_overlap)
+        ranges = chunk_token_ranges(
+            tokens, size=self._config.chunk_size, overlap=self._config.chunk_overlap
+        )
 
         for token_start, token_end in ranges:
             segment_tokens = tokens[token_start:token_end]
@@ -678,7 +682,9 @@ class IngestionPipeline:
                     "segments": [],
                 },
             )
-            segment_entry = self._format_page_segment(summary, span_metadata, segment_text=segment_text)
+            segment_entry = self._format_page_segment(
+                summary, span_metadata, segment_text=segment_text
+            )
 
             table_info = self._extract_table_artifact(span_metadata, summary, page_number)
             if table_info:
@@ -757,7 +763,9 @@ class IngestionPipeline:
         return segment_entry
 
     @staticmethod
-    def _extract_table_artifact(metadata: dict, summary: dict, page_number: int | None) -> dict | None:
+    def _extract_table_artifact(
+        metadata: dict, summary: dict, page_number: int | None
+    ) -> dict | None:
         table_data = metadata.get("table_data")
         if table_data is None:
             return None
@@ -770,7 +778,9 @@ class IngestionPipeline:
         return info
 
     @staticmethod
-    def _extract_image_artifact(metadata: dict, summary: dict, page_number: int | None) -> dict | None:
+    def _extract_image_artifact(
+        metadata: dict, summary: dict, page_number: int | None
+    ) -> dict | None:
         if metadata.get("content_type") != "image" and not metadata.get("image_ref"):
             return None
         caption = metadata.get("caption") or metadata.get("label")
@@ -789,7 +799,9 @@ class IngestionPipeline:
         return info
 
     @staticmethod
-    def _extract_chart_artifact(metadata: dict, summary: dict, page_number: int | None) -> dict | None:
+    def _extract_chart_artifact(
+        metadata: dict, summary: dict, page_number: int | None
+    ) -> dict | None:
         chart_data = metadata.get("chart_data") or metadata.get("chart")
         if chart_data is None:
             return None
@@ -857,8 +869,10 @@ class IngestionPipeline:
         for image in images:
             metadata = image.get("metadata") if isinstance(image, dict) else None
             if isinstance(metadata, dict):
-                key = metadata.get("image_hash") or metadata.get("image_ref") or json.dumps(
-                    metadata, sort_keys=True, default=str
+                key = (
+                    metadata.get("image_hash")
+                    or metadata.get("image_ref")
+                    or json.dumps(metadata, sort_keys=True, default=str)
                 )
             else:
                 key = json.dumps(image, sort_keys=True, default=str)
@@ -947,7 +961,9 @@ class IngestionPipeline:
         for idx, image in enumerate(images, start=1):
             if not isinstance(image, dict):
                 continue
-            caption_value = image.get("caption") or image.get("detailed_caption") or f"Embedded image {idx}"
+            caption_value = (
+                image.get("caption") or image.get("detailed_caption") or f"Embedded image {idx}"
+            )
             caption = self._escape_markdown_text(str(caption_value))
             image_ref = image.get("image_ref")
             if image_ref in (None, "", "None"):
@@ -972,7 +988,9 @@ class IngestionPipeline:
             if image.get("hash"):
                 details.append(f"Image hash: `{image['hash']}`")
 
-            detail_text = "\n".join(f"> {self._escape_markdown_text(line)}" for line in details if line)
+            detail_text = "\n".join(
+                f"> {self._escape_markdown_text(line)}" for line in details if line
+            )
             block_parts = [image_line]
             if detail_text:
                 block_parts.append(detail_text)
@@ -996,7 +1014,9 @@ class IngestionPipeline:
                 block_lines.append(f"> Type: {self._escape_markdown_text(str(chart_type))}")
             transcription = chart.get("transcription")
             if transcription:
-                block_lines.append(f"> Transcription: {self._escape_markdown_text(str(transcription))}")
+                block_lines.append(
+                    f"> Transcription: {self._escape_markdown_text(str(transcription))}"
+                )
             data = chart.get("data")
             if data is not None:
                 try:
@@ -1121,10 +1141,7 @@ class IngestionPipeline:
     @staticmethod
     def _escape_markdown_text(value: str) -> str:
         escaped = (
-            value.replace("\\", "\\\\")
-            .replace("|", "\\|")
-            .replace("[", "\\[")
-            .replace("]", "\\]")
+            value.replace("\\", "\\\\").replace("|", "\\|").replace("[", "\\[").replace("]", "\\]")
         )
         return escaped.replace("\r", " ").replace("\n", " ").strip()
 
@@ -1166,7 +1183,9 @@ class IngestionPipeline:
             or "YouWorkerIngest/1.0 (+https://youworker.example)"
         )
 
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0, headers={"User-Agent": user_agent}) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True, timeout=30.0, headers={"User-Agent": user_agent}
+        ) as client:
             response = await client.get(url)
             response.raise_for_status()
 

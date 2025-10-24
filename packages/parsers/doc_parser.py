@@ -20,4 +20,3 @@ class DocumentParser:
     async def parse(self, source: str) -> ParsedDocument:
         """Parse the provided source and return structured content."""
         raise NotImplementedError("Document parsing has not been implemented yet.")
-

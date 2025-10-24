@@ -14,7 +14,6 @@ import logging
 import math
 import os
 import wave
-from functools import partial
 from typing import Any, Optional, Tuple
 
 import numpy as np
@@ -252,6 +251,7 @@ async def synthesize_speech(
     voice = await _load_piper_voice()
 
     if voice:
+
         def _run_voice() -> Tuple[bytes, int]:
             # Use synthesize method which returns a numpy array
             audio_array = voice.synthesize(cleaned)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -82,10 +81,11 @@ async def init_db(settings: Settings) -> None:
     #     raise RuntimeError("Failed to run database migrations") from exc
 
     # Create tables automatically (for pre-release only)
-    from sqlalchemy import inspect
     async with _engine.begin() as conn:
+
         def create_tables_sync(connection):
             Base.metadata.create_all(bind=connection)
+
         await conn.run_sync(create_tables_sync)
 
 

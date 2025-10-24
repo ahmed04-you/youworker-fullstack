@@ -4,7 +4,7 @@ import hashlib
 from datetime import datetime
 from typing import Iterable
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .models import (
@@ -26,22 +26,24 @@ def _hash_api_key(api_key: str) -> str:
 
 
 async def ensure_root_user(session, *, username: str, api_key: str) -> User:
-        q = await session.execute(select(User).where(User.username == username))
-        user = q.scalar_one_or_none()
-        if user:
-            # Update api key hash if changed
-            h = _hash_api_key(api_key)
-            if user.api_key_hash != h:
-                user.api_key_hash = h
-                await session.flush()
-            return user
-        user = User(username=username, is_root=True, api_key_hash=_hash_api_key(api_key))
-        session.add(user)
-        await session.flush()
+    q = await session.execute(select(User).where(User.username == username))
+    user = q.scalar_one_or_none()
+    if user:
+        # Update api key hash if changed
+        h = _hash_api_key(api_key)
+        if user.api_key_hash != h:
+            user.api_key_hash = h
+            await session.flush()
         return user
+    user = User(username=username, is_root=True, api_key_hash=_hash_api_key(api_key))
+    session.add(user)
+    await session.flush()
+    return user
 
 
-async def upsert_mcp_servers(session: AsyncSession, servers: Iterable[tuple[str, str, bool]]) -> dict[str, MCPServer]:
+async def upsert_mcp_servers(
+    session: AsyncSession, servers: Iterable[tuple[str, str, bool]]
+) -> dict[str, MCPServer]:
     """Upsert MCP servers by server_id.
 
     Args:
@@ -115,7 +117,9 @@ async def get_or_create_session(
 ) -> ChatSession:
     if external_id:
         q = await session.execute(
-            select(ChatSession).where(ChatSession.user_id == user_id, ChatSession.external_id == external_id)
+            select(ChatSession).where(
+                ChatSession.user_id == user_id, ChatSession.external_id == external_id
+            )
         )
         cs = q.scalar_one_or_none()
         if cs:
@@ -124,7 +128,9 @@ async def get_or_create_session(
             cs.enable_tools = enable_tools
             await session.flush()
             return cs
-    cs = ChatSession(user_id=user_id, external_id=external_id, model=model, enable_tools=enable_tools)
+    cs = ChatSession(
+        user_id=user_id, external_id=external_id, model=model, enable_tools=enable_tools
+    )
     session.add(cs)
     await session.flush()
     return cs
@@ -302,7 +308,9 @@ async def ensure_collection(session: AsyncSession, name: str) -> DocumentCollect
     return col
 
 
-async def grant_user_collection_access(session: AsyncSession, user_id: int, collection_name: str) -> None:
+async def grant_user_collection_access(
+    session: AsyncSession, user_id: int, collection_name: str
+) -> None:
     col = await ensure_collection(session, collection_name)
     q = await session.execute(
         select(UserCollectionAccess).where(
@@ -318,7 +326,9 @@ async def grant_user_collection_access(session: AsyncSession, user_id: int, coll
 # ==================== READ OPERATIONS ====================
 
 
-async def get_user_sessions(session: AsyncSession, user_id: int, limit: int = 50) -> list[ChatSession]:
+async def get_user_sessions(
+    session: AsyncSession, user_id: int, limit: int = 50
+) -> list[ChatSession]:
     """Get user's chat sessions ordered by most recent."""
     q = await session.execute(
         select(ChatSession)
@@ -329,11 +339,12 @@ async def get_user_sessions(session: AsyncSession, user_id: int, limit: int = 50
     return list(q.scalars().all())
 
 
-async def get_session_with_messages(session: AsyncSession, session_id: int, user_id: int) -> ChatSession | None:
+async def get_session_with_messages(
+    session: AsyncSession, session_id: int, user_id: int
+) -> ChatSession | None:
     """Get a chat session with all its messages."""
     q = await session.execute(
-        select(ChatSession)
-        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
     chat_session = q.scalar_one_or_none()
     if not chat_session:
@@ -408,8 +419,7 @@ async def get_user_tool_runs(
 async def delete_session(session: AsyncSession, session_id: int, user_id: int) -> bool:
     """Delete a chat session and all its messages (cascade)."""
     q = await session.execute(
-        select(ChatSession)
-        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
     chat_session = q.scalar_one_or_none()
     if not chat_session:
@@ -447,8 +457,7 @@ async def delete_document_by_path_hash(session: AsyncSession, path_hash: str) ->
 async def delete_ingestion_run(session: AsyncSession, run_id: int, user_id: int) -> bool:
     """Delete an ingestion run record."""
     q = await session.execute(
-        select(IngestionRun)
-        .where(IngestionRun.id == run_id, IngestionRun.user_id == user_id)
+        select(IngestionRun).where(IngestionRun.id == run_id, IngestionRun.user_id == user_id)
     )
     run = q.scalar_one_or_none()
     if not run:
@@ -462,11 +471,12 @@ async def delete_ingestion_run(session: AsyncSession, run_id: int, user_id: int)
 # ==================== UPDATE OPERATIONS ====================
 
 
-async def update_session_title(session: AsyncSession, session_id: int, user_id: int, title: str) -> bool:
+async def update_session_title(
+    session: AsyncSession, session_id: int, user_id: int, title: str
+) -> bool:
     """Update a chat session's title."""
     q = await session.execute(
-        select(ChatSession)
-        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
     chat_session = q.scalar_one_or_none()
     if not chat_session:

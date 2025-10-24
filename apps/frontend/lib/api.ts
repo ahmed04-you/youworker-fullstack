@@ -1,17 +1,6 @@
 "use client"
 
-import { SSEClient } from "@/lib/transport/sse-client"
-import type {
-  DocumentItem,
-  IngestResponse,
-  IngestionRun,
-  Session,
-  ToolEventPayload,
-  UnifiedChatRequestPayload,
-  UnifiedChatResponsePayload,
-  UnifiedChatStreamCallbacks,
-  HealthResponse,
-} from "@/lib/types"
+import type { DocumentItem, IngestResponse, IngestionRun, Session, HealthResponse } from "@/lib/types"
 
 const DEFAULT_API_URL = "http://localhost:8001"
 const DEFAULT_API_KEY = process.env.NEXT_PUBLIC_API_KEY || "dev-root-key"
@@ -97,118 +86,6 @@ export async function apiFetch<T = unknown>(path: string, init?: RequestInit): P
 
 export async function getHealth(): Promise<HealthResponse> {
   return apiFetch<HealthResponse>("/health")
-}
-
-export async function postUnifiedChat(
-  payload: UnifiedChatRequestPayload,
-  callbacks: UnifiedChatStreamCallbacks = {},
-  client?: SSEClient | null,
-): Promise<void> {
-  const controller = new AbortController()
-  if (client) {
-    client.attach(controller)
-  }
-
-  const body = {
-    ...payload,
-    messages: payload.messages.map((msg) => ({
-      role: msg.role,
-      content: msg.content,
-    })),
-  }
-
-  try {
-    const response = await fetch(resolveUrl("/v1/unified-chat"), {
-      method: "POST",
-      headers: buildHeaders({
-        Accept: "text/event-stream",
-        "Content-Type": "application/json",
-      }),
-      body: JSON.stringify(body),
-      signal: controller.signal,
-      credentials: "include",
-    })
-
-    if (!response.ok) {
-      throw await parseError(response)
-    }
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      throw new Error("Streaming non supportato dal browser.")
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ""
-
-    while (true) {
-      const { value, done } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-
-      let separatorIndex: number
-      while ((separatorIndex = buffer.indexOf("\n\n")) !== -1) {
-        const rawEvent = buffer.slice(0, separatorIndex)
-        buffer = buffer.slice(separatorIndex + 2)
-        const parsed = parseSseEvent(rawEvent)
-        if (!parsed) continue
-
-        const { event, data } = parsed
-
-        if (event === "token" && data && typeof callbacks.onToken === "function") {
-          callbacks.onToken(data)
-        } else if (event === "tool" && data && typeof callbacks.onTool === "function") {
-          callbacks.onTool(data as ToolEventPayload)
-        } else if (event === "log" && data && typeof callbacks.onLog === "function") {
-          callbacks.onLog(data)
-        } else if ((event === "heartbeat" || event === "ping") && typeof callbacks.onHeartbeat === "function") {
-          callbacks.onHeartbeat()
-        } else if (event === "done" && data && typeof callbacks.onDone === "function") {
-          callbacks.onDone(data as UnifiedChatResponsePayload)
-        }
-      }
-    }
-  } catch (error) {
-    if ((error as DOMException)?.name === "AbortError") {
-      return
-    }
-    if (callbacks.onError) {
-      callbacks.onError(error as Error)
-    }
-    throw error
-  } finally {
-    if (client) {
-      client.close()
-    }
-  }
-}
-
-function parseSseEvent(raw: string): { event: string; data: any } | null {
-  if (!raw.trim()) return null
-  const lines = raw.split(/\r?\n/)
-  let event = "message"
-  const dataLines: string[] = []
-
-  for (const line of lines) {
-    if (!line) continue
-    if (line.startsWith(":")) continue
-    if (line.startsWith("event:")) {
-      event = line.slice(6).trim()
-    } else if (line.startsWith("data:")) {
-      dataLines.push(line.slice(5).trim())
-    }
-  }
-
-  const dataString = dataLines.join("\n")
-  if (!dataString) {
-    return { event, data: null }
-  }
-
-  try {
-    return { event, data: JSON.parse(dataString) }
-  } catch {
-    return { event, data: dataString }
-  }
 }
 
 export async function postIngest(payload: {

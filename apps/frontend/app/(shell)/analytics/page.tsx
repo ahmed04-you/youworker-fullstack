@@ -25,17 +25,11 @@ import { Activity, Database, MessageSquare, Settings2 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useI18n } from "@/lib/i18n"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:9001"
+import { getApiBaseUrl, apiFetch } from "@/lib/api"
 
 const fetcher = async (url: string) => {
-  const token = localStorage.getItem("auth_token")
-  const res = await fetch(url, {
-    headers: {
-      Authorization: token ? `Bearer ${token}` : "",
-    },
-  })
-  if (!res.ok) throw new Error("Failed to fetch")
-  return res.json()
+  // Use the centralized API fetch function that handles authentication properly
+  return apiFetch(url.replace(/^https?:\/\/[^\/]+/, ""))
 }
 
 const COLORS = {
@@ -56,25 +50,25 @@ export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("30")
   const { t } = useI18n()
 
-  const { data: overview } = useSWR(`${API_BASE_URL}/v1/analytics/overview?days=${timeRange}`, fetcher, {
+  const { data: overview } = useSWR(`/v1/analytics/overview?days=${timeRange}`, fetcher, {
     refreshInterval: 30000,
   })
 
   const { data: tokensTimeline } = useSWR(
-    `${API_BASE_URL}/v1/analytics/tokens-timeline?days=${timeRange}&interval=day`,
+    `/v1/analytics/tokens-timeline?days=${timeRange}&interval=day`,
     fetcher,
     { refreshInterval: 30000 },
   )
 
-  const { data: toolPerformance } = useSWR(`${API_BASE_URL}/v1/analytics/tool-performance?days=${timeRange}`, fetcher, {
+  const { data: toolPerformance } = useSWR(`/v1/analytics/tool-performance?days=${timeRange}`, fetcher, {
     refreshInterval: 30000,
   })
 
-  const { data: ingestionStats } = useSWR(`${API_BASE_URL}/v1/analytics/ingestion-stats?days=${timeRange}`, fetcher, {
+  const { data: ingestionStats } = useSWR(`/v1/analytics/ingestion-stats?days=${timeRange}`, fetcher, {
     refreshInterval: 30000,
   })
 
-  const { data: sessionActivity } = useSWR(`${API_BASE_URL}/v1/analytics/session-activity?days=${timeRange}`, fetcher, {
+  const { data: sessionActivity } = useSWR(`/v1/analytics/session-activity?days=${timeRange}`, fetcher, {
     refreshInterval: 30000,
   })
 

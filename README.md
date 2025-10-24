@@ -6,16 +6,27 @@
 
 YouWorker.AI è un'applicazione full-stack in sviluppo che combina tecnologie web moderne con modelli AI locali per offrire un'esperienza conversazionale potente e orientata alla privacy. Costruito con Next.js, FastAPI e il Model Context Protocol (MCP).
 
----
+## 📚 Documentazione
+
+Per informazioni dettagliate sull'utilizzo e lo sviluppo del progetto, consulta la documentazione completa nella cartella [`docs/`](docs/):
+
+- **[Guida Utente](docs/guida-utente.md)** - Istruzioni complete per l'utilizzo dell'applicazione
+- **[Guida per Sviluppatori](docs/guida-sviluppatori.md)** - Documentazione tecnica per contribuire al progetto
+- **[Documentazione Tecnica](docs/tecnica.md)** - Architettura dettagliata del sistema
+- **[README Documentazione](docs/README.md)** - Indice completo della documentazione
+
+> Le impostazioni condivise dell'API e dei processi di ingestione vengono ora definite una sola volta in `packages/common/settings.py` ed esposte dall'API tramite `apps/api/config.py`.
 
 ## ✨ Caratteristiche Principali
 
 ### 🎙️ **Doppia Modalità di Interazione**
 - **Modalità Testo**: Risposte in streaming real-time con Server-Sent Events
+- **Streaming SSE ottimizzato**: flush iniziale ridotto e heartbeat periodici per connessioni stabili a bassa banda
 - **Modalità Voce**: Input vocale push-to-talk con riconoscimento e sintesi vocale italiana
 
 ### 🤖 **Sistema Agente Intelligente**
 - Alimentato da modelli Ollama locali (privacy-first, nessuna API esterna)
+- Selezione modello per richiesta, sicura in presenza di più sessioni concorrenti
 - Scoperta dinamica degli strumenti via Model Context Protocol (MCP)
 - Architettura single-tool stepper per comportamento affidabile e prevedibile
 - Risposte in streaming con feedback sull'esecuzione degli strumenti
@@ -84,6 +95,7 @@ YouWorker.AI è un'applicazione full-stack in sviluppo che combina tecnologie we
    - **Documentazione API**: http://localhost:8001/docs
    - **Analytics Dashboard**: http://localhost:8000/analytics
    - **Grafana** (opzionale): http://localhost:3001 (user: `admin`, password: `admin`)
+   - Tutti i container sono eseguiti come utenti non-root e le immagini Docker sono versionate con tag stabili
 
 ### Sequenza di Avvio
 
@@ -100,93 +112,9 @@ Lo stack Docker Compose avvia i servizi in questo ordine:
 
 ---
 
-## ⚙️ Configurazione
-
-### Variabili d'Ambiente Essenziali
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `CHAT_MODEL` | Modello chat Ollama | `gpt-oss:20b` |
-| `EMBED_MODEL` | Modello embedding | `embeddinggemma:300m` |
-| `OLLAMA_AUTO_PULL` | Scarica automaticamente i modelli mancanti al primo avvio (`0` per disabilitare) | `1` |
-| `ROOT_API_KEY` | Chiave autenticazione API | `dev-root-key` |
-| `JWT_SECRET` | Chiave separata per firmare i token JWT | `dev-jwt-secret` |
-| `OLLAMA_BASE_URL` | URL servizio Ollama | `http://ollama:11434` |
-| `QDRANT_URL` | URL servizio Qdrant | `http://qdrant:6333` |
-| `DATABASE_URL` | Connessione PostgreSQL | Auto-configurato |
-
-### Configurazione Vocale
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `STT_MODEL` | Dimensione modello Whisper | `small` |
-| `STT_DEVICE` | Dispositivo compute | `cuda` |
-| `STT_LANGUAGE` | Lingua riconoscimento vocale | `it` |
-| `TTS_VOICE` | Modello voce Piper | `it_IT-paola-medium` |
-| `TTS_PROVIDER` | Motore TTS | `piper` |
-
-### Configurazione Agente
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `MAX_AGENT_ITERATIONS` | Iterazioni massime consentite per singola risposta | `10` |
-| `AGENT_DEFAULT_LANGUAGE` | Lingua predefinita dell'assistente (`it`, `en`) | `it` |
-
-### Configurazione Frontend
-
-| Variabile | Descrizione | Default |
-|-----------|-------------|---------|
-| `NEXT_PUBLIC_API_KEY` | Chiave API browser | Deve corrispondere a `ROOT_API_KEY` |
-| `NEXT_PUBLIC_API_PORT` | Porta API | `8000` |
-
----
-
-## 📈 Monitoraggio e Analisi Dati
-
-YouWorker.AI offre **due soluzioni** per visualizzare e analizzare i dati del database PostgreSQL:
-
-### 1. Dashboard Analitica Integrata
-
-Una dashboard moderna costruita con React e Recharts, accessibile direttamente dall'interfaccia web:
-
-- **Accesso**: Clicca l'icona Analytics (📊) nella barra laterale o naviga a `/analytics`
-- **Metriche in tempo reale** con aggiornamento automatico ogni 30 secondi
-- **Visualizzazioni disponibili**:
-  - Utilizzo token (input/output) nel tempo
-  - Performance strumenti (success rate, latency)
-  - Statistiche di ingestione (file, chunks, collezioni)
-  - Attività sessioni e distribuzione modelli
-- **Intervalli temporali**: 7/30/90 giorni o ultimo anno
-- **API Endpoints**: `/v1/analytics/*` (overview, tokens-timeline, tool-performance, ingestion-stats, session-activity)
-
-### 2. Dashboard Grafana (BI Esterno)
-
-Grafana offre un'esperienza di Business Intelligence professionale con connessione diretta a PostgreSQL:
-
-**Avvio Grafana**:
-```bash
-docker-compose up -d grafana prometheus
-```
-
-**Accesso**: http://localhost:3001 (user: `admin`, password: `admin`)
-
-**Caratteristiche**:
-- Dashboard pre-configurate con provisioning automatico
-- Query SQL personalizzabili su PostgreSQL
-- Integrazione Prometheus per metriche API (endpoint `/metrics`)
-- Alerting configurabile su soglie critiche
-- Export/import dashboard in JSON
-- Metriche disponibili: sessioni, token, tool execution, ingestion trends
-
-**Data Sources Auto-Configurati**:
-- PostgreSQL (`postgres:5432/youworker`)
-- Prometheus (`http://prometheus:9090`)
-
-**Persistenza**: I dati Grafana sono salvati in `data/grafana/`
-
----
-
 ## 📖 Guida all'Uso
+
+Per istruzioni dettagliate sull'utilizzo dell'applicazione, consulta la **[Guida Utente](docs/guida-utente.md)**.
 
 ### Modalità Chat Testuale
 
@@ -195,13 +123,6 @@ docker-compose up -d grafana prometheus
 3. Premi Invio o clicca Invia
 4. Osserva le risposte in streaming real-time e le esecuzioni degli strumenti
 
-**Funzionalità**:
-- Streaming token in tempo reale
-- Visualizzazione esecuzione strumenti
-- Risposte contestuali
-- Riproduzione audio opzionale (attiva icona altoparlante)
-- Cambia al volo la lingua delle risposte (Italiano o Inglese) dalle impostazioni
-
 ### Modalità Voce
 
 1. Clicca il pulsante **"Voce"** nell'intestazione
@@ -209,25 +130,12 @@ docker-compose up -d grafana prometheus
 3. **Rilascia** quando hai finito di parlare
 4. Ascolta la risposta vocale dell'AI
 
-**Funzionalità**:
-- Registrazione push-to-talk
-- Visualizzazione livello audio in tempo reale
-- Trascrizione automatica italiana
-- Risposte text-to-speech naturali
-
-**Nota**: La modalità voce richiede HTTPS in produzione (i browser limitano l'accesso al microfono ai contesti sicuri). Usa `localhost` per lo sviluppo.
-
 ### Ingestione Documenti
 
 1. Naviga alla pagina **Ingest**
 2. Carica file o fornisci URL
 3. Seleziona il tipo di documento (auto-rilevato per i file)
 4. Clicca "Ingest" per elaborare
-
-**Formati supportati**:
-- Documenti PDF
-- File di testo
-- Pagine web (via URL)
 
 ---
 
@@ -259,6 +167,8 @@ docker-compose up -d grafana prometheus
 ---
 
 ## 🧪 Sviluppo
+
+Per istruzioni dettagliate sullo sviluppo del progetto, consulta la **[Guida per Sviluppatori](docs/guida-sviluppatori.md)**.
 
 ### Setup Sviluppo Locale
 

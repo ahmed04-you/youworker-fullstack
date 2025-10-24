@@ -44,7 +44,7 @@ export function DynamicImport({
 // Predefined dynamic imports for common components
 export const DynamicChatComposer = (props: any) => (
   <DynamicImport
-    loader={() => import("@/components/chat/chat-composer")}
+    loader={() => import("@/components/chat/chat-composer-refactored")}
     className="w-full"
     {...props}
   />

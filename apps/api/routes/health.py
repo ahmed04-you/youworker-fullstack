@@ -1,25 +1,30 @@
 """
 Health check API endpoints.
 """
+
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from apps.api.audio_pipeline import FW_AVAILABLE as STT_AVAILABLE, PIPER_AVAILABLE as TTS_AVAILABLE
+from apps.api.routes.deps import (
+    get_agent_loop_optional,
+    get_ollama_client_optional,
+    get_registry_optional,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def get_health_dependencies():
-    """Get health check dependencies."""
-    from apps.api.main import registry, ollama_client, agent_loop
-    from apps.api.audio_pipeline import FW_AVAILABLE as STT_AVAILABLE, PIPER_AVAILABLE as TTS_AVAILABLE
-    return registry, ollama_client, agent_loop, STT_AVAILABLE, TTS_AVAILABLE
-
-
 @router.get("/health")
-async def health_check():
+async def health_check(
+    registry=Depends(get_registry_optional),
+    ollama_client=Depends(get_ollama_client_optional),
+    agent_loop=Depends(get_agent_loop_optional),
+):
     """
     Health check endpoint with detailed component status.
 
@@ -27,14 +32,12 @@ async def health_check():
     Status is 'degraded' if some MCP servers are unavailable.
     """
     from apps.api.config import settings
-    
-    registry, ollama_client, agent_loop, STT_AVAILABLE, TTS_AVAILABLE = get_health_dependencies()
-    
+
     mcp_status = {"healthy": [], "unhealthy": [], "total": 0}
 
     if registry:
         healthy_servers = registry.list_healthy_servers()
-        all_servers = list(registry.clients.keys()) if hasattr(registry, 'clients') else []
+        all_servers = list(registry.clients.keys()) if hasattr(registry, "clients") else []
 
         mcp_status["healthy"] = healthy_servers
         mcp_status["unhealthy"] = [s for s in all_servers if s not in healthy_servers]

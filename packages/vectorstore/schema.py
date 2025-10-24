@@ -1,6 +1,7 @@
 """
 Schema definitions for vector store documents.
 """
+
 from typing import Literal
 
 

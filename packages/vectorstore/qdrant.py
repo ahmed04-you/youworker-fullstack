@@ -1,12 +1,15 @@
 """
 Qdrant vector store client with semantic search capabilities.
 """
+
+# While ingestion relies on the synchronous helpers in packages.vectorstore.helpers,
+# this async wrapper remains available for components that require direct client access.
 import logging
 import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from qdrant_client import QdrantClient, AsyncQdrantClient
+from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     Distance,
     VectorParams,

@@ -1,18 +1,15 @@
 """
 CRUD-related API endpoints.
 """
-import logging
-from typing import Any
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Query
-from pydantic import BaseModel
+import logging
+
+from fastapi import APIRouter, HTTPException, Depends, Query
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from apps.api.config import settings
 from apps.api.auth.security import get_current_active_user
 from packages.db import get_async_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +24,11 @@ async def _get_current_user(current_user=Depends(get_current_active_user)):
     try:
         from packages.vectorstore.schema import DEFAULT_COLLECTION
         from packages.db.crud import grant_user_collection_access
+
         async with get_async_session() as db:
-            await grant_user_collection_access(db, user_id=user.id, collection_name=DEFAULT_COLLECTION)
+            await grant_user_collection_access(
+                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
+            )
     except (AttributeError, ImportError, ValueError) as e:
         logger.debug(f"Could not grant default collection access: {e}")
         pass
@@ -40,12 +40,12 @@ async def _get_current_user(current_user=Depends(get_current_active_user)):
 
 @router.get("/sessions")
 async def list_sessions(
-    current_user=Depends(_get_current_user), 
-    limit: int = Query(default=50, le=100)
+    current_user=Depends(_get_current_user), limit: int = Query(default=50, le=100)
 ):
     """List user's chat sessions."""
     async with get_async_session() as db:
         from packages.db.crud import get_user_sessions
+
         sessions = await get_user_sessions(db, user_id=current_user["id"], limit=limit)
         return {
             "sessions": [
@@ -64,14 +64,14 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(
-    session_id: int, 
-    current_user=Depends(_get_current_user)
-):
+async def get_session(session_id: int, current_user=Depends(_get_current_user)):
     """Get a specific chat session with all messages."""
     async with get_async_session() as db:
         from packages.db.crud import get_session_with_messages
-        session = await get_session_with_messages(db, session_id=session_id, user_id=current_user["id"])
+
+        session = await get_session_with_messages(
+            db, session_id=session_id, user_id=current_user["id"]
+        )
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -100,13 +100,11 @@ async def get_session(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session_endpoint(
-    session_id: int, 
-    current_user=Depends(_get_current_user)
-):
+async def delete_session_endpoint(session_id: int, current_user=Depends(_get_current_user)):
     """Delete a chat session and all its messages."""
     async with get_async_session() as db:
         from packages.db.crud import delete_session
+
         success = await delete_session(db, session_id=session_id, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -116,14 +114,15 @@ async def delete_session_endpoint(
 
 @router.patch("/sessions/{session_id}")
 async def update_session(
-    session_id: int, 
-    title: str = Query(...), 
-    current_user=Depends(_get_current_user)
+    session_id: int, title: str = Query(...), current_user=Depends(_get_current_user)
 ):
     """Update a chat session's title."""
     async with get_async_session() as db:
         from packages.db.crud import update_session_title
-        success = await update_session_title(db, session_id=session_id, user_id=current_user["id"], title=title)
+
+        success = await update_session_title(
+            db, session_id=session_id, user_id=current_user["id"], title=title
+        )
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
         await db.commit()
@@ -143,6 +142,7 @@ async def list_documents(
     """List ingested documents."""
     async with get_async_session() as db:
         from packages.db.crud import get_user_documents
+
         documents = await get_user_documents(
             db,
             user_id=current_user["id"],
@@ -163,7 +163,9 @@ async def list_documents(
                     "collection": d.collection,
                     "path_hash": d.path_hash,
                     "created_at": d.created_at.isoformat(),
-                    "last_ingested_at": d.last_ingested_at.isoformat() if d.last_ingested_at else None,
+                    "last_ingested_at": (
+                        d.last_ingested_at.isoformat() if d.last_ingested_at else None
+                    ),
                 }
                 for d in documents
             ],
@@ -172,16 +174,14 @@ async def list_documents(
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document_endpoint(
-    document_id: int, 
-    current_user=Depends(_get_current_user)
-):
+async def delete_document_endpoint(document_id: int, current_user=Depends(_get_current_user)):
     """Delete a document from the catalog.
 
     Note: This only removes the metadata. Vector data in Qdrant must be deleted separately.
     """
     async with get_async_session() as db:
         from packages.db.crud import delete_document
+
         success = await delete_document(db, document_id=document_id)
         if not success:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -201,6 +201,7 @@ async def list_ingestion_runs(
     """List ingestion run history."""
     async with get_async_session() as db:
         from packages.db.crud import get_user_ingestion_runs
+
         runs = await get_user_ingestion_runs(
             db,
             user_id=current_user["id"],
@@ -230,13 +231,11 @@ async def list_ingestion_runs(
 
 
 @router.delete("/ingestion-runs/{run_id}")
-async def delete_ingestion_run_endpoint(
-    run_id: int, 
-    current_user=Depends(_get_current_user)
-):
+async def delete_ingestion_run_endpoint(run_id: int, current_user=Depends(_get_current_user)):
     """Delete an ingestion run record."""
     async with get_async_session() as db:
         from packages.db.crud import delete_ingestion_run
+
         success = await delete_ingestion_run(db, run_id=run_id, user_id=current_user["id"])
         if not success:
             raise HTTPException(status_code=404, detail="Ingestion run not found")
@@ -256,6 +255,7 @@ async def list_tool_runs(
     """List tool execution logs."""
     async with get_async_session() as db:
         from packages.db.crud import get_user_tool_runs
+
         runs = await get_user_tool_runs(
             db,
             user_id=current_user["id"],

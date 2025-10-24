@@ -22,7 +22,7 @@ interface ChatComposerProps {
 
 const MAX_TEXTAREA_HEIGHT = 200
 
-export function ChatComposerRefactored({ onSubmit, onStop, onVoiceTurn, textareaRef }: ChatComposerProps) {
+export function ChatComposer({ onSubmit, onStop, onVoiceTurn, textareaRef }: ChatComposerProps) {
   const {
     isStreaming,
     audioPlaying,

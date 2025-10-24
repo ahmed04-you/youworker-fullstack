@@ -47,14 +47,20 @@ def _extract_pdf_tables(
                 try:
                     tables = page.extract_tables()
                 except Exception as exc:  # pragma: no cover
-                    logger.warning("pdfplumber-table-error", path=str(path), page=page_idx, error=str(exc))
+                    logger.warning(
+                        "pdfplumber-table-error", path=str(path), page=page_idx, error=str(exc)
+                    )
                     continue
                 for table in tables or []:
                     rows = _normalize_rows(table)
                     if not rows:
                         continue
                     csv_text = _rows_to_csv(rows)
-                    metadata = {"page": page_idx, "table_idx": table_counter, "table": {"rows": rows}}
+                    metadata = {
+                        "page": page_idx,
+                        "table_idx": table_counter,
+                        "table": {"rows": rows},
+                    }
                     table_counter += 1
                     yield DocChunk(
                         id=str(uuid4()),
@@ -90,4 +96,3 @@ def _coerce_cell(cell: Any) -> str:
 
 def _rows_to_csv(rows: Sequence[Sequence[str]]) -> str:
     return "\n".join(",".join(cell.replace("\n", " ").strip() for cell in row) for row in rows)
-

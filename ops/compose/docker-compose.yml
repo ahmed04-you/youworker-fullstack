@@ -35,7 +35,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-youworker}
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:1.8.2
     restart: unless-stopped
     ports:
       - "6333:6333"
@@ -50,7 +50,7 @@ services:
       QDRANT__SERVICE__GRPC_PORT: 6334
 
   ollama:
-    image: ollama/ollama:latest
+    image: ollama/ollama:0.1.36
     restart: unless-stopped
     ports:
       - "11434:11434"
@@ -243,7 +243,7 @@ services:
       NODE_ENV: "production"
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.4.3
     restart: unless-stopped
     ports:
       - "3001:3000"
@@ -263,7 +263,7 @@ services:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.51.2
     restart: unless-stopped
     ports:
       - "9090:9090"
@@ -283,7 +283,7 @@ services:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
 
   nginx:
-    image: nginx:alpine
+    image: nginx:1.25.5-alpine
     restart: unless-stopped
     command:
       [

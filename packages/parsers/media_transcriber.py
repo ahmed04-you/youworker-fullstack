@@ -37,12 +37,16 @@ WHISPER_GPU_COMPUTE_TYPE = _settings.ingest_whisper_gpu_compute_type or "float16
 WHISPER_CPU_THREADS = max(1, _settings.ingest_whisper_cpu_threads or 4)
 WHISPER_NUM_WORKERS = max(1, _settings.ingest_whisper_num_workers or 1)
 WHISPER_LANGUAGE = _settings.ingest_whisper_language
+
+
 def _active_compute_type(choice: AcceleratorChoice) -> str:
     return WHISPER_GPU_COMPUTE_TYPE if choice.using_gpu else WHISPER_COMPUTE_TYPE
 
 
 _WHISPER_ACCELERATOR = resolve_accelerator(
-    preference=coerce_preference(_settings.ingest_whisper_accelerator, _settings.ingest_accelerator),
+    preference=coerce_preference(
+        _settings.ingest_whisper_accelerator, _settings.ingest_accelerator
+    ),
     explicit_device=_settings.ingest_whisper_device or _settings.ingest_gpu_device,
 )
 _MODEL_CACHE: WhisperModel | None = None
@@ -299,7 +303,9 @@ def _demux_to_wav(path: Path) -> _DemuxedAudio:
             .run(quiet=True)
         )
     except ffmpeg.Error as exc:  # pragma: no cover
-        logger.warning("ffmpeg-demux-error", path=str(path), error=exc.stderr.decode(errors="ignore"))
+        logger.warning(
+            "ffmpeg-demux-error", path=str(path), error=exc.stderr.decode(errors="ignore")
+        )
         tmp_path.unlink(missing_ok=True)
         raise
     return _DemuxedAudio(tmp_path)
@@ -383,7 +389,9 @@ def _transcribe_kwargs() -> dict:
     }
 
 
-def _run_transcription(model: WhisperModel, audio_path: Path, *, language_hint: str | None) -> tuple[list, str | None]:
+def _run_transcription(
+    model: WhisperModel, audio_path: Path, *, language_hint: str | None
+) -> tuple[list, str | None]:
     """Run the Whisper transcription pass preferring auto-detection, with fallback to hints."""
     candidates: list[str | None] = [None]
     if language_hint:

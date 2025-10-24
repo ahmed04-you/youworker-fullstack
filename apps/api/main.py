@@ -3,14 +3,11 @@ FastAPI backend for AI agent with dynamic MCP tools.
 
 Main application entry point with modular route organization.
 """
-import asyncio
-import json
+
 import logging
-import secrets
 import uuid
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
-from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 
@@ -22,18 +19,10 @@ from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from apps.api.config import settings
-from apps.api.audio_pipeline import (
-    FW_AVAILABLE as STT_AVAILABLE,
-    PIPER_AVAILABLE as TTS_AVAILABLE,
-    transcribe_audio_pcm16,
-    synthesize_speech,
-)
 from packages.llm import OllamaClient
 from packages.agent import MCPRegistry, AgentLoop
 from packages.vectorstore import QdrantStore
 from packages.db import init_db as init_database
-from packages.db.session import get_async_session
-from packages.db.crud import ensure_root_user
 from packages.ingestion import IngestionPipeline
 
 # Import route modules
@@ -88,6 +77,7 @@ async def lifespan(app: FastAPI):
 
     # Ensure ingestion directories exist
     from pathlib import Path
+
     for dir_path in [settings.ingest_upload_root, settings.ingest_examples_dir]:
         try:
             Path(dir_path).mkdir(parents=True, exist_ok=True)
@@ -107,6 +97,7 @@ async def lifespan(app: FastAPI):
         auto_pull=settings.ollama_auto_pull,
     )
     logger.info("Ollama client initialized")
+    app.state.ollama_client = ollama_client
 
     # Initialize vector store
     logger.info("Initializing vector store...")
@@ -116,9 +107,11 @@ async def lifespan(app: FastAPI):
         default_collection=settings.qdrant_collection,
     )
     logger.info("Vector store initialized")
+    app.state.vector_store = vector_store
 
     # Initialize ingestion pipeline
     ingestion_pipeline = IngestionPipeline(settings=settings)  # type: ignore
+    app.state.ingestion_pipeline = ingestion_pipeline
 
     # Parse MCP server URLs
     logger.info("Parsing MCP server URLs...")
@@ -167,21 +160,30 @@ async def lifespan(app: FastAPI):
 
     # Initialize MCP registry
     registry = MCPRegistry(server_configs=mcp_server_configs)
+    app.state.registry = registry
 
     # Connect to all MCP servers and discover tools
     logger.info("About to connect to MCP servers...")
     try:
         await registry.connect_all()
         logger.info(f"Connected to {len(registry.clients)} MCP servers")
+
         # Persist MCP servers and tools on refresh
         async def persist_registry(tools: dict[str, Any], clients: dict[str, Any]):
             from packages.db import get_async_session
             from packages.db.crud import upsert_mcp_servers, upsert_tools
+
             async with get_async_session() as db:
                 # Servers
                 servers = []
                 for sid, client in clients.items():
-                    servers.append((sid, client.ws_url.replace("ws://", "http://").replace("wss://", "https://"), client.is_healthy))
+                    servers.append(
+                        (
+                            sid,
+                            client.ws_url.replace("ws://", "http://").replace("wss://", "https://"),
+                            client.is_healthy,
+                        )
+                    )
                 smap = await upsert_mcp_servers(db, servers)
                 # Tools
                 tool_rows = []
@@ -206,6 +208,7 @@ async def lifespan(app: FastAPI):
         model=settings.chat_model,
         default_language=settings.agent_default_language,
     )
+    app.state.agent_loop = agent_loop
 
     logger.info("API service ready")
 
@@ -292,6 +295,16 @@ async def add_correlation_id(request: Request, call_next):
     # Add correlation ID to response headers
     response.headers["X-Correlation-ID"] = correlation_id
 
+    return response
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Attach basic security headers to every response."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "same-origin")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
     return response
 
 

@@ -3,13 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ChatTranscript } from "@/components/chat/chat-transcript"
-import { ChatComposer } from "@/components/chat/chat-composer"
+import { ChatComposer } from "@/components/chat/chat-composer-refactored"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { generateId } from "@/lib/utils"
 import { useChatSettings } from "@/lib/mode"
-import { postUnifiedChat } from "@/lib/api"
+import { streamChat, type StreamController } from "@/lib/sse"
 import { playBase64Wav } from "@/lib/audio-utils"
-import { SSEClient } from "@/lib/transport/sse-client"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Mic } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -39,7 +38,7 @@ export default function ChatPage() {
   const composerRef = useRef<HTMLTextAreaElement>(null)
   const tokenBufferRef = useRef("")
   const rafRef = useRef<number | null>(null)
-  const sseClientRef = useRef<SSEClient | null>(null)
+  const streamControllerRef = useRef<StreamController | null>(null)
   const audioElementRef = useRef<HTMLAudioElement | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
 
@@ -52,14 +51,9 @@ export default function ChatPage() {
   }, [setStreamingText])
 
   useEffect(() => {
-    const client = new SSEClient()
-    sseClientRef.current = client
-
     return () => {
-      client.close()
-      if (sseClientRef.current === client) {
-        sseClientRef.current = null
-      }
+      streamControllerRef.current?.close()
+      streamControllerRef.current = null
     }
   }, [sessionId])
 
@@ -93,9 +87,15 @@ export default function ChatPage() {
       audioBase64: string | null,
     ) => {
       try {
-        await postUnifiedChat(
+        streamControllerRef.current?.close()
+        streamControllerRef.current = null
+
+        const controller = await streamChat(
           {
-            messages: history,
+            messages: history.map((msg) => ({
+              role: msg.role,
+              content: msg.content,
+            })),
             text_input: textInput,
             audio_b64: audioBase64,
             expect_audio: expectAudio,
@@ -103,7 +103,7 @@ export default function ChatPage() {
             enable_tools: true,
             session_id: sessionIdentifier,
             stream: true,
-          },
+          } as const,
           {
             onToken: (data) => {
               tokenBufferRef.current += data.text
@@ -127,6 +127,7 @@ export default function ChatPage() {
               // Heartbeat received, connection alive
             },
             onDone: async (data) => {
+              streamControllerRef.current = null
               flushTokens()
               const finalText = data.content || data.final_text || streamingText
               const assistantMessage = {
@@ -173,6 +174,7 @@ export default function ChatPage() {
               }, 100)
             },
             onError: (error) => {
+              streamControllerRef.current = null
               setIsStreaming(false)
               setStreamingText("")
               toast.error(`Errore: ${error.message}`)
@@ -181,9 +183,11 @@ export default function ChatPage() {
               }, 100)
             },
           },
-          sseClientRef.current ?? undefined,
         )
+        streamControllerRef.current = controller
       } catch (error) {
+        streamControllerRef.current?.close()
+        streamControllerRef.current = null
         setIsStreaming(false)
         setStreamingText("")
         toast.error("Impossibile avviare lo streaming di testo")

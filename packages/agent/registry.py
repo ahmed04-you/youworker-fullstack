@@ -1,6 +1,7 @@
 """
 MCP tool registry with dynamic discovery and management.
 """
+
 import asyncio
 import logging
 from typing import Any
@@ -180,11 +181,7 @@ class MCPRegistry:
 
     def list_healthy_servers(self) -> list[str]:
         """Get list of healthy server IDs."""
-        return [
-            server_id
-            for server_id, client in self.clients.items()
-            if client.is_healthy
-        ]
+        return [server_id for server_id, client in self.clients.items() if client.is_healthy]
 
     def _rebuild_exposure_map(self) -> None:
         exposed_to_qualified: dict[str, str] = {}
@@ -209,12 +206,12 @@ class MCPRegistry:
         for ch in qualified_name:
             if ch.isalnum():
                 exposed.append(ch)
-            elif ch in {'.', '-', '/'}:
-                exposed.append('_')
+            elif ch in {".", "-", "/"}:
+                exposed.append("_")
             else:
-                exposed.append('_')
+                exposed.append("_")
         # Avoid leading digits
-        s = ''.join(exposed)
+        s = "".join(exposed)
         if s and s[0].isdigit():
             s = f"t_{s}"
         return s

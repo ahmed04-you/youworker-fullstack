@@ -37,7 +37,9 @@ def _chunk_token_ranges(tokens: Sequence[str], *, size: int, overlap: int) -> li
     return ranges
 
 
-def chunk_token_ranges(tokens: Sequence[str], *, size: int = 500, overlap: int = 50) -> list[Tuple[int, int]]:
+def chunk_token_ranges(
+    tokens: Sequence[str], *, size: int = 500, overlap: int = 50
+) -> list[Tuple[int, int]]:
     """Return sliding-window token ranges that match chunk_text behaviour."""
     return _chunk_token_ranges(tokens, size=size, overlap=overlap)
 

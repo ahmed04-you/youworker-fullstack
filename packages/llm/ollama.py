@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ToolCall:
     """Represents a function/tool call from the LLM."""
+
     id: str
     name: str
     arguments: dict[str, Any]
@@ -22,6 +23,7 @@ class ToolCall:
 @dataclass
 class ChatMessage:
     """Chat message with role, content, and optional tool calls."""
+
     role: str  # "system", "user", "assistant", "tool"
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
@@ -53,6 +55,7 @@ class ChatMessage:
 @dataclass
 class StreamChunk:
     """A single chunk from the streaming response."""
+
     thinking: str = ""
     content: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)

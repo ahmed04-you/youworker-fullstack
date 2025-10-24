@@ -1,6 +1,7 @@
 """
 Helper functions for Qdrant vector store operations.
 """
+
 import logging
 from typing import TYPE_CHECKING
 

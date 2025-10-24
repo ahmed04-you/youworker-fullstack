@@ -7,7 +7,6 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
-    Enum,
     ForeignKey,
     Integer,
     String,
@@ -46,14 +45,18 @@ class ChatSession(AsyncAttrs, Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     user: Mapped[User] = relationship(back_populates="sessions")
-    messages: Mapped[list["ChatMessage"]] = relationship(back_populates="session", cascade="all, delete-orphan")
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session", cascade="all, delete-orphan"
+    )
 
 
 class ChatMessage(AsyncAttrs, Base):
     __tablename__ = "chat_messages"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    session_id: Mapped[int] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
+    )
     role: Mapped[str] = mapped_column(String(16))
     content: Mapped[str] = mapped_column(Text)
     tool_call_name: Mapped[Optional[str]] = mapped_column(String(256))
@@ -74,19 +77,25 @@ class MCPServer(AsyncAttrs, Base):
     healthy: Mapped[bool] = mapped_column(Boolean, default=True)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
-    tools: Mapped[list["Tool"]] = relationship(back_populates="server", cascade="all, delete-orphan")
+    tools: Mapped[list["Tool"]] = relationship(
+        back_populates="server", cascade="all, delete-orphan"
+    )
 
 
 class Tool(AsyncAttrs, Base):
     __tablename__ = "tools"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    mcp_server_id: Mapped[int] = mapped_column(ForeignKey("mcp_servers.id", ondelete="CASCADE"), index=True)
+    mcp_server_id: Mapped[int] = mapped_column(
+        ForeignKey("mcp_servers.id", ondelete="CASCADE"), index=True
+    )
     name: Mapped[str] = mapped_column(String(256), index=True)  # qualified name like web.search
     description: Mapped[Optional[str]] = mapped_column(Text)
     input_schema: Mapped[Optional[dict]] = mapped_column(JSONB)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    last_discovered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
 
     server: Mapped[MCPServer] = relationship(back_populates="tools")
     __table_args__ = (UniqueConstraint("mcp_server_id", "name", name="uq_tool_server_name"),)
@@ -96,9 +105,13 @@ class ToolRun(AsyncAttrs, Base):
     __tablename__ = "tool_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tool_id: Mapped[Optional[int]] = mapped_column(ForeignKey("tools.id", ondelete="SET NULL"), index=True, nullable=True)
+    tool_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("tools.id", ondelete="SET NULL"), index=True, nullable=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    session_id: Mapped[Optional[int]] = mapped_column(ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True)
+    session_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True
+    )
     tool_name: Mapped[str] = mapped_column(String(256))
     status: Mapped[str] = mapped_column(String(32))
     start_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
@@ -165,5 +178,7 @@ class UserCollectionAccess(AsyncAttrs, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    collection_id: Mapped[int] = mapped_column(ForeignKey("document_collections.id", ondelete="CASCADE"))
+    collection_id: Mapped[int] = mapped_column(
+        ForeignKey("document_collections.id", ondelete="CASCADE")
+    )
     __table_args__ = (UniqueConstraint("user_id", "collection_id", name="uq_user_collection"),)

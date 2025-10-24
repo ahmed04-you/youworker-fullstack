@@ -39,4 +39,3 @@ class IngestionReport:
     total_chunks: int
     files: list[Mapping[str, Any]]
     errors: list[Mapping[str, Any]]
-

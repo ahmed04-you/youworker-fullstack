@@ -1,6 +1,7 @@
 """
 Ingestion-related API endpoints.
 """
+
 import hashlib
 import logging
 import os
@@ -9,15 +10,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Header, Depends, UploadFile, File, Form, Request
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from pydantic import BaseModel
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import get_current_active_user, sanitize_input
+from apps.api.routes.deps import get_ingestion_pipeline
 from packages.db import get_async_session
-from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ limiter = Limiter(key_func=get_remote_address)
 # Request/Response models
 class IngestRequest(BaseModel):
     """Ingestion request model."""
+
     path_or_url: str
     from_web: bool = False
     recursive: bool = False
@@ -37,6 +39,7 @@ class IngestRequest(BaseModel):
 
 class IngestResponse(BaseModel):
     """Ingestion response model."""
+
     files_processed: int
     chunks_written: int
     files: list[dict[str, Any]] = []
@@ -50,18 +53,15 @@ async def _get_current_user():
     try:
         from packages.vectorstore.schema import DEFAULT_COLLECTION
         from packages.db.crud import grant_user_collection_access
+
         async with get_async_session() as db:
-            await grant_user_collection_access(db, user_id=user.id, collection_name=DEFAULT_COLLECTION)
+            await grant_user_collection_access(
+                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
+            )
     except (AttributeError, ImportError, ValueError) as e:
         logger.debug(f"Could not grant default collection access: {e}")
         pass
     return {"id": user.id, "username": user.username, "is_root": user.is_root}
-
-
-def get_ingestion_dependencies():
-    """Get ingestion dependencies."""
-    from apps.api.main import ingestion_pipeline
-    return ingestion_pipeline
 
 
 @router.post("/ingest")
@@ -69,18 +69,14 @@ def get_ingestion_dependencies():
 async def ingest_endpoint(
     ingest_request: IngestRequest,
     request: Request,
-    current_user=Depends(_get_current_user)
+    current_user=Depends(_get_current_user),
+    ingestion_pipeline=Depends(get_ingestion_pipeline),
 ):
     """
     Document ingestion endpoint.
 
     Accepts local paths or URLs, parses with Docling, and upserts to Qdrant.
     """
-    ingestion_pipeline = get_ingestion_dependencies()
-    
-    if not ingestion_pipeline:
-        raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
-
     logger.info("Ingestion request received")
 
     try:
@@ -111,12 +107,14 @@ async def ingest_endpoint(
 
                 # Check if path is within allowed directories
                 is_in_upload = resolved_path == upload_root or upload_root in resolved_path.parents
-                is_in_examples = resolved_path == examples_root or examples_root in resolved_path.parents
+                is_in_examples = (
+                    resolved_path == examples_root or examples_root in resolved_path.parents
+                )
 
                 if not (is_in_upload or is_in_examples):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Path must be within allowed directories: {settings.ingest_upload_root} or {settings.ingest_examples_dir}"
+                        detail=f"Path must be within allowed directories: {settings.ingest_upload_root} or {settings.ingest_examples_dir}",
                     )
             except (ValueError, OSError) as e:
                 raise HTTPException(status_code=400, detail=f"Invalid path: {e}")
@@ -137,6 +135,7 @@ async def ingest_endpoint(
         # Persist ingestion run + documents
         try:
             from packages.db.crud import record_ingestion_run, upsert_document
+
             started_at = datetime.now().astimezone()
             finished_at = datetime.now().astimezone()
             async with get_async_session() as db:
@@ -155,7 +154,7 @@ async def ingest_endpoint(
                     finished_at=finished_at,
                     status="success" if not error_messages else "partial",
                 )
-                for f in (result.files or []):
+                for f in result.files or []:
                     uri = f.get("uri")
                     path = f.get("path")
                     basis = uri or path or ""
@@ -198,6 +197,7 @@ async def ingest_upload_endpoint(
     files: list[UploadFile] = File(...),
     tags: list[str] | None = Form(default=None),
     current_user=Depends(_get_current_user),
+    ingestion_pipeline=Depends(get_ingestion_pipeline),
 ):
     """Upload files, save them to a fixed directory, and ingest them.
 
@@ -206,11 +206,6 @@ async def ingest_upload_endpoint(
     Note: Rate limiting for file uploads should be configured at the reverse proxy level
     due to compatibility issues with multipart/form-data endpoints.
     """
-    ingestion_pipeline = get_ingestion_dependencies()
-    
-    if not ingestion_pipeline:
-        raise HTTPException(status_code=503, detail="Ingestion pipeline not initialized")
-
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
 
@@ -275,13 +270,18 @@ async def ingest_upload_endpoint(
         )
 
         error_messages = [
-            f"{err.get('path') or err.get('target')}: {err.get('error')}" if isinstance(err, dict) else str(err)
+            (
+                f"{err.get('path') or err.get('target')}: {err.get('error')}"
+                if isinstance(err, dict)
+                else str(err)
+            )
             for err in (result.errors or [])
         ]
 
         # Persist ingestion run + documents
         try:
             from packages.db.crud import record_ingestion_run, upsert_document
+
             started_at = datetime.now().astimezone()
             finished_at = datetime.now().astimezone()
             async with get_async_session() as db:
@@ -300,7 +300,7 @@ async def ingest_upload_endpoint(
                     finished_at=finished_at,
                     status="success" if not error_messages else "partial",
                 )
-                for f in (result.files or []):
+                for f in result.files or []:
                     uri = f.get("uri")
                     path = f.get("path")
                     basis = uri or path or ""

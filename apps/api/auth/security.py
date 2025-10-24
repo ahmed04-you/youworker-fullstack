@@ -1,13 +1,14 @@
 """
 Security utilities for authentication and authorization.
 """
+
 import secrets
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import HTTPException, Header, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,12 +48,12 @@ async def get_current_user(
 ):
     """
     Get the current user from JWT token or API key.
-    
+
     Supports both JWT tokens and API keys for backward compatibility.
     """
     user = None
     provided_api_key = x_api_key.strip() if isinstance(x_api_key, str) else None
-    
+
     # Try JWT authentication first
     if authorization:
         try:
@@ -63,9 +64,11 @@ async def get_current_user(
                 secret = settings.jwt_secret or settings.root_api_key
                 payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
                 username = payload.get("sub")
-                
+
                 if username:
-                    user = await _ensure_root_user_impl(session=db, username=username, api_key=settings.root_api_key)
+                    user = await _ensure_root_user_impl(
+                        session=db, username=username, api_key=settings.root_api_key
+                    )
                     if user:
                         return user
             else:
@@ -77,7 +80,7 @@ async def get_current_user(
         except ValueError as e:
             logger.warning(f"Authorization parsing failed: {e}")
             # Fall back to API key authentication
-    
+
     # If JWT failed or not provided, try API key authentication
     if not user:
         api_key = provided_api_key
@@ -87,24 +90,22 @@ async def get_current_user(
                 detail="Not authenticated",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         # Use constant-time comparison to prevent timing attacks
         if not secrets.compare_digest(api_key, settings.root_api_key):
             raise HTTPException(status_code=401, detail="Invalid API key")
-        
+
         user = await _ensure_root_user_impl(session=db, username="root", api_key=api_key)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
     return user
 
 
-async def get_current_active_user(
-    current_user = Depends(get_current_user)
-):
+async def get_current_active_user(current_user=Depends(get_current_user)):
     """
     Get the current active user.
-    
+
     Raises HTTPException if user is not active.
     """
     if not current_user:
@@ -115,12 +116,12 @@ async def get_current_active_user(
 def verify_api_key(api_key: str) -> bool:
     """
     Verify an API key against the stored root key.
-    
+
     Uses constant-time comparison to prevent timing attacks.
     """
     if not api_key:
         return False
-    
+
     # Use constant-time comparison to prevent timing attacks
     return secrets.compare_digest(api_key, settings.root_api_key)
 
@@ -128,25 +129,23 @@ def verify_api_key(api_key: str) -> bool:
 def sanitize_input(input_str: str | None, max_length: int = 4000) -> str:
     """
     Sanitize user input to prevent injection attacks.
-    
+
     Args:
         input_str: Input string to sanitize
         max_length: Maximum allowed length
-        
+
     Returns:
         Sanitized string
     """
     if not input_str:
         return ""
-    
+
     if not isinstance(input_str, str):
         input_str = str(input_str)
 
     # Normalize whitespace and strip control characters (except common whitespace)
     sanitized = "".join(
-        ch
-        for ch in input_str
-        if (32 <= ord(ch) <= 126) or ch in {"\n", "\r", "\t", " "}
+        ch for ch in input_str if (32 <= ord(ch) <= 126) or ch in {"\n", "\r", "\t", " "}
     )
 
     # Remove simple script/style tags
@@ -170,32 +169,33 @@ def sanitize_input(input_str: str | None, max_length: int = 4000) -> str:
 def validate_file_path(file_path: str) -> bool:
     """
     Validate file path to prevent directory traversal attacks.
-    
+
     Args:
         file_path: File path to validate
-        
+
     Returns:
         True if path is safe, False otherwise
     """
     if not file_path:
         return False
-    
+
     # Normalize path
     import os
+
     file_path = os.path.normpath(file_path)
-    
+
     # Check for directory traversal
     if ".." in file_path:
         return False
-    
+
     # Check if path is within allowed directories
     allowed_dirs = [
         os.path.normpath(settings.ingest_upload_root),
         os.path.normpath(settings.ingest_examples_dir),
     ]
-    
+
     for allowed_dir in allowed_dirs:
         if file_path.startswith(allowed_dir):
             return True
-    
+
     return False

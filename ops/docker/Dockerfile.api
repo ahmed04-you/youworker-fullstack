@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+RUN useradd --create-home --uid 1001 appuser
+
 # Install uv in a separate layer to ensure it's properly cached
 RUN pip install --user --no-cache-dir uv \
     && /root/.local/bin/uv --version
@@ -42,6 +44,11 @@ COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
+RUN mkdir -p /data/uploads /data/examples /app/models \
+    && chown -R appuser:appuser /app /data/uploads /data/examples /app/models
+
 EXPOSE 8001
+
+USER appuser
 
 CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8001", "--timeout-keep-alive", "75", "--limit-concurrency", "1000", "--backlog", "2048"]

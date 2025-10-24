@@ -1,6 +1,7 @@
 """
 Embedder client for generating text embeddings via Ollama.
 """
+
 import asyncio
 import logging
 from typing import TYPE_CHECKING
@@ -33,6 +34,7 @@ class Embedder:
         self.model = settings.embed_model
         self.batch_size = batch_size
         self.client = httpx.AsyncClient(timeout=300.0)
+        self._sem = asyncio.Semaphore(8)
 
     async def close(self):
         """Close HTTP client."""
@@ -105,10 +107,11 @@ class Embedder:
         }
 
         try:
-            response = await self.client.post(
-                f"{self.base_url}/api/embeddings",
-                json=payload,
-            )
+            async with self._sem:
+                response = await self.client.post(
+                    f"{self.base_url}/api/embeddings",
+                    json=payload,
+                )
             response.raise_for_status()
 
             data = response.json()
