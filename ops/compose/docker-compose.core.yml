@@ -1,0 +1,117 @@
+# Core application services
+# Usage: docker-compose -f docker-compose.core.yml up
+
+networks:
+  youworker-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  uploads:
+  nginx-ssl:
+
+services:
+  # PostgreSQL database
+  postgres:
+    image: postgres:15-alpine
+    container_name: youworker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-youworker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      - youworker-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API backend
+  api:
+    build:
+      context: ../../
+      dockerfile: ops/docker/Dockerfile.api
+      args:
+        ENABLE_GPU_TORCH: ${ENABLE_GPU_TORCH:-0}
+    container_name: youworker-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-youworker}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - QDRANT_URL=${QDRANT_URL:-http://qdrant:6333}
+      - ROOT_API_KEY=${ROOT_API_KEY:-dev-root-key}
+      - JWT_SECRET=${JWT_SECRET:-dev-jwt-secret}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:8000}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - uploads:/data/uploads
+      - ../../examples:/data/examples:ro
+    ports:
+      - "${API_PORT:-8001}:8001"
+    networks:
+      - youworker-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+
+  # Frontend Next.js app
+  frontend:
+    build:
+      context: ../../
+      dockerfile: ops/docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost}
+        NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8001}
+    container_name: youworker-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      - NEXT_PUBLIC_API_KEY=${ROOT_API_KEY:-dev-root-key}
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    networks:
+      - youworker-network
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: youworker-nginx
+    restart: unless-stopped
+    depends_on:
+      - api
+      - frontend
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - nginx-ssl:/etc/nginx/ssl
+    ports:
+      - "${NGINX_PORT:-8000}:80"
+      - "${NGINX_SSL_PORT:-8443}:443"
+    networks:
+      - youworker-network
+    command: >
+      sh -c "
+      if [ ! -f /etc/nginx/ssl/cert.pem ]; then
+        apk add --no-cache openssl &&
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout /etc/nginx/ssl/key.pem \
+          -out /etc/nginx/ssl/cert.pem \
+          -subj '/CN=localhost' &&
+        echo 'Generated self-signed certificate';
+      fi &&
+      nginx -g 'daemon off;'
+      "
+  
+

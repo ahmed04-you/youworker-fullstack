@@ -84,8 +84,8 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <div className="container mx-auto flex min-h-full flex-col p-6 py-8">
-      <div className="flex-1 rounded-2xl border-border/50 bg-card/50 p-6 shadow-xl backdrop-blur-sm">
+    <div className="container mx-auto flex min-h-full flex-col p-4 sm:p-6 lg:p-8">
+      <div className="flex-1 rounded-2xl border-border/50 bg-card/50 p-4 sm:p-6 shadow-xl backdrop-blur-sm">
         <div className="flex flex-col gap-6">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/50 pb-4">
             <div className="space-y-1">

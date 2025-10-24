@@ -139,12 +139,11 @@ export function RightPanel() {
       animate={{
         x: 0,
         opacity: 1,
-        width: isCollapsed ? "56px" : "360px",
       }}
       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.3, ease: "easeOut" }}
       className={cn(
         "hidden h-screen flex-col border-l border-border/40 bg-card/40 backdrop-blur-sm lg:flex",
-        isCollapsed ? "items-center" : "",
+        isCollapsed ? "w-14 items-center" : "w-[360px]",
       )}
     >
       {/* Header */}

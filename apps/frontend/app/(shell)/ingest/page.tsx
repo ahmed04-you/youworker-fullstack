@@ -170,9 +170,9 @@ export default function IngestPage() {
   }
 
   return (
-    <div className="container mx-auto flex min-h-full flex-col p-6 py-8">
+    <div className="container mx-auto flex min-h-full flex-col p-4 sm:p-6 lg:p-8">
       <Card className="flex min-h-[70vh] flex-col overflow-hidden rounded-2xl border-border/50 bg-card/60 shadow-xl backdrop-blur-sm">
-        <div className="flex flex-wrap items-start gap-3 border-b border-border/50 px-8 py-6">
+        <div className="flex flex-wrap items-start gap-3 border-b border-border/50 px-4 py-6 sm:px-6 lg:px-8">
           <span className="grid h-10 w-10 place-items-center rounded-2xl border border-primary/30 bg-primary/10 text-primary">
             <Upload className="h-5 w-5" />
           </span>
@@ -182,7 +182,7 @@ export default function IngestPage() {
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-8 py-6">
+        <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-8">
           <div className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               <Tabs value={source} onValueChange={(value) => setSource(value as "upload" | "web")} className="space-y-4">

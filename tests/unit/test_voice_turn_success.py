@@ -33,7 +33,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def fake_session() -> AsyncIterator[None]:
         yield FakeSession()
 
-    monkeypatch.setattr(main, "get_async_session", fake_session)
+    monkeypatch.setattr("packages.db.session", "get_async_session", fake_session)
 
     # Stub CRUD helpers
     async def noop(*args: Any, **kwargs: Any) -> None:
@@ -67,8 +67,6 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
     monkeypatch.setattr(main, "ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("apps.api.auth.security.ensure_root_user", fake_ensure_root_user)
-    monkeypatch.setattr("apps.api.auth.security.get_async_session", fake_session)
-    monkeypatch.setattr("apps.api.routes.chat.get_async_session", fake_session)
 
     # Override FastAPI dependency for authentication
     from apps.api.auth.security import get_current_active_user

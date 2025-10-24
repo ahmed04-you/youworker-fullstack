@@ -67,7 +67,12 @@ const nextConfig = {
   output: "standalone",
   env: exposedEnv,
   experimental: {
-    optimizePackageImports: ["lucide-react", "@radix-ui/react-icons"],
+    optimizePackageImports: [
+      "lucide-react",
+      "@radix-ui/react-icons",
+      "recharts",
+      "date-fns",
+    ],
   },
   compress: true,
   eslint: {

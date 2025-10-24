@@ -26,8 +26,13 @@ def _hash_api_key(api_key: str) -> str:
 
 
 async def ensure_root_user(session, *, username: str, api_key: str) -> User:
-    q = await session.execute(select(User).where(User.username == username))
-    user = q.scalar_one_or_none()
+    # session is already an AsyncSession from the context manager
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.warning(f"Session type: {type(session)}")
+    q = select(User).where(User.username == username)
+    result = await session.execute(q)
+    user = result.scalar_one_or_none()
     if user:
         # Update api key hash if changed
         h = _hash_api_key(api_key)
@@ -50,7 +55,9 @@ async def upsert_mcp_servers(
         servers: iterable of (server_id, url, healthy)
     Returns: mapping server_id -> MCPServer
     """
-    existing = (await session.execute(select(MCPServer))).scalars().all()
+    q = select(MCPServer)
+    result = await session.execute(q)
+    existing = result.scalars().all()
     by_id = {s.server_id: s for s in existing}
     result: dict[str, MCPServer] = {}
     now = datetime.utcnow()
@@ -81,7 +88,9 @@ async def upsert_tools(
         tools: iterable of (server_id, qualified_name, description, input_schema)
     """
     # We could optimize by querying by server, but simplicity is fine
-    existing = (await session.execute(select(Tool))).scalars().all()
+    q = select(Tool)
+    result = await session.execute(q)
+    existing = result.scalars().all()
     index = {(t.mcp_server_id, t.name): t for t in existing}
     now = datetime.utcnow()
     for server_id, name, description, schema in tools:
@@ -116,12 +125,11 @@ async def get_or_create_session(
     enable_tools: bool,
 ) -> ChatSession:
     if external_id:
-        q = await session.execute(
-            select(ChatSession).where(
-                ChatSession.user_id == user_id, ChatSession.external_id == external_id
-            )
+        q = select(ChatSession).where(
+            ChatSession.user_id == user_id, ChatSession.external_id == external_id
         )
-        cs = q.scalar_one_or_none()
+        result = await session.execute(q)
+        cs = result.scalar_one_or_none()
         if cs:
             cs.updated_at = datetime.utcnow()
             cs.model = model or cs.model
@@ -169,8 +177,9 @@ async def start_tool_run(
     # Try resolve tool_id
     tool_id = None
     try:
-        q = await session.execute(select(Tool).where(Tool.name == tool_name))
-        t = q.scalar_one_or_none()
+        q = select(Tool).where(Tool.name == tool_name)
+        result = await session.execute(q)
+        t = result.scalar_one_or_none()
         if t:
             tool_id = t.id
     except Exception:
@@ -200,8 +209,9 @@ async def finish_tool_run(
     error_message: str | None = None,
     tool_name: str | None = None,
 ) -> None:
-    q = await session.execute(select(ToolRun).where(ToolRun.id == run_id))
-    tr = q.scalar_one_or_none()
+    q = select(ToolRun).where(ToolRun.id == run_id)
+    result = await session.execute(q)
+    tr = result.scalar_one_or_none()
     if not tr:
         return
     tr.status = status
@@ -211,8 +221,9 @@ async def finish_tool_run(
     tr.error_message = error_message
     if tr.tool_id is None and tool_name:
         try:
-            q2 = await session.execute(select(Tool).where(Tool.name == tool_name))
-            t = q2.scalar_one_or_none()
+            q2 = select(Tool).where(Tool.name == tool_name)
+            result2 = await session.execute(q2)
+            t = result2.scalar_one_or_none()
             if t:
                 tr.tool_id = t.id
         except Exception:
@@ -267,8 +278,9 @@ async def upsert_document(
     tags: list[str] | None,
     collection: str | None,
 ) -> Document:
-    q = await session.execute(select(Document).where(Document.path_hash == path_hash))
-    doc = q.scalar_one_or_none()
+    q = select(Document).where(Document.path_hash == path_hash)
+    result = await session.execute(q)
+    doc = result.scalar_one_or_none()
     now = datetime.utcnow()
     if doc:
         doc.uri = uri or doc.uri
@@ -298,8 +310,9 @@ async def upsert_document(
 
 
 async def ensure_collection(session: AsyncSession, name: str) -> DocumentCollection:
-    q = await session.execute(select(DocumentCollection).where(DocumentCollection.name == name))
-    col = q.scalar_one_or_none()
+    q = select(DocumentCollection).where(DocumentCollection.name == name)
+    result = await session.execute(q)
+    col = result.scalar_one_or_none()
     if col:
         return col
     col = DocumentCollection(name=name)
@@ -312,12 +325,11 @@ async def grant_user_collection_access(
     session: AsyncSession, user_id: int, collection_name: str
 ) -> None:
     col = await ensure_collection(session, collection_name)
-    q = await session.execute(
-        select(UserCollectionAccess).where(
-            UserCollectionAccess.user_id == user_id, UserCollectionAccess.collection_id == col.id
-        )
+    q = select(UserCollectionAccess).where(
+        UserCollectionAccess.user_id == user_id, UserCollectionAccess.collection_id == col.id
     )
-    uca = q.scalar_one_or_none()
+    result = await session.execute(q)
+    uca = result.scalar_one_or_none()
     if not uca:
         session.add(UserCollectionAccess(user_id=user_id, collection_id=col.id))
         await session.flush()
@@ -330,33 +342,25 @@ async def get_user_sessions(
     session: AsyncSession, user_id: int, limit: int = 50
 ) -> list[ChatSession]:
     """Get user's chat sessions ordered by most recent."""
-    q = await session.execute(
-        select(ChatSession)
-        .where(ChatSession.user_id == user_id)
-        .order_by(ChatSession.updated_at.desc())
-        .limit(limit)
-    )
-    return list(q.scalars().all())
+    q = select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc()).limit(limit)
+    result = await session.execute(q)
+    return list(result.scalars().all())
 
 
 async def get_session_with_messages(
     session: AsyncSession, session_id: int, user_id: int
 ) -> ChatSession | None:
     """Get a chat session with all its messages."""
-    q = await session.execute(
-        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-    )
-    chat_session = q.scalar_one_or_none()
+    q = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    result = await session.execute(q)
+    chat_session = result.scalar_one_or_none()
     if not chat_session:
         return None
 
     # Load messages
-    q = await session.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc())
-    )
-    chat_session.messages = list(q.scalars().all())
+    q2 = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
+    result2 = await session.execute(q2)
+    chat_session.messages = list(result2.scalars().all())
     return chat_session
 
 
@@ -386,14 +390,9 @@ async def get_user_ingestion_runs(
     offset: int = 0,
 ) -> list[IngestionRun]:
     """Get user's ingestion runs ordered by most recent."""
-    q = await session.execute(
-        select(IngestionRun)
-        .where(IngestionRun.user_id == user_id)
-        .order_by(IngestionRun.started_at.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(q.scalars().all())
+    q = select(IngestionRun).where(IngestionRun.user_id == user_id).order_by(IngestionRun.started_at.desc()).limit(limit).offset(offset)
+    result = await session.execute(q)
+    return list(result.scalars().all())
 
 
 async def get_user_tool_runs(
@@ -403,14 +402,9 @@ async def get_user_tool_runs(
     offset: int = 0,
 ) -> list[ToolRun]:
     """Get user's tool execution logs ordered by most recent."""
-    q = await session.execute(
-        select(ToolRun)
-        .where(ToolRun.user_id == user_id)
-        .order_by(ToolRun.start_ts.desc())
-        .limit(limit)
-        .offset(offset)
-    )
-    return list(q.scalars().all())
+    q = select(ToolRun).where(ToolRun.user_id == user_id).order_by(ToolRun.start_ts.desc()).limit(limit).offset(offset)
+    result = await session.execute(q)
+    return list(result.scalars().all())
 
 
 # ==================== DELETE OPERATIONS ====================
@@ -418,10 +412,9 @@ async def get_user_tool_runs(
 
 async def delete_session(session: AsyncSession, session_id: int, user_id: int) -> bool:
     """Delete a chat session and all its messages (cascade)."""
-    q = await session.execute(
-        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-    )
-    chat_session = q.scalar_one_or_none()
+    q = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    result = await session.execute(q)
+    chat_session = result.scalar_one_or_none()
     if not chat_session:
         return False
 
@@ -432,8 +425,9 @@ async def delete_session(session: AsyncSession, session_id: int, user_id: int) -
 
 async def delete_document(session: AsyncSession, document_id: int) -> bool:
     """Delete a document from the catalog."""
-    q = await session.execute(select(Document).where(Document.id == document_id))
-    doc = q.scalar_one_or_none()
+    q = select(Document).where(Document.id == document_id)
+    result = await session.execute(q)
+    doc = result.scalar_one_or_none()
     if not doc:
         return False
 
@@ -444,8 +438,9 @@ async def delete_document(session: AsyncSession, document_id: int) -> bool:
 
 async def delete_document_by_path_hash(session: AsyncSession, path_hash: str) -> bool:
     """Delete a document by its path hash."""
-    q = await session.execute(select(Document).where(Document.path_hash == path_hash))
-    doc = q.scalar_one_or_none()
+    q = select(Document).where(Document.path_hash == path_hash)
+    result = await session.execute(q)
+    doc = result.scalar_one_or_none()
     if not doc:
         return False
 
@@ -456,10 +451,9 @@ async def delete_document_by_path_hash(session: AsyncSession, path_hash: str) ->
 
 async def delete_ingestion_run(session: AsyncSession, run_id: int, user_id: int) -> bool:
     """Delete an ingestion run record."""
-    q = await session.execute(
-        select(IngestionRun).where(IngestionRun.id == run_id, IngestionRun.user_id == user_id)
-    )
-    run = q.scalar_one_or_none()
+    q = select(IngestionRun).where(IngestionRun.id == run_id, IngestionRun.user_id == user_id)
+    result = await session.execute(q)
+    run = result.scalar_one_or_none()
     if not run:
         return False
 
@@ -475,10 +469,9 @@ async def update_session_title(
     session: AsyncSession, session_id: int, user_id: int, title: str
 ) -> bool:
     """Update a chat session's title."""
-    q = await session.execute(
-        select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
-    )
-    chat_session = q.scalar_one_or_none()
+    q = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    result = await session.execute(q)
+    chat_session = result.scalar_one_or_none()
     if not chat_session:
         return False
 

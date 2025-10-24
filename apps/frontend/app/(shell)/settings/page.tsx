@@ -21,7 +21,7 @@ export default function SettingsPage() {
   const { t } = useI18n()
 
   return (
-    <div className="container mx-auto w-full max-w-3xl space-y-6 px-4 py-10">
+    <div className="container mx-auto w-full max-w-3xl space-y-6 p-4 sm:p-6 lg:p-8">
       <header className="flex items-center gap-3">
         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
           <Settings className="h-5 w-5" aria-hidden="true" />

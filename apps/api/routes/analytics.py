@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select, and_
+from sqlalchemy import func, select, and_, case
 
 from apps.api.auth.security import get_current_active_user
 from packages.db import get_async_session
@@ -226,7 +226,7 @@ async def get_tool_performance(
             select(
                 ToolRun.tool_name,
                 func.count(ToolRun.id).label("total_runs"),
-                func.sum(func.cast(ToolRun.status == "success", type_=func.Integer())).label(
+                func.sum(case((ToolRun.status == "success", 1), else_=0)).label(
                     "successful_runs"
                 ),
                 func.avg(ToolRun.latency_ms).label("avg_latency"),
@@ -289,7 +289,7 @@ async def get_tool_timeline(
                 date_trunc.label("period"),
                 ToolRun.tool_name,
                 func.count(ToolRun.id).label("run_count"),
-                func.sum(func.cast(ToolRun.status == "success", type_=func.Integer())).label(
+                func.sum(case((ToolRun.status == "success", 1), else_=0)).label(
                     "success_count"
                 ),
             )
@@ -341,7 +341,7 @@ async def get_ingestion_stats(
                 func.count(IngestionRun.id).label("run_count"),
                 func.sum(IngestionRun.totals_files).label("total_files"),
                 func.sum(IngestionRun.totals_chunks).label("total_chunks"),
-                func.sum(func.cast(IngestionRun.status == "success", type_=func.Integer())).label(
+                func.sum(case((IngestionRun.status == "success", 1), else_=0)).label(
                     "success_count"
                 ),
             )
@@ -414,7 +414,7 @@ async def get_session_activity(
             select(
                 func.date_trunc("day", ChatSession.created_at).label("period"),
                 func.count(ChatSession.id).label("session_count"),
-                func.sum(func.cast(ChatSession.enable_tools, type_=func.Integer())).label(
+                func.sum(case((ChatSession.enable_tools, 1), else_=0)).label(
                     "tools_enabled_count"
                 ),
             )

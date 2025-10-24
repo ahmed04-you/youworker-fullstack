@@ -1,0 +1,90 @@
+# Infrastructure services (Ollama, Qdrant, Monitoring)
+# Usage: docker-compose -f docker-compose.core.yml -f docker-compose.infra.yml up
+
+version: "3.9"
+
+networks:
+  youworker-network:
+    external: true
+
+volumes:
+  qdrant_data:
+  ollama_data:
+  prometheus_data:
+  grafana_data:
+
+services:
+  # Qdrant vector database
+  qdrant:
+    image: qdrant/qdrant:v1.8.2
+    container_name: youworker-qdrant
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    networks:
+      - youworker-network
+
+  # Ollama LLM server
+  ollama:
+    image: ollama/ollama:0.1.36
+    container_name: youworker-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    networks:
+      - youworker-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+  # Prometheus monitoring
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: youworker-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    networks:
+      - youworker-network
+
+  # Grafana dashboards
+  grafana:
+    image: grafana/grafana:10.4.3
+    container_name: youworker-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    networks:
+      - youworker-network
+    depends_on:
+      - prometheus

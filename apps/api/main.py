@@ -26,7 +26,9 @@ from packages.db import init_db as init_database
 from packages.ingestion import IngestionPipeline
 
 # Import route modules
-from apps.api.routes import chat, ingestion, crud, health, analytics
+from apps.api.routes.chat import router as chat_router
+from apps.api.routes.analytics import router as analytics_router
+from apps.api.routes import ingestion, crud, health
 
 # Correlation ID context variable for request tracing
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
@@ -310,10 +312,10 @@ async def add_security_headers(request: Request, call_next):
 
 # Include route modules
 app.include_router(health.router)
-app.include_router(chat.router)
+app.include_router(chat_router)
 app.include_router(ingestion.router)
 app.include_router(crud.router)
-app.include_router(analytics.router)
+app.include_router(analytics_router)
 
 
 if __name__ == "__main__":

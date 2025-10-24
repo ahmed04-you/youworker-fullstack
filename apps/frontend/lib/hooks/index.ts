@@ -1,3 +1,7 @@
+/**
+ * Centralized export for all custom hooks.
+ */
+
 "use client"
 
 import useSWR from "swr"
@@ -21,3 +25,35 @@ export function useHealthSWR() {
     },
   )
 }
+
+// Export new custom hooks
+export { useChat } from "./useChat";
+export type { UseChatOptions, ChatState, UseChatReturn, ToolEvent } from "./useChat";
+
+export { useSSE } from "./useSSE";
+export type { SSEEvent, UseSSEOptions, UseSSEReturn } from "./useSSE";
+
+export { useToolEvents, useToolMetrics } from "./useToolEvents";
+export type {
+  ToolEvent as ToolEventType,
+  ToolEventGroup,
+  UseToolEventsReturn,
+  ToolMetrics,
+} from "./useToolEvents";
+
+export { useVoiceRecorder, audioBlobToPCM16Base64 } from "./useVoiceRecorder";
+export type {
+  VoiceRecorderOptions,
+  VoiceRecorderState,
+  VoiceRecorderControls,
+} from "./useVoiceRecorder";
+
+export {
+  useAnalytics,
+  useOverviewMetrics,
+  useTokensTimeline,
+  useToolPerformance,
+  useToolTimeline,
+  useIngestionStats,
+  useSessionActivity,
+} from "./useAnalytics";
