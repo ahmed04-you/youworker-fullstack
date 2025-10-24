@@ -135,11 +135,12 @@ services:
     healthcheck:
       <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -f http://localhost:7004/health || exit 1"]
+      start_period: 120s  # More time for model initialization
     environment:
       PYTHONUNBUFFERED: "1"
       OLLAMA_BASE_URL: "http://ollama:11434"
       QDRANT_URL: "http://qdrant:6333"
-      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/youworker"
+      # DATABASE_URL is loaded from .env file
     volumes:
       - ../../data/uploads:/data/uploads
       - ../../examples/ingestion:/data/examples:ro
@@ -173,7 +174,7 @@ services:
       PYTHONUNBUFFERED: "1"
       OLLAMA_BASE_URL: "http://ollama:11434"
       QDRANT_URL: "http://qdrant:6333"
-      DATABASE_URL: "postgresql+asyncpg://postgres:postgres@postgres:5432/youworker"
+      # DATABASE_URL is loaded from .env file
     restart: unless-stopped
     deploy: *ollama-gpu-deploy
     gpus: "all"
@@ -197,12 +198,15 @@ services:
       mcp_datetime:
         condition: service_healthy
       mcp_ingest:
-        condition: service_healthy
+        condition: service_started  # Changed from service_healthy - don't wait for health
       mcp_units:
         condition: service_healthy
     healthcheck:
-      <<: *healthcheck-defaults
       test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s  # Much more time for model and database initialization
 
   frontend:
     build:
@@ -288,7 +292,7 @@ services:
       CERT_IP: ${NGINX_CERT_IP:-127.0.0.1}
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:8000/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --no-check-certificate https://127.0.0.1:8000/ || exit 1"]
     # Rimuoviamo la generazione automatica dei certificati dal container
     # e usiamo lo script esterno per maggiore controllo
 

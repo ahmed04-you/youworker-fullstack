@@ -15,6 +15,7 @@ SQLAlchemy==2.0.36
 asyncpg==0.30.0
 alembic==1.13.3
 psycopg[binary]
+psycopg2-binary  # For Alembic migrations (synchronous driver)
 docling
 docling-core
 beautifulsoup4

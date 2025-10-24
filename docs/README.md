@@ -156,7 +156,7 @@ La configurazione di base funziona subito, ma puoi personalizzare:
 
 | Impostazione | A Cosa Serve | Valore Consigliato |
 |--------------|--------------|-------------------|
-| `CHAT_MODEL` | Intelligenza dell'AI | `gpt-oss:latest` |
+| `CHAT_MODEL` | Intelligenza dell'AI | `gpt-oss:20b` |
 | `ROOT_API_KEY` | Sicurezza accessi | Genera una chiave unica |
 | `JWT_SECRET` | Firma dei token JWT | Imposta un segreto distinto |
 | `TTS_VOICE` | Tipo di voce vocale | `it_IT-paola-medium` |

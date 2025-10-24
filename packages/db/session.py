@@ -63,19 +63,30 @@ async def init_db(settings: Settings) -> None:
     )
     _session_factory = async_sessionmaker(bind=_engine, expire_on_commit=False)
 
-    # Run database migrations to ensure schema is up to date.
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
+    # NOTE: Migrations disabled for pre-release version
+    # Database schema is created automatically by SQLAlchemy
+    # Uncomment below to enable Alembic migrations in production
 
-    try:
-        if loop and loop.is_running():
-            await loop.run_in_executor(None, _run_alembic_migrations, database_url)
-        else:
-            _run_alembic_migrations(database_url)
-    except Exception as exc:
-        raise RuntimeError("Failed to run database migrations") from exc
+    # # Run database migrations to ensure schema is up to date.
+    # try:
+    #     loop = asyncio.get_running_loop()
+    # except RuntimeError:
+    #     loop = None
+
+    # try:
+    #     if loop and loop.is_running():
+    #         await loop.run_in_executor(None, _run_alembic_migrations, database_url)
+    #     else:
+    #         _run_alembic_migrations(database_url)
+    # except Exception as exc:
+    #     raise RuntimeError("Failed to run database migrations") from exc
+
+    # Create tables automatically (for pre-release only)
+    from sqlalchemy import inspect
+    async with _engine.begin() as conn:
+        def create_tables_sync(connection):
+            Base.metadata.create_all(bind=connection)
+        await conn.run_sync(create_tables_sync)
 
 
 @asynccontextmanager

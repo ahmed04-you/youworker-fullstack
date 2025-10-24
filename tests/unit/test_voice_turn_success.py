@@ -70,6 +70,14 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("apps.api.auth.security.get_async_session", fake_session)
     monkeypatch.setattr("apps.api.routes.chat.get_async_session", fake_session)
 
+    # Override FastAPI dependency for authentication
+    from apps.api.auth.security import get_current_active_user
+
+    async def fake_get_current_active_user() -> FakeUser:
+        return FakeUser()
+
+    main.app.dependency_overrides[get_current_active_user] = fake_get_current_active_user
+
     # Stub transcription and synthesis
     async def fake_transcribe(audio_pcm: bytes, sample_rate: int) -> dict[str, Any]:
         assert audio_pcm
@@ -121,6 +129,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     main.agent_loop = original_agent_loop
     main.transcribe_audio_pcm16 = original_transcribe
     main.synthesize_speech = original_synthesize
+    main.app.dependency_overrides.clear()
 
 
 def test_voice_turn_success(voice_client: TestClient) -> None:

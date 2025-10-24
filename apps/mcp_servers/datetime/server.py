@@ -51,7 +51,7 @@ def get_now(tz: str = "UTC") -> dict[str, Any]:
         return {"error": "tz must be a non-empty string"}
     tz = tz.strip()
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
-        return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
+        return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
 
     logger.info(f"get_now called with tz='{tz}'")
 
@@ -95,7 +95,7 @@ def format_time(iso: str, fmt: str = "%Y-%m-%d %H:%M:%S", tz: str = "UTC") -> di
         return {"error": "tz must be a non-empty string"}
     tz = tz.strip()
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
-        return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
+        return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
 
     try:
         dt = parse_date(iso)
@@ -139,7 +139,7 @@ def add_time(iso: str, delta: dict[str, int], tz: str = "UTC") -> dict[str, Any]
         return {"error": "tz must be a non-empty string"}
     tz = tz.strip()
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
-        return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
+        return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
 
     for key in ("days", "hours", "minutes", "seconds"):
         if key in delta:
@@ -193,7 +193,7 @@ def parse_natural(text: str, tz: str | None = None) -> dict[str, Any]:
         return {"error": "text must be a non-empty string"}
     tz = (tz or "UTC").strip()
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
-        return {"error": "tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
+        return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
     try:
         settings = {
             "TIMEZONE": tz,
