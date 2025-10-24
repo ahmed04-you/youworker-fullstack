@@ -20,9 +20,9 @@ router = APIRouter(prefix="/v1")
 limiter = Limiter(key_func=get_remote_address)
 
 
-async def _get_current_user():
+async def _get_current_user(current_user=Depends(get_current_active_user)):
     """Get current authenticated user."""
-    user = await get_current_active_user()
+    user = current_user
     # Ensure root has access to default collection
     try:
         from packages.vectorstore.schema import DEFAULT_COLLECTION

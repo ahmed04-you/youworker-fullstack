@@ -29,11 +29,13 @@ import { cn } from "@/lib/utils"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import type { ToolRun } from "@/lib/contexts/chat-context"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
+import { useI18n } from "@/lib/i18n"
 
 export function RightPanel() {
   const [isCollapsed, setIsCollapsed] = useState(false)
   const { toolEvents } = useChatContext()
   const prefersReducedMotion = useMotionPreference()
+  const { t } = useI18n()
 
   const getToolIcon = (toolName: string) => {
     const name = toolName.toLowerCase()
@@ -59,25 +61,25 @@ export function RightPanel() {
     running: {
       icon: <Clock className="h-4 w-4 text-sky-500 animate-pulse" />,
       className: "border-sky-500/40 text-sky-500 bg-sky-500/10",
-      label: "In esecuzione",
+      label: t("tool.status.running") || "In esecuzione",
       accent: "from-sky-500/25 to-sky-500/0",
     },
     success: {
       icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
       className: "border-emerald-500/40 text-emerald-500 bg-emerald-500/10",
-      label: "Completato",
+      label: t("tool.status.success") || "Completato",
       accent: "from-emerald-500/25 to-emerald-500/0",
     },
     error: {
       icon: <XCircle className="h-4 w-4 text-rose-500" />,
       className: "border-rose-500/40 text-rose-500 bg-rose-500/10",
-      label: "Errore",
+      label: t("tool.status.error") || "Errore",
       accent: "from-rose-500/25 to-rose-500/0",
     },
     cached: {
       icon: <Sparkles className="h-4 w-4 text-purple-500" />,
       className: "border-purple-500/40 text-purple-500 bg-purple-500/10",
-      label: "Cache",
+      label: t("tool.status.cached") || "Cache",
       accent: "from-purple-500/25 to-purple-500/0",
     },
   }
@@ -100,15 +102,15 @@ export function RightPanel() {
   const getUpdateLabel = (status: ToolRun["updates"][number]["status"]) => {
     switch (status) {
       case "start":
-        return "Avviato"
+        return t("tool.update.start") || "Avviato"
       case "end":
-        return "Completato"
+        return t("tool.update.end") || "Completato"
       case "ok":
         return "Completato"
       case "error":
-        return "Errore"
+        return t("tool.update.error") || "Errore"
       case "cached":
-        return "Cache"
+        return t("tool.update.cached") || "Cache"
       default:
         return status
     }
@@ -156,7 +158,7 @@ export function RightPanel() {
               className="flex flex-1 items-center gap-2"
             >
               <Wrench className="h-5 w-5 text-primary" />
-              <h2 className="font-semibold">Cronologia strumenti</h2>
+              <h2 className="font-semibold">{t("tool.history.title") || "Cronologia strumenti"}</h2>
               {toolEvents.length > 0 && (
                 <Badge variant="secondary" className="ml-auto">
                   {toolEvents.length}
@@ -190,7 +192,7 @@ export function RightPanel() {
                 {toolEvents.length === 0 ? (
                   <div className="py-8 text-center text-sm text-muted-foreground">
                     <Wrench className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                    <p>Nessun evento strumento</p>
+                    <p>{t("tool.empty.events") || "Nessun evento strumento"}</p>
                   </div>
                 ) : (
                   toolEvents

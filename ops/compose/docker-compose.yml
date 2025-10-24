@@ -70,6 +70,8 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_web
+      cache_from:
+        - mcp_web:latest
     command: ["uvicorn", "apps.mcp_servers.web.server:app", "--host", "0.0.0.0", "--port", "7001"]
     restart: unless-stopped
     ports:
@@ -84,6 +86,8 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_semantic
+      cache_from:
+        - mcp_semantic:latest
     command: ["uvicorn", "apps.mcp_servers.semantic.server:app", "--host", "0.0.0.0", "--port", "7002"]
     restart: unless-stopped
     ports:
@@ -105,6 +109,8 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_datetime
+      cache_from:
+        - mcp_datetime:latest
     command: ["uvicorn", "apps.mcp_servers.datetime.server:app", "--host", "0.0.0.0", "--port", "7003"]
     restart: unless-stopped
     ports:
@@ -119,6 +125,8 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_ingest
+      cache_from:
+        - mcp_ingest:latest
     command: ["uvicorn", "apps.mcp_servers.ingest.server:app", "--host", "0.0.0.0", "--port", "7004"]
     restart: unless-stopped
     env_file:
@@ -149,6 +157,8 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_units
+      cache_from:
+        - mcp_units:latest
     command: ["uvicorn", "apps.mcp_servers.units.server:app", "--host", "0.0.0.0", "--port", "7005"]
     restart: unless-stopped
     ports:
@@ -167,6 +177,8 @@ services:
       dockerfile: ops/docker/Dockerfile.api
       args:
         ENABLE_GPU_TORCH: ${ENABLE_GPU_TORCH:-0}
+      cache_from:
+        - api:latest
     env_file:
       - ../../.env
     environment:
@@ -216,6 +228,8 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
         NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8000}
         NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-dev-root-key}
+      cache_from:
+        - frontend:latest
     env_file:
       - ../../.env
     restart: unless-stopped

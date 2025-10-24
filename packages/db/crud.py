@@ -25,20 +25,20 @@ def _hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-async def ensure_root_user(session: AsyncSession, *, username: str, api_key: str) -> User:
-    q = await session.execute(select(User).where(User.username == username))
-    user = q.scalar_one_or_none()
-    if user:
-        # Update api key hash if changed
-        h = _hash_api_key(api_key)
-        if user.api_key_hash != h:
-            user.api_key_hash = h
-            await session.flush()
+async def ensure_root_user(session, *, username: str, api_key: str) -> User:
+        q = await session.execute(select(User).where(User.username == username))
+        user = q.scalar_one_or_none()
+        if user:
+            # Update api key hash if changed
+            h = _hash_api_key(api_key)
+            if user.api_key_hash != h:
+                user.api_key_hash = h
+                await session.flush()
+            return user
+        user = User(username=username, is_root=True, api_key_hash=_hash_api_key(api_key))
+        session.add(user)
+        await session.flush()
         return user
-    user = User(username=username, is_root=True, api_key_hash=_hash_api_key(api_key))
-    session.add(user)
-    await session.flush()
-    return user
 
 
 async def upsert_mcp_servers(session: AsyncSession, servers: Iterable[tuple[str, str, bool]]) -> dict[str, MCPServer]:

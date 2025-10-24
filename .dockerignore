@@ -95,3 +95,10 @@ Dockerfile*
 tmp/
 temp/
 .cache/
+
+# Additional optimizations for build context
+.to_ingest/
+examples/
+scripts/
+ops/scripts/
+license.tmp

@@ -10,6 +10,7 @@ import type {
   UnifiedChatRequestPayload,
   UnifiedChatResponsePayload,
   UnifiedChatStreamCallbacks,
+  HealthResponse,
 } from "@/lib/types"
 
 const DEFAULT_API_URL = "http://localhost:8001"
@@ -92,6 +93,10 @@ export async function apiFetch<T = unknown>(path: string, init?: RequestInit): P
   }
   const text = await response.text()
   return text as unknown as T
+}
+
+export async function getHealth(): Promise<HealthResponse> {
+  return apiFetch<HealthResponse>("/health")
 }
 
 export async function postUnifiedChat(

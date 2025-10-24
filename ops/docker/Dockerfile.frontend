@@ -3,14 +3,14 @@ FROM node:20-alpine AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat curl
+RUN apk add --no-cache libc6-compat curl && rm -rf /var/cache/apk/*
 
 FROM base AS deps
 
 WORKDIR /app
 COPY apps/frontend/package*.json ./
 
-RUN npm install --legacy-peer-deps
+RUN npm ci --legacy-peer-deps --no-audit --no-fund
 
 FROM base AS build
 
@@ -35,7 +35,9 @@ RUN echo "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" > .env.productio
     echo "NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}" >> .env.production && \
     cat .env.production
 
-RUN npm run build
+RUN npm run build \
+    && find .next -name "*.js" -exec gzip -k {} \; \
+    && find .next -name "*.css" -exec gzip -k {} \;
 
 FROM base AS runner
 

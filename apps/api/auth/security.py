@@ -65,8 +65,7 @@ async def get_current_user(
                 username = payload.get("sub")
                 
                 if username:
-                    from apps.api.main import ensure_root_user as main_ensure_root_user
-                    user = await main_ensure_root_user(db, username=username, api_key=settings.root_api_key)
+                    user = await _ensure_root_user_impl(session=db, username=username, api_key=settings.root_api_key)
                     if user:
                         return user
             else:
@@ -93,8 +92,7 @@ async def get_current_user(
         if not secrets.compare_digest(api_key, settings.root_api_key):
             raise HTTPException(status_code=401, detail="Invalid API key")
         
-        from apps.api.main import ensure_root_user as main_ensure_root_user
-        user = await main_ensure_root_user(db, username="root", api_key=api_key)
+        user = await _ensure_root_user_impl(session=db, username="root", api_key=api_key)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid API key")
     

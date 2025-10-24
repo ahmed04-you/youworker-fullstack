@@ -32,10 +32,12 @@ import { toast } from "sonner"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
 export default function IngestPage() {
   const router = useRouter()
   const { setSuggestedPrompt } = useChatContext()
+  const { t } = useI18n()
   const [source, setSource] = useState<"upload" | "web">("upload")
   const [files, setFiles] = useState<File[]>([])
   const [webUrl, setWebUrl] = useState("")
@@ -81,7 +83,7 @@ export default function IngestPage() {
     const droppedFiles = Array.from(e.dataTransfer.files)
     if (droppedFiles.length > 0) {
       setFiles((prev) => [...prev, ...droppedFiles])
-      toast.success(`${droppedFiles.length} file aggiunti`)
+      toast.success(`${droppedFiles.length} ${t("ingest.files_added") || "file aggiunti"}`)
     }
   }, [])
 
@@ -89,7 +91,7 @@ export default function IngestPage() {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFiles = Array.from(e.target.files)
       setFiles((prev) => [...prev, ...selectedFiles])
-      toast.success(`${selectedFiles.length} file selezionati`)
+      toast.success(`${selectedFiles.length} ${t("ingest.files_selected") || "file selezionati"}`)
     }
   }, [])
 
@@ -100,11 +102,11 @@ export default function IngestPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (source === "upload" && files.length === 0) {
-      toast.error("Seleziona almeno un file")
+      toast.error(t("ingest.error.select_file") || "Seleziona almeno un file")
       return
     }
     if (source === "web" && !webUrl.trim()) {
-      toast.error("URL obbligatorio")
+      toast.error(t("ingest.error.url_required") || "URL obbligatorio")
       return
     }
 
@@ -140,12 +142,12 @@ export default function IngestPage() {
 
       setResult(response)
       if (response.success) {
-        toast.success(`Ingestione completata: ${response.totals.files} file, ${response.totals.chunks} chunk`)
+        toast.success(`${t("ingest.success.completed") || "Ingestione completata"}: ${response.totals.files} ${t("ingest.files") || "file"}, ${response.totals.chunks} ${t("ingest.chunks") || "chunk"}`)
       } else if (response.errors.length > 0) {
-        toast.warning(`Completata con ${response.errors.length} errori`)
+        toast.warning(`${t("ingest.warning.completed_with_errors") || "Completata con"} ${response.errors.length} ${response.errors.length === 1 ? (t("ingest.error") || "errore") : (t("ingest.errors") || "errori")}`)
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Ingestione non riuscita"
+      const errorMessage = error instanceof Error ? error.message : (t("ingest.error.failed") || "Ingestione non riuscita")
       toast.error(errorMessage)
       setResult({
         success: false,
@@ -175,10 +177,8 @@ export default function IngestPage() {
             <Upload className="h-5 w-5" />
           </span>
           <div>
-            <h1 className="text-2xl font-semibold">Caricamento ed elaborazione file</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Aggiungi percorsi locali o URL per arricchire il workspace prima di parlarne con l&apos;assistente.
-            </p>
+            <h1 className="text-2xl font-semibold">{t("ingest.title")}</h1>
+            <p className="mt-1 text-sm text-muted-foreground">{t("ingest.description")}</p>
           </div>
         </div>
 
@@ -188,15 +188,15 @@ export default function IngestPage() {
               <Tabs value={source} onValueChange={(value) => setSource(value as "upload" | "web")} className="space-y-4">
                 <TabsList className="grid w-full grid-cols-2 gap-2 rounded-2xl bg-muted/40 p-1">
                   <TabsTrigger value="upload" className="rounded-xl data-[state=active]:bg-background/90">
-                    Carica file
+                    {t("ingest.upload_files") || "Carica file"}
                   </TabsTrigger>
                   <TabsTrigger value="web" className="rounded-xl data-[state=active]:bg-background/90">
-                    URL web
+                    {t("ingest.web_url") || "URL web"}
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="upload" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
                   <div className="space-y-2">
-                    <Label>Carica file *</Label>
+                    <Label>{t("ingest.upload_files") || "Carica file"} *</Label>
                     {/* Drag & Drop Area */}
                     <div
                       onDragEnter={handleDragEnter}
@@ -222,10 +222,10 @@ export default function IngestPage() {
                       />
                       <Upload className={cn("mb-3 h-10 w-10 transition-all", isDragging ? "scale-110 text-primary" : "text-muted-foreground")} />
                       <p className="text-center text-sm font-medium">
-                        {isDragging ? "Rilascia i file qui" : "Trascina i file qui o clicca per selezionare"}
+                        {isDragging ? (t("ingest.drop_files_here") || "Rilascia i file qui") : (t("ingest.drag_or_click") || "Trascina i file qui o clicca per selezionare")}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Supporta tutti i formati comuni (PDF, DOC, immagini, audio, video)
+                        {t("ingest.supported_formats") || "Supporta tutti i formati comuni (PDF, DOC, immagini, audio, video)"}
                       </p>
                     </div>
 
@@ -234,7 +234,7 @@ export default function IngestPage() {
                       <div className="mt-4 space-y-2">
                         <div className="flex items-center justify-between">
                           <Label className="text-xs text-muted-foreground">
-                            {files.length} file selezionati
+                            {files.length} {t("ingest.files_selected") || "file selezionati"}
                           </Label>
                           <Button
                             type="button"
@@ -244,7 +244,7 @@ export default function IngestPage() {
                             className="h-7 text-xs"
                             disabled={isLoading}
                           >
-                            Rimuovi tutti
+                            {t("ingest.remove_all") || "Rimuovi tutti"}
                           </Button>
                         </div>
                         <ScrollArea className="h-[140px] rounded-2xl border border-border/40 bg-background/60 p-3">
@@ -277,7 +277,7 @@ export default function IngestPage() {
                                   disabled={isLoading}
                                 >
                                   <X className="h-3.5 w-3.5" />
-                                  <span className="sr-only">Rimuovi file</span>
+                                  <span className="sr-only">{t("ingest.remove_file") || "Rimuovi file"}</span>
                                 </Button>
                               </motion.div>
                             ))}
@@ -290,32 +290,32 @@ export default function IngestPage() {
 
                 <TabsContent value="web" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
                   <div className="space-y-2">
-                    <Label htmlFor="web-url">URL web *</Label>
+                    <Label htmlFor="web-url">{t("ingest.web_url") || "URL web"} *</Label>
                     <div className="relative">
                       <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                       <Input
                         id="web-url"
                         value={webUrl}
                         onChange={(e) => setWebUrl(e.target.value)}
-                        placeholder="https://example.com/documento"
+                        placeholder={t("ingest.url_placeholder") || "https://example.com/documento"}
                         className="rounded-2xl pl-9"
                         disabled={isLoading}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Scarica e analizza la pagina web indicata, estraendo testo, immagini e tabelle.
+                      {t("ingest.url_description") || "Scarica e analizza la pagina web indicata, estraendo testo, immagini e tabelle."}
                     </p>
                   </div>
                 </TabsContent>
               </Tabs>
 
               <div className="space-y-2">
-                <Label htmlFor="tags">Tag (separati da virgola)</Label>
+                <Label htmlFor="tags">{t("ingest.tags_label") || "Tag"} ({t("ingest.tags_separator") || "separati da virgola"})</Label>
                 <Input
                   id="tags"
                   value={tags}
                   onChange={(e) => setTags(e.target.value)}
-                  placeholder="documentazione, api, riferimento"
+                  placeholder={t("ingest.tags_placeholder") || "documentazione, api, riferimento"}
                   className="rounded-2xl"
                 />
               </div>
@@ -329,12 +329,12 @@ export default function IngestPage() {
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      {source === "upload" ? "Caricamento in corso…" : "Analisi URL in corso…"}
+                      {source === "upload" ? (t("ingest.uploading") || "Caricamento in corso…") : (t("ingest.analyzing") || "Analisi URL in corso…")}
                     </>
                   ) : (
                     <>
                       <Upload className="mr-2 h-4 w-4" />
-                      {source === "upload" ? "Carica e indicizza" : "Analizza URL"}
+                      {source === "upload" ? (t("ingest.upload_and_index") || "Carica e indicizza") : (t("ingest.analyze_url") || "Analizza URL")}
                     </>
                   )}
                 </Button>
@@ -347,7 +347,7 @@ export default function IngestPage() {
                     className="space-y-2"
                   >
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>Caricamento ed elaborazione</span>
+                      <span>{t("ingest.upload_and_process") || "Caricamento ed elaborazione"}</span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -391,10 +391,10 @@ export default function IngestPage() {
                         </div>
                         <div>
                           <p className="font-semibold text-green-700 dark:text-green-300">
-                            Ingestione completata con successo!
+                            {t("ingest.success.title") || "Ingestione completata con successo!"}
                           </p>
                           <p className="text-xs text-green-600/80 dark:text-green-400/80">
-                            I documenti sono ora disponibili per la ricerca e l&apos;analisi
+                            {t("ingest.success.description") || "I documenti sono ora disponibili per la ricerca e l'analisi"}
                           </p>
                         </div>
                       </div>
@@ -410,7 +410,7 @@ export default function IngestPage() {
                     >
                       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <FileText className="h-4 w-4 text-blue-500" />
-                        File processati
+                        {t("ingest.files_processed") || "File processati"}
                       </div>
                       <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
                         {result.totals.files}
@@ -424,7 +424,7 @@ export default function IngestPage() {
                     >
                       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <CheckCircle2 className="h-4 w-4 text-purple-500" />
-                        Chunk creati
+                        {t("ingest.chunks_created") || "Chunk creati"}
                       </div>
                       <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
                         {result.totals.chunks}
@@ -438,7 +438,7 @@ export default function IngestPage() {
                     >
                       <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
                         <Upload className="h-4 w-4 text-emerald-500" />
-                        Dimensione totale
+                        {t("ingest.total_size") || "Dimensione totale"}
                       </div>
                       <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">
                         {formatBytes(result.totals.total_bytes)}
@@ -448,16 +448,16 @@ export default function IngestPage() {
 
                   {result.files.length > 0 && (
                     <div className="space-y-2">
-                      <h2 className="text-sm font-semibold text-muted-foreground">File</h2>
+                      <h2 className="text-sm font-semibold text-muted-foreground">{t("ingest.files") || "File"}</h2>
                       <Card className="overflow-hidden rounded-2xl border border-border/40 bg-background/60">
                         <ScrollArea className="h-[260px]">
                           <Table>
                             <TableHeader>
                               <TableRow>
-                                <TableHead>Percorso</TableHead>
-                                <TableHead>Tipo</TableHead>
-                                <TableHead className="text-right">Chunk</TableHead>
-                                <TableHead className="text-right">Dimensione</TableHead>
+                                <TableHead>{t("ingest.table.path") || "Percorso"}</TableHead>
+                                <TableHead>{t("ingest.table.type") || "Tipo"}</TableHead>
+                                <TableHead className="text-right">{t("ingest.table.chunks") || "Chunk"}</TableHead>
+                                <TableHead className="text-right">{t("ingest.table.size") || "Dimensione"}</TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -492,7 +492,7 @@ export default function IngestPage() {
                             <div className="flex items-center gap-2 text-destructive">
                               <AlertCircle className="h-5 w-5" />
                               <span className="font-semibold">
-                                {result.errors.length} {result.errors.length === 1 ? "errore" : "errori"}
+                                {result.errors.length} {result.errors.length === 1 ? (t("ingest.error") || "errore") : (t("ingest.errors") || "errori")}
                               </span>
                             </div>
                           </AccordionTrigger>
@@ -527,7 +527,7 @@ export default function IngestPage() {
                       className="h-11 w-full rounded-2xl transition-transform hover:scale-[1.01] active:scale-[0.99]"
                     >
                       <MessageSquare className="mr-2 h-4 w-4" />
-                      Avvia una chat su questi documenti
+                      {t("ingest.start_chat") || "Avvia una chat su questi documenti"}
                     </Button>
                   )}
                 </motion.div>

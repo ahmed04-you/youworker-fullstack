@@ -689,6 +689,8 @@ async def unified_chat_endpoint(
 
         async def generate():
             """Generate SSE stream."""
+            local_final_text = ""
+            local_metadata = dict(metadata)
             try:
                 last_tool_run_id = [None]  # type: ignore
 
@@ -701,6 +703,8 @@ async def unified_chat_endpoint(
                     # Persist tool runs
                     if event.get("event") == "tool":
                         data = event.get("data", {})
+                        if isinstance(data, dict):
+                            tool_events.append(data)
                         if data.get("status") == "start":
                             async with get_async_session() as db:
                                 from packages.db.crud import start_tool_run
@@ -745,11 +749,12 @@ async def unified_chat_endpoint(
                             meta = {}
                         meta["assistant_language"] = assistant_language
                         payload["metadata"] = meta
-                        metadata = meta
+                        local_metadata = meta
 
                         final = payload.get("final_text") or ""
-                        if not final_text:  # final_text is defined in outer scope
-                            final_text = "".join(collected_chunks) + final
+                        if not local_final_text:
+                            local_final_text = "".join(collected_chunks) + final
+                        persisted_text = local_final_text or "".join(collected_chunks)
 
                         # Persist assistant final message
                         async with get_async_session() as db:
@@ -758,15 +763,15 @@ async def unified_chat_endpoint(
                                 db,
                                 session_id=chat_session_id,
                                 role="assistant",
-                                content=final_text if final_text else "".join(collected_chunks),
+                                content=persisted_text,
                             )
 
                         # Generate audio if requested
                         audio_b64 = None
                         audio_sample_rate = None
-                        if unified_request.expect_audio and final_text:
+                        if unified_request.expect_audio and persisted_text:
                             try:
-                                synth_result = await synthesize_speech(final_text)
+                                synth_result = await synthesize_speech(persisted_text)
                                 if synth_result:
                                     import base64
                                     wav_bytes, sr = synth_result
@@ -776,9 +781,9 @@ async def unified_chat_endpoint(
                                 logger.error("Voice synthesis failed: %s", exc)
 
                         response = UnifiedChatResponse(
-                            content=final_text if final_text else "".join(collected_chunks),
+                            content=persisted_text,
                             transcript=transcript,
-                            metadata=metadata,
+                            metadata=local_metadata,
                             audio_b64=audio_b64,
                             audio_sample_rate=audio_sample_rate,
                             stt_confidence=stt_confidence,

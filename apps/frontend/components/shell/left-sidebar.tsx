@@ -19,10 +19,11 @@ import { ThreadListSkeleton } from "@/components/chat/thread-list-skeleton"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useMotionPreference } from "@/lib/hooks/use-motion-preference"
+import { useI18n } from "@/lib/i18n"
 
 const quickLinks = [
-  { title: "Nuova chat", icon: Plus, href: "/" },
-  { title: "Carica file", icon: Upload, href: "/ingest" },
+  { titleKey: "nav.new_chat", icon: Plus, href: "/" },
+  { titleKey: "nav.upload", icon: Upload, href: "/ingest" },
 ]
 
 export function LeftSidebar() {
@@ -31,6 +32,7 @@ export function LeftSidebar() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const pathname = usePathname()
   const prefersReducedMotion = useMotionPreference()
+  const { t } = useI18n()
 
   const { threads, activeThreadId, setActiveThreadId, createThread, deleteThread } = useLocalThreads()
   const { data: health, error: healthError } = useHealthSWR()
@@ -134,11 +136,11 @@ export function LeftSidebar() {
                 aria-hidden="true"
               />
               <Input
-                placeholder="Cerca conversazioni..."
+                placeholder={t("history.placeholder.search") || "Cerca conversazioni..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="rounded-xl pl-9"
-                aria-label="Cerca conversazioni"
+                aria-label={t("history.placeholder.search") || "Cerca conversazioni"}
               />
             </div>
           </div>
@@ -149,8 +151,8 @@ export function LeftSidebar() {
             ) : filteredThreads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8 text-center text-sm text-muted-foreground">
                 <MessageSquare className="mb-2 h-8 w-8 opacity-50" aria-hidden="true" />
-                <p>{searchQuery ? "Nessuna conversazione trovata" : "Ancora nessuna conversazione"}</p>
-                <p className="text-xs">Avvia una nuova chat per iniziare</p>
+                <p>{searchQuery ? (t("history.empty.search_results") || "Nessuna conversazione trovata") : (t("history.empty.sessions.title") || "Ancora nessuna conversazione")}</p>
+                <p className="text-xs">{t("history.empty.sessions.description") || "Avvia una nuova chat per iniziare"}</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -197,7 +199,7 @@ export function LeftSidebar() {
                           onClick={(e) => handleThreadDelete(thread.id, e as any)}
                         >
                           <Trash2 className="mr-2 h-4 w-4" aria-hidden="true" />
-                          Elimina conversazione
+                          {t("history.action.delete") || "Elimina conversazione"}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -223,7 +225,7 @@ export function LeftSidebar() {
               >
                 <Link href={link.href} aria-current={isActive ? "page" : undefined}>
                   <link.icon className="h-4 w-4" aria-hidden="true" />
-                  {link.title}
+                  {t(link.titleKey as any)}
                 </Link>
               </Button>
             )
@@ -235,8 +237,8 @@ export function LeftSidebar() {
           <div className="flex items-center gap-3 rounded-xl border border-border/50 bg-card/40 p-3">
             <Image src="/youco-logo.png" alt="YouCo logo" width={48} height={24} priority />
             <div className="flex flex-1 flex-col">
-              <span className="text-sm font-medium">YouWorker.AI</span>
-              <span className="text-xs text-muted-foreground">Stato API</span>
+              <span className="text-sm font-medium">{t("chat.title")}</span>
+              <span className="text-xs text-muted-foreground">{t("nav.api_status.online") || "Stato API"}</span>
             </div>
             <span className={statusBadgeClasses}>{statusText}</span>
           </div>

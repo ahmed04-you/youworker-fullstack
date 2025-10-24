@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Settings, History } from "lucide-react"
+import { Settings, History, Globe, MessageSquare } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { Button } from "@/components/ui/button"
@@ -60,7 +60,10 @@ export default function SettingsPage() {
 
         <Card className="flex flex-col gap-4 rounded-2xl border-border/40 bg-card/30 p-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{t("settings.language.interface")}</h2>
+            <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              <Globe className="h-4 w-4" />
+              {t("settings.language.interface")}
+            </h2>
             <p className="text-xs text-muted-foreground">{t("settings.language.interface_description")}</p>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-border/40 bg-background/40 p-3">
@@ -81,9 +84,14 @@ export default function SettingsPage() {
               </SelectContent>
             </Select>
           </div>
+        </Card>
 
+        <Card className="flex flex-col gap-4 rounded-2xl border-border/40 bg-card/30 p-4">
           <div className="flex flex-col gap-1">
-            <h3 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{t("settings.language.assistant")}</h3>
+            <h2 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+              <MessageSquare className="h-4 w-4" />
+              {t("settings.language.assistant")}
+            </h2>
             <p className="text-xs text-muted-foreground">{t("settings.language.assistant_description")}</p>
           </div>
           <div className="flex items-center justify-between gap-4 rounded-xl border border-border/40 bg-background/40 p-3">

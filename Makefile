@@ -1,7 +1,7 @@
 COMPOSE_FILE ?= ops/compose/docker-compose.yml
 COMPOSE_CMD ?= docker compose -f $(COMPOSE_FILE)
 
-.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup
+.PHONY: help compose-up compose-down compose-logs compose-restart build build-fast clean test lint format ssl-setup start-ssl backup
 
 # Default target
 help:
@@ -11,6 +11,7 @@ help:
 	@echo "  compose-logs     - View logs from all services"
 	@echo "  compose-restart  - Restart all services"
 	@echo "  build            - Build all Docker images"
+	@echo "  build-fast       - Install deps (if needed), build frontend, run tests"
 	@echo "  clean            - Remove containers, volumes, and images"
 	@echo "  test             - Run tests"
 	@echo "  lint             - Run linters"
@@ -41,6 +42,9 @@ compose-restart:
 # Build images
 build:
 	$(COMPOSE_CMD) build
+
+build-fast:
+	./scripts/build_fast.sh
 
 # Clean everything
 clean:

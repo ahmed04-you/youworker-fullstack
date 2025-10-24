@@ -1,6 +1,5 @@
 fastapi
 uvicorn[standard]
-sse-starlette
 slowapi
 prometheus-fastapi-instrumentator
 pydantic

@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
+import { useI18n } from "@/lib/i18n"
 
 interface SettingsSheetProps {
   open: boolean
@@ -26,16 +27,16 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
         <div className="mt-6 space-y-6 pb-2">
           <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-medium">Aspetto</h2>
-              <p className="text-sm text-muted-foreground">Seleziona la combinazione di colori preferita</p>
+              <h2 className="text-lg font-medium">{t("settings.workspace.theme") || "Aspetto"}</h2>
+              <p className="text-sm text-muted-foreground">{t("settings.workspace.theme_hint") || "Seleziona la combinazione di colori preferita"}</p>
             </div>
 
             <Separator />
 
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label htmlFor="theme-toggle">Tema</Label>
-                <p className="text-sm text-muted-foreground">Scegli tema chiaro, scuro o quello di sistema</p>
+                <Label htmlFor="theme-toggle">{t("settings.workspace.theme") || "Tema"}</Label>
+                <p className="text-sm text-muted-foreground">{t("settings.workspace.theme_hint") || "Scegli tema chiaro, scuro o quello di sistema"}</p>
               </div>
               <ThemeToggle />
             </div>
@@ -45,9 +46,9 @@ export function SettingsSheet({ open, onOpenChange }: SettingsSheetProps) {
 
           <div className="space-y-4">
             <div>
-              <h2 className="text-lg font-medium">Accessibilità</h2>
+              <h2 className="text-lg font-medium">{t("settings.accessibility") || "Accessibilità"}</h2>
               <p className="text-sm text-muted-foreground">
-                Le preferenze di animazione vengono rilevate automaticamente dalle impostazioni di sistema
+                {t("settings.accessibility.description") || "Le preferenze di animazione vengono rilevate automaticamente dalle impostazioni di sistema"}
               </p>
             </div>
           </div>

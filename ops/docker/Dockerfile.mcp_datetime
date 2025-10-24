@@ -11,12 +11,15 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
     && curl -LsSf https://astral.sh/uv/install.sh | sh
 
 COPY requirements/mcp-datetime.txt /app/requirements.txt
 
-RUN /root/.local/bin/uv pip install --system --upgrade pip \
-    && /root/.local/bin/uv pip install --system --requirement requirements.txt
+RUN /root/.local/bin/uv pip install --system --no-cache-dir --upgrade pip \
+    && /root/.local/bin/uv pip install --system --no-cache-dir --requirement requirements.txt \
+    && find /usr/local/lib/python3.11/site-packages -name "*.pyc" -delete \
+    && find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 COPY apps/__init__.py /app/apps/__init__.py
 COPY apps/mcp_servers /app/apps/mcp_servers

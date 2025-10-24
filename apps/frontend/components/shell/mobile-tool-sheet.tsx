@@ -29,9 +29,11 @@ import { Separator } from "@/components/ui/separator"
 import { cn } from "@/lib/utils"
 import { useChatContext } from "@/lib/contexts/chat-context"
 import type { ToolRun } from "@/lib/contexts/chat-context"
+import { useI18n } from "@/lib/i18n"
 
 export function MobileToolSheet() {
   const { toolEvents, metadata } = useChatContext()
+  const { t } = useI18n()
 
   const getToolIcon = (toolName: string) => {
     const name = toolName.toLowerCase()
@@ -57,22 +59,22 @@ export function MobileToolSheet() {
     running: {
       icon: <Clock className="h-4 w-4 text-sky-500 animate-pulse" />,
       className: "border-sky-500/40 text-sky-500 bg-sky-500/10",
-      label: "In esecuzione",
+      label: t("tool.status.running") || "In esecuzione",
     },
     success: {
       icon: <CheckCircle2 className="h-4 w-4 text-emerald-500" />,
       className: "border-emerald-500/40 text-emerald-500 bg-emerald-500/10",
-      label: "Completato",
+      label: t("tool.status.success") || "Completato",
     },
     error: {
       icon: <XCircle className="h-4 w-4 text-rose-500" />,
       className: "border-rose-500/40 text-rose-500 bg-rose-500/10",
-      label: "Errore",
+      label: t("tool.status.error") || "Errore",
     },
     cached: {
       icon: <Sparkles className="h-4 w-4 text-purple-500" />,
       className: "border-purple-500/40 text-purple-500 bg-purple-500/10",
-      label: "Cache",
+      label: t("tool.status.cached") || "Cache",
     },
   }
 
@@ -104,7 +106,7 @@ export function MobileToolSheet() {
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <Wrench className="h-5 w-5 text-primary" />
-            Eventi strumenti
+            {t("tool.history.title") || "Eventi strumenti"}
             {toolEvents.length > 0 && (
               <Badge variant="secondary" className="ml-auto">
                 {toolEvents.length}
@@ -117,7 +119,7 @@ export function MobileToolSheet() {
             {toolEvents.length === 0 ? (
               <div className="text-center text-muted-foreground text-sm py-8">
                 <Wrench className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>Nessun evento strumento</p>
+                <p>{t("tool.empty.events") || "Nessun evento strumento"}</p>
               </div>
             ) : (
               <>
@@ -167,7 +169,7 @@ export function MobileToolSheet() {
                     <Card className="p-4 rounded-xl border-primary/50 bg-primary/5">
                       <div className="flex items-center gap-2 mb-2">
                         <Info className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">Metadati della risposta</span>
+                        <span className="text-sm font-semibold">{t("tool.metadata.title") || "Metadati della risposta"}</span>
                       </div>
                       <pre className="text-xs bg-muted/50 rounded-lg p-3 overflow-x-auto">
                         {JSON.stringify(metadata, null, 2)}
