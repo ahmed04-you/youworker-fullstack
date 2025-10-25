@@ -59,8 +59,8 @@ class Settings(BaseSettings):
 
     # Ingest HTTP settings
     ingest_user_agent: str | None = None
-    ingest_upload_root: str = "/data/uploads"
-    ingest_examples_dir: str = "/data/examples"
+    ingest_upload_root: str = "data/uploads"
+    ingest_examples_dir: str = "data/examples"
 
     # Web crawling
     crawl_max_depth: int = 2

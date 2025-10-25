@@ -33,7 +33,9 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def fake_session() -> AsyncIterator[None]:
         yield FakeSession()
 
-    monkeypatch.setattr("packages.db.session", "get_async_session", fake_session)
+    monkeypatch.setattr("packages.db.session.get_async_session", fake_session)
+    monkeypatch.setattr("packages.db.get_async_session", fake_session)
+    monkeypatch.setattr("apps.api.routes.chat.voice.get_async_session", fake_session)
 
     # Stub CRUD helpers
     async def noop(*args: Any, **kwargs: Any) -> None:
@@ -92,6 +94,8 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(main, "synthesize_speech", fake_synthesize)
     monkeypatch.setattr("apps.api.audio_pipeline.transcribe_audio_pcm16", fake_transcribe)
     monkeypatch.setattr("apps.api.audio_pipeline.synthesize_speech", fake_synthesize)
+    monkeypatch.setattr("apps.api.routes.chat.voice.transcribe_audio_pcm16", fake_transcribe)
+    monkeypatch.setattr("apps.api.routes.chat.voice.synthesize_speech", fake_synthesize)
 
     # Stub agent loop
     async def fake_agent_loop(**_: Any) -> AsyncIterator[dict[str, Any]]:
@@ -110,6 +114,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     original_agent_loop = main.agent_loop
     main.agent_loop = FakeAgentLoop()
+    main.app.state.agent_loop = main.agent_loop
 
     original_lifespan = main.app.router.lifespan_context
 
@@ -125,6 +130,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     # Restore globals after test
     main.app.router.lifespan_context = original_lifespan
     main.agent_loop = original_agent_loop
+    main.app.state.agent_loop = original_agent_loop
     main.transcribe_audio_pcm16 = original_transcribe
     main.synthesize_speech = original_synthesize
     main.app.dependency_overrides.clear()

@@ -22,8 +22,9 @@ from apps.api.config import settings
 from packages.llm import OllamaClient
 from packages.agent import MCPRegistry, AgentLoop
 from packages.vectorstore import QdrantStore
-from packages.db import init_db as init_database
+from packages.db import init_db as init_database, ensure_root_user
 from packages.ingestion import IngestionPipeline
+from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
 
 # Import route modules
 from apps.api.routes.chat import router as chat_router
