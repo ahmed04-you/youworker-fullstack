@@ -68,7 +68,7 @@ reset-data:
 		echo "Removing data directories as root (handles permissions)..."; \
 		docker run --rm -v "$(shell pwd)/data:/data" alpine:3 sh -c 'rm -rf /data/*'; \
 		echo "Re-creating expected directories..."; \
-		mkdir -p data/{postgres,qdrant,ollama,nginx/ssl,uploads,models,grafana,prometheus}; \
+		mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models data/grafana data/prometheus; \
 		chmod -R u+rwX,go+rwX data; \
 		echo "Data reset complete."; \
 	else \
@@ -189,7 +189,7 @@ start-ssl-prod:
 # Create necessary directories
 setup-dirs:
 	@echo "Creating necessary directories..."
-	mkdir -p data/{postgres,qdrant,ollama,nginx/ssl,uploads,models}
+	mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models
 	mkdir -p examples/ingestion
 
 # Full setup (directories + SSL + start)

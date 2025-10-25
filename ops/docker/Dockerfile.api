@@ -45,10 +45,16 @@ COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
 # Download Piper TTS model during build
-RUN mkdir -p /app/models/tts && \
-    cd /app/models/tts && \
-    curl -L -o it_IT-paola-medium.onnx https://github.com/rhasspy/piper/releases/download/v1.2.0/it_it_paola_medium.onnx && \
-    curl -L -o it_IT-paola-medium.onnx.json https://github.com/rhasspy/piper/releases/download/v1.2.0/it_it_paola_medium.onnx.json && \
+RUN set -eux; \
+    mkdir -p /opt/youworker/tts /app/models/tts; \
+    curl -L \
+      -o /tmp/voice-it-riccardo_fasol-x-low.tar.gz \
+      https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-it-riccardo_fasol-x-low.tar.gz; \
+    tar -xzf /tmp/voice-it-riccardo_fasol-x-low.tar.gz -C /opt/youworker/tts; \
+    rm /tmp/voice-it-riccardo_fasol-x-low.tar.gz; \
+    cp /opt/youworker/tts/it-riccardo_fasol-x-low.onnx /app/models/tts/; \
+    cp /opt/youworker/tts/it-riccardo_fasol-x-low.onnx.json /app/models/tts/; \
+    rm -rf /opt/youworker/tts; \
     mkdir -p /data/uploads /data/examples /app/models && \
     chown -R appuser:appuser /app /data/uploads /data/examples /app/models
 

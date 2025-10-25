@@ -139,7 +139,7 @@ async def _load_piper_voice() -> "PiperVoice | None":
             return PIPER_VOICE
 
         loop = asyncio.get_running_loop()
-        voice_name = os.getenv("TTS_VOICE", "it_IT-paola-medium")
+        voice_name = os.getenv("TTS_VOICE", "it-riccardo_fasol-x-low")
         model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
         provider = os.getenv("TTS_PROVIDER", "piper")
 

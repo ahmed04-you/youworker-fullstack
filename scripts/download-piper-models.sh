@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Script to download Piper TTS voice models for Italian
 # Usage: ./download-piper-models.sh [voice_name]
-# Default voice: it_IT-paola-medium
+# Default voice: it-riccardo_fasol-x-low
 
 # Colors for output
 RED='\033[0;31m'
@@ -17,7 +17,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MODELS_DIR="$PROJECT_ROOT/data/models/tts"
 
 # Default voice model
-VOICE_NAME="${1:-it_IT-paola-medium}"
+VOICE_NAME="${1:-it-riccardo_fasol-x-low}"
 
 # Piper releases URL
 PIPER_VERSION="v1.2.0"
@@ -48,18 +48,14 @@ fi
 
 # Available Italian voices
 case "$VOICE_NAME" in
-    "it_IT-paola-medium")
-        ARCHIVE="voice-it-IT-paola-medium.tar.gz"
-        ;;
-    "it_IT-riccardo-x_low")
-        ARCHIVE="voice-it-IT-riccardo-x_low.tar.gz"
+    "it-riccardo_fasol-x-low")
+        ARCHIVE="voice-it-riccardo_fasol-x-low.tar.gz"
         ;;
     *)
         echo -e "${RED}Unknown voice: $VOICE_NAME${NC}"
         echo ""
         echo "Available Italian voices:"
-        echo "  - it_IT-paola-medium (recommended, balanced quality)"
-        echo "  - it_IT-riccardo-x_low (faster, lower quality)"
+        echo "  - it-riccardo_fasol-x-low (faster, lower quality)"
         echo ""
         echo "Usage: $0 [voice_name]"
         exit 1
