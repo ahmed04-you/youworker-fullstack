@@ -160,7 +160,7 @@ export function useVoiceRecorder(
       onError?.(error);
       cleanup();
     }
-  }, [sampleRate, maxDuration, onError, onStart, cleanup]);
+  }, [sampleRate, maxDuration, onError, onStart, cleanup, stopRecording]);
 
   // Stop recording
   const stopRecording = useCallback(async (): Promise<Blob | null> => {

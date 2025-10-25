@@ -240,8 +240,14 @@ export default function ChatPage() {
 
   const resetStreamingState = useCallback(
     (options: { closeStream?: boolean } = {}) => {
-      if (options.closeStream !== false && sseClientRef.current) {
-        sseClientRef.current.close()
+      if (options.closeStream !== false && streamControllerRef.current) {
+        // Close active SSE stream
+        try {
+          streamControllerRef.current.close()
+        } catch (err) {
+          console.warn("Failed to close stream controller", err)
+        }
+        streamControllerRef.current = null
       }
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current)

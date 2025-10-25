@@ -1,5 +1,5 @@
 """
-Common utilities, settings, and logging for the ingestion pipeline.
+Common utilities, settings, and accelerator management for the ingestion pipeline.
 """
 
 from .logger import get_logger

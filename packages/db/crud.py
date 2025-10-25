@@ -351,16 +351,18 @@ async def get_session_with_messages(
     session: AsyncSession, session_id: int, user_id: int
 ) -> ChatSession | None:
     """Get a chat session with all its messages."""
-    q = select(ChatSession).where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    from sqlalchemy.orm import joinedload
+
+    q = (
+        select(ChatSession)
+        .options(joinedload(ChatSession.messages).order_by(ChatMessage.created_at.asc()))
+        .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
+    )
     result = await session.execute(q)
     chat_session = result.scalar_one_or_none()
     if not chat_session:
         return None
 
-    # Load messages
-    q2 = select(ChatMessage).where(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc())
-    result2 = await session.execute(q2)
-    chat_session.messages = list(result2.scalars().all())
     return chat_session
 
 

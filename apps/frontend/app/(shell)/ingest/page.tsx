@@ -85,7 +85,7 @@ export default function IngestPage() {
       setFiles((prev) => [...prev, ...droppedFiles])
       toast.success(`${droppedFiles.length} ${t("ingest.files_added") || "file aggiunti"}`)
     }
-  }, [])
+  }, [t])
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -93,7 +93,7 @@ export default function IngestPage() {
       setFiles((prev) => [...prev, ...selectedFiles])
       toast.success(`${selectedFiles.length} ${t("ingest.files_selected") || "file selezionati"}`)
     }
-  }, [])
+  }, [t])
 
   const removeFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))

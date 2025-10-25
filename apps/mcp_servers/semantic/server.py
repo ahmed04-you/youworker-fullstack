@@ -10,7 +10,6 @@ Tools:
 import logging
 import os
 import json
-import os
 import re
 from typing import Any
 
@@ -43,7 +42,6 @@ async def startup():
 
     qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
-    embed_model = os.environ.get("EMBED_MODEL", "embeddinggemma:300m")
 
     logger.info(f"Connecting to Qdrant at {qdrant_url}")
     vector_store = QdrantStore(url=qdrant_url)

@@ -9,11 +9,11 @@ readme = "README.md"
 python = "^3.11"
 
 # API
-fastapi = "^0.115.0"
-uvicorn = {extras = ["standard"], version = "^0.32.0"}
+fastapi = "^0.120.0"
+uvicorn = {extras = ["standard"], version = "^0.38.0"}
 pydantic = "^2.9.2"
 pydantic-settings = "^2.6.1"
-python-multipart = "^0.0.17"
+python-multipart = "^0.0.20"
 slowapi = "^0.1.9"
 prometheus-fastapi-instrumentator = "^7.0.0"
 websockets = ">=12,<16"
@@ -24,10 +24,10 @@ httpx = "^0.28.1"
 
 # Vector store
 qdrant-client = "^1.12.1"
-sqlalchemy = "^2.0.36"
+sqlalchemy = "^2.0.44"
 asyncpg = "^0.30.0"
 greenlet = "^3.1.1"
-alembic = "^1.13.3"
+alembic = "^1.17.0"
 psycopg = {extras = ["binary"], version = "^3.1.18"}
 
 # Ingestion
@@ -53,10 +53,11 @@ ffmpeg-python = "^0.2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.4"
-pytest-asyncio = "^0.24.0"
-pytest-cov = "^6.0.0"
-black = "^24.10.0"
-ruff = "^0.8.4"
+pytest-asyncio = "^1.2.0"
+pytest-cov = "^7.0.0"
+black = "^25.9.0"
+ruff = "^0.14.2"
+safety = "^2.3.5"
 
 [build-system]
 requires = ["poetry-core"]

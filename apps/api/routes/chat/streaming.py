@@ -7,15 +7,14 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from httpx import HTTPStatusError
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from apps.api.config import settings
-from apps.api.auth.security import get_current_active_user
-from apps.api.routes.deps import get_agent_loop
+from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
 from apps.api.utils.response_formatting import sse_format
 from packages.agent import AgentLoop
 from packages.db import get_async_session
@@ -38,30 +37,12 @@ limiter = Limiter(key_func=get_remote_address)
 HEARTBEAT_INTERVAL_SECONDS = 15
 
 
-async def _get_current_user(current_user=Depends(get_current_active_user)):
-    """Get current authenticated user with collection access."""
-    user = current_user
-    # Ensure root has access to default collection
-    try:
-        from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
-
-        async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
-            )
-    except (AttributeError, ImportError, ValueError) as e:
-        logger.debug(f"Could not grant default collection access: {e}")
-        pass
-    return {"id": user.id, "username": user.username, "is_root": user.is_root}
-
-
 @router.post("/chat")
 @limiter.limit("30/minute")
 async def chat_endpoint(
     request: Request,
     chat_request: ChatRequest,
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     agent_loop: AgentLoop = Depends(get_agent_loop),
 ):
     """

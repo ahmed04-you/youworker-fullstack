@@ -693,7 +693,7 @@ async def mcp_socket(ws: WebSocket):
             raw = await ws.receive_text()
             try:
                 req = json.loads(raw)
-            except Exception as pe:
+            except Exception:
                 await ws.send_text(
                     json.dumps({
                         "jsonrpc": "2.0",

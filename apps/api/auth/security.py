@@ -10,7 +10,6 @@ from typing import Optional
 from fastapi import HTTPException, Header, Depends
 from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from packages.db import get_async_session
@@ -100,6 +99,53 @@ async def get_current_user(
                 raise HTTPException(status_code=401, detail="Invalid API key")
 
         return user
+
+
+async def get_current_user_optional(
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+):
+    """
+    Get the current user from JWT token or API key, or None if no authentication provided.
+    """
+    async with get_async_session() as db:
+        user = None
+        provided_api_key = x_api_key.strip() if isinstance(x_api_key, str) else None
+
+        # Try JWT authentication first
+        if authorization:
+            try:
+                # Extract token from "Bearer <token>" format
+                scheme, _, token = authorization.partition(" ")
+                if scheme.lower() == "bearer" and token:
+                    # Decode JWT token
+                    secret = settings.jwt_secret or settings.root_api_key
+                    payload = jwt.decode(token, secret, algorithms=[ALGORITHM])
+                    username = payload.get("sub")
+
+                    if username:
+                        user = await _ensure_root_user_impl(
+                            session=db, username=username, api_key=settings.root_api_key
+                        )
+                        if user:
+                            return user
+                else:
+                    # Support raw API key in Authorization header for backward compatibility
+                    provided_api_key = authorization.strip()
+            except JWTError as e:
+                logger.warning(f"JWT authentication failed: {e}")
+                # Fall back to API key authentication
+            except ValueError as e:
+                logger.warning(f"Authorization parsing failed: {e}")
+                # Fall back to API key authentication
+
+        # If JWT failed or not provided, try API key authentication
+        if not user and provided_api_key and secrets.compare_digest(provided_api_key, settings.root_api_key):
+            user = await _ensure_root_user_impl(session=db, username="root", api_key=provided_api_key)
+            if user:
+                return user
+
+        return None
 
 
 async def get_current_active_user(current_user=Depends(get_current_user)):

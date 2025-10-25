@@ -12,7 +12,6 @@ import asyncio
 import ipaddress
 import json
 import logging
-import os
 import socket
 from collections import deque
 import hashlib

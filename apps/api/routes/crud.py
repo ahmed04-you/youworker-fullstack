@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from apps.api.auth.security import get_current_active_user
+from apps.api.routes.deps import get_current_user_with_collection_access
 from packages.db import get_async_session
 
 logger = logging.getLogger(__name__)
@@ -17,30 +17,13 @@ router = APIRouter(prefix="/v1")
 limiter = Limiter(key_func=get_remote_address)
 
 
-async def _get_current_user(current_user=Depends(get_current_active_user)):
-    """Get current authenticated user."""
-    user = current_user
-    # Ensure root has access to default collection
-    try:
-        from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
-
-        async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
-            )
-    except (AttributeError, ImportError, ValueError) as e:
-        logger.debug(f"Could not grant default collection access: {e}")
-        pass
-    return {"id": user.id, "username": user.username, "is_root": user.is_root}
-
-
 # ==================== SESSION ENDPOINTS ====================
 
 
 @router.get("/sessions")
 async def list_sessions(
-    current_user=Depends(_get_current_user), limit: int = Query(default=50, le=100)
+    current_user=Depends(get_current_user_with_collection_access),
+    limit: int = Query(default=50, le=100),
 ):
     """List user's chat sessions."""
     async with get_async_session() as db:
@@ -64,7 +47,9 @@ async def list_sessions(
 
 
 @router.get("/sessions/{session_id}")
-async def get_session(session_id: int, current_user=Depends(_get_current_user)):
+async def get_session(
+    session_id: int, current_user=Depends(get_current_user_with_collection_access)
+):
     """Get a specific chat session with all messages."""
     async with get_async_session() as db:
         from packages.db.crud import get_session_with_messages
@@ -100,7 +85,9 @@ async def get_session(session_id: int, current_user=Depends(_get_current_user)):
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session_endpoint(session_id: int, current_user=Depends(_get_current_user)):
+async def delete_session_endpoint(
+    session_id: int, current_user=Depends(get_current_user_with_collection_access)
+):
     """Delete a chat session and all its messages."""
     async with get_async_session() as db:
         from packages.db.crud import delete_session
@@ -114,7 +101,9 @@ async def delete_session_endpoint(session_id: int, current_user=Depends(_get_cur
 
 @router.patch("/sessions/{session_id}")
 async def update_session(
-    session_id: int, title: str = Query(...), current_user=Depends(_get_current_user)
+    session_id: int,
+    title: str = Query(...),
+    current_user=Depends(get_current_user_with_collection_access),
 ):
     """Update a chat session's title."""
     async with get_async_session() as db:
@@ -134,7 +123,7 @@ async def update_session(
 
 @router.get("/documents")
 async def list_documents(
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     collection: str | None = Query(default=None),
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -174,7 +163,9 @@ async def list_documents(
 
 
 @router.delete("/documents/{document_id}")
-async def delete_document_endpoint(document_id: int, current_user=Depends(_get_current_user)):
+async def delete_document_endpoint(
+    document_id: int, current_user=Depends(get_current_user_with_collection_access)
+):
     """Delete a document from the catalog.
 
     Note: This only removes the metadata. Vector data in Qdrant must be deleted separately.
@@ -194,7 +185,7 @@ async def delete_document_endpoint(document_id: int, current_user=Depends(_get_c
 
 @router.get("/ingestion-runs")
 async def list_ingestion_runs(
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     limit: int = Query(default=50, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -231,7 +222,9 @@ async def list_ingestion_runs(
 
 
 @router.delete("/ingestion-runs/{run_id}")
-async def delete_ingestion_run_endpoint(run_id: int, current_user=Depends(_get_current_user)):
+async def delete_ingestion_run_endpoint(
+    run_id: int, current_user=Depends(get_current_user_with_collection_access)
+):
     """Delete an ingestion run record."""
     async with get_async_session() as db:
         from packages.db.crud import delete_ingestion_run
@@ -248,7 +241,7 @@ async def delete_ingestion_run_endpoint(run_id: int, current_user=Depends(_get_c
 
 @router.get("/tool-runs")
 async def list_tool_runs(
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0, ge=0),
 ):

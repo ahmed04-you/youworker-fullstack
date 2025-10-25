@@ -15,9 +15,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from apps.api.config import settings
-from apps.api.auth.security import get_current_active_user, sanitize_input
+from apps.api.auth.security import sanitize_input
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
-from apps.api.routes.deps import get_agent_loop
+from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
 from apps.api.utils.response_formatting import sse_format
 from packages.agent import AgentLoop
 from packages.db import get_async_session
@@ -39,22 +39,6 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 HEARTBEAT_INTERVAL_SECONDS = 15
-
-
-async def _get_current_user(current_user=Depends(get_current_active_user)):
-    """Get current authenticated user with collection access."""
-    user = current_user
-    try:
-        from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
-
-        async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
-            )
-    except (AttributeError, ImportError, ValueError) as e:
-        logger.debug(f"Could not grant default collection access: {e}")
-    return {"id": user.id, "username": user.username, "is_root": user.is_root}
 
 
 async def process_input(
@@ -107,7 +91,7 @@ async def process_input(
 async def unified_chat_endpoint(
     request: Request,
     unified_request: UnifiedChatRequest,
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     agent_loop: AgentLoop = Depends(get_agent_loop),
 ):
     """
@@ -249,9 +233,11 @@ async def unified_chat_endpoint(
                         local_metadata = meta
                         data["metadata"] = meta
 
+                        # Prefer the final_text provided by the agent; if absent, join collected chunks.
                         final_piece = data.get("final_text") or ""
                         if not local_final_text:
-                            local_final_text = "".join(collected_chunks) + final_piece
+                            # Avoid duplication when final_text already contains the accumulated chunks.
+                            local_final_text = final_piece or "".join(collected_chunks)
                         persisted_text = local_final_text or "".join(collected_chunks)
 
                         async with get_async_session() as db:
@@ -264,7 +250,8 @@ async def unified_chat_endpoint(
                         audio_sample_rate = None
                         if unified_request.expect_audio and persisted_text:
                             try:
-                                synth_result = await synthesize_speech(persisted_text)
+                                # Allow fallback beep when TTS voice is unavailable.
+                                synth_result = await synthesize_speech(persisted_text, fallback=True)
                                 if synth_result:
                                     wav_bytes, sr = synth_result
                                     audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -338,7 +325,6 @@ async def unified_chat_endpoint(
     # Non-streaming response
     final_text = ""
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
-    pending_tool_run: int | None = None
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
@@ -382,7 +368,8 @@ async def unified_chat_endpoint(
     audio_sample_rate: int | None = None
     if unified_request.expect_audio and final_text:
         try:
-            synth_result = await synthesize_speech(final_text)
+            # Allow fallback beep when TTS voice is unavailable.
+            synth_result = await synthesize_speech(final_text, fallback=True)
             if synth_result:
                 wav_bytes, sr = synth_result
                 audio_b64 = base64.b64encode(wav_bytes).decode("ascii")

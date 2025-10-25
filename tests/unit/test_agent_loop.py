@@ -2,7 +2,7 @@
 Unit tests for agent loop with single-tool stepper.
 """
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, AsyncMock
 
 from packages.llm import ChatMessage, ToolCall
 from packages.agent import AgentLoop, MCPRegistry

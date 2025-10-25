@@ -24,14 +24,14 @@ def _make_wav(duration_ms: int = 50, sample_rate: int = 16000) -> bytes:
 
 
 @pytest.fixture
-def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def voice_client(monkeypatch: pytest.MonkeyPatch):
     # Stub database session context manager
     class FakeSession:
         id = 1
 
     @asynccontextmanager
     async def fake_session() -> AsyncIterator[None]:
-        yield FakeSession()
+        yield None
 
     monkeypatch.setattr("packages.db.session.get_async_session", fake_session)
     monkeypatch.setattr("packages.db.get_async_session", fake_session)
@@ -67,7 +67,6 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
 
     monkeypatch.setattr("packages.db.crud.ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
-    monkeypatch.setattr(main, "ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("apps.api.auth.security.ensure_root_user", fake_ensure_root_user)
 
     # Override FastAPI dependency for authentication
@@ -88,10 +87,6 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         assert text
         return _make_wav(), 16000
 
-    original_transcribe = main.transcribe_audio_pcm16
-    original_synthesize = main.synthesize_speech
-    monkeypatch.setattr(main, "transcribe_audio_pcm16", fake_transcribe)
-    monkeypatch.setattr(main, "synthesize_speech", fake_synthesize)
     monkeypatch.setattr("apps.api.audio_pipeline.transcribe_audio_pcm16", fake_transcribe)
     monkeypatch.setattr("apps.api.audio_pipeline.synthesize_speech", fake_synthesize)
     monkeypatch.setattr("apps.api.routes.chat.voice.transcribe_audio_pcm16", fake_transcribe)
@@ -131,8 +126,6 @@ def voice_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     main.app.router.lifespan_context = original_lifespan
     main.agent_loop = original_agent_loop
     main.app.state.agent_loop = original_agent_loop
-    main.transcribe_audio_pcm16 = original_transcribe
-    main.synthesize_speech = original_synthesize
     main.app.dependency_overrides.clear()
 
 

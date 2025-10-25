@@ -108,6 +108,15 @@ class Tool(AsyncAttrs, Base):
         DateTime(timezone=True), default=datetime.utcnow
     )
 
+    @validates('input_schema')
+    def validate_input_schema(self, key, value):
+        if value:
+            import json
+            schema_json = json.dumps(value, ensure_ascii=False)
+            if len(schema_json) > 10000:  # 10KB limit
+                raise ValueError("input_schema too large (max 10KB)")
+        return value
+
     server: Mapped[MCPServer] = relationship(back_populates="tools")
     __table_args__ = (UniqueConstraint("mcp_server_id", "name", name="uq_tool_server_name"),)
 
@@ -175,6 +184,15 @@ class Document(AsyncAttrs, Base):
     path_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
     last_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    @validates('tags')
+    def validate_tags(self, key, value):
+        if value:
+            import json
+            tags_json = json.dumps(value, ensure_ascii=False)
+            if len(tags_json) > 5000:  # 5KB limit for tags
+                raise ValueError("tags too large (max 5KB)")
+        return value
 
     __table_args__ = (
         Index("idx_documents_collection_created", "collection", created_at.desc()),

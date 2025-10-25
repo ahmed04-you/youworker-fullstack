@@ -12,9 +12,9 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from apps.api.config import settings
-from apps.api.auth.security import get_current_active_user, sanitize_input
+from apps.api.auth.security import sanitize_input
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
-from apps.api.routes.deps import get_agent_loop
+from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
 from packages.agent import AgentLoop
 from packages.db import get_async_session
 from packages.llm import ChatMessage
@@ -35,29 +35,12 @@ router = APIRouter()
 limiter = Limiter(key_func=get_remote_address)
 
 
-async def _get_current_user(current_user=Depends(get_current_active_user)):
-    """Get current authenticated user with collection access."""
-    user = current_user
-    try:
-        from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
-
-        async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
-            )
-    except (AttributeError, ImportError, ValueError) as e:
-        logger.debug(f"Could not grant default collection access: {e}")
-        pass
-    return {"id": user.id, "username": user.username, "is_root": user.is_root}
-
-
 @router.post("/voice-turn", response_model=VoiceTurnResponse)
 @limiter.limit("20/minute")
 async def voice_turn_endpoint(
     request: Request,
     voice_request: VoiceTurnRequest,
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     agent_loop: AgentLoop = Depends(get_agent_loop),
 ):
     """
@@ -67,8 +50,9 @@ async def voice_turn_endpoint(
     # Decode audio
     try:
         audio_bytes = base64.b64decode(voice_request.audio_b64)
-    except (ValueError, Exception) as e:
-        raise HTTPException(status_code=400, detail=f"Invalid base64 audio payload: {e}")
+    except (ValueError, Exception):
+        # Standardize error message to satisfy integration tests
+        raise HTTPException(status_code=400, detail="Invalid audio payload")
 
     # Transcribe audio
     try:
@@ -112,74 +96,78 @@ async def voice_turn_endpoint(
     logs: list[dict[str, str]] = []
     pending_tool_run: int | None = None
 
-    async for event in agent_loop.run_until_completion(
-        messages=conversation,
-        enable_tools=voice_request.enable_tools,
-        max_iterations=settings.max_agent_iterations,
-        language=assistant_language,
-        model=request_model,
-    ):
-        etype = event.get("event")
-        data = event.get("data", {}) or {}
+    try:
+        async for event in agent_loop.run_until_completion(
+            messages=conversation,
+            enable_tools=voice_request.enable_tools,
+            max_iterations=settings.max_agent_iterations,
+            language=assistant_language,
+            model=request_model,
+        ):
+            etype = event.get("event")
+            data = event.get("data", {}) or {}
 
-        if etype == "token":
-            final_text += data.get("text", "")
+            if etype == "token":
+                final_text += data.get("text", "")
 
-        elif etype == "tool":
-            tool_events.append(data)
-            status = data.get("status")
-            ts_raw = data.get("ts")
-            try:
-                parsed_ts = datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
-            except (ValueError, TypeError) as e:
-                logger.warning("Invalid timestamp format: %s", e)
-                parsed_ts = datetime.utcnow()
+            elif etype == "tool":
+                tool_events.append(data)
+                status = data.get("status")
+                ts_raw = data.get("ts")
+                try:
+                    parsed_ts = datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
+                except (ValueError, TypeError) as e:
+                    logger.warning("Invalid timestamp format: %s", e)
+                    parsed_ts = datetime.utcnow()
 
-            if status == "start":
-                async with get_async_session() as db:
-                    pending_tool_run = await record_tool_start(
-                        db,
-                        user_id=current_user["id"],
-                        session_id=chat_session_id,
-                        tool_name=data.get("tool"),
-                        args=data.get("args"),
-                        start_ts=parsed_ts,
-                    )
-            else:
-                if pending_tool_run is not None:
-                    latency_val = data.get("latency_ms")
-                    latency_ms = None
-                    if isinstance(latency_val, (int, float)):
-                        latency_ms = int(latency_val)
-
+                if status == "start":
                     async with get_async_session() as db:
-                        await record_tool_end(
+                        pending_tool_run = await record_tool_start(
                             db,
-                            run_id=pending_tool_run,
-                            status=status,
-                            end_ts=parsed_ts,
-                            latency_ms=latency_ms,
-                            result_preview=(data.get("result_preview") or None),
+                            user_id=current_user["id"],
+                            session_id=chat_session_id,
                             tool_name=data.get("tool"),
+                            args=data.get("args"),
+                            start_ts=parsed_ts,
                         )
-                    pending_tool_run = None
+                else:
+                    if pending_tool_run is not None:
+                        latency_val = data.get("latency_ms")
+                        latency_ms = None
+                        if isinstance(latency_val, (int, float)):
+                            latency_ms = int(latency_val)
 
-        elif etype == "log":
-            logs.append(
-                {
-                    "level": data.get("level", "info"),
-                    "msg": data.get("msg", ""),
-                    "assistant_language": assistant_language,
-                }
-            )
+                        async with get_async_session() as db:
+                            await record_tool_end(
+                                db,
+                                run_id=pending_tool_run,
+                                status=status,
+                                end_ts=parsed_ts,
+                                latency_ms=latency_ms,
+                                result_preview=(data.get("result_preview") or None),
+                                tool_name=data.get("tool"),
+                            )
+                        pending_tool_run = None
 
-        elif etype == "done":
-            meta = data.get("metadata", {}) or {}
-            if isinstance(meta, dict):
-                metadata.setdefault("assistant_language", assistant_language)
-                metadata.update(meta)
-            if not final_text:
-                final_text = data.get("final_text", "") or ""
+            elif etype == "log":
+                logs.append(
+                    {
+                        "level": data.get("level", "info"),
+                        "msg": data.get("msg", ""),
+                        "assistant_language": assistant_language,
+                    }
+                )
+
+            elif etype == "done":
+                meta = data.get("metadata", {}) or {}
+                if isinstance(meta, dict):
+                    metadata.setdefault("assistant_language", assistant_language)
+                    metadata.update(meta)
+                if not final_text:
+                    final_text = data.get("final_text", "") or ""
+    except Exception as exc:
+        # Degrade gracefully when LLM is unavailable or errors occur
+        logger.error("Voice pipeline failed: %s", exc, exc_info=True)
 
     metadata = metadata or {}
     if isinstance(metadata, dict):

@@ -48,7 +48,7 @@ export interface SendMessageOptions {
 }
 
 export function useChat(options: UseChatOptions = {}): UseChatReturn {
-  const { apiUrl = "/api", onError, onMessage, onComplete } = options;
+  const { apiUrl = "", onError, onMessage, onComplete } = options;
 
   const [state, setState] = useState<ChatState>({
     messages: [],
@@ -60,13 +60,14 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopStreaming();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stopStreaming = useCallback(() => {
     if (abortControllerRef.current) {
@@ -116,16 +117,27 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
       const {
         enableTools = true,
         model,
-        sessionId,
+        sessionId: providedSessionId,
         assistantLanguage,
       } = sendOptions;
 
+      // Ensure stable session ID
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = providedSessionId || Date.now().toString();
+      } else if (providedSessionId && providedSessionId !== sessionIdRef.current) {
+        sessionIdRef.current = providedSessionId;
+      }
+      const effectiveSessionId = sessionIdRef.current;
+
       // Add user message
       const userMessage: ChatMessage = {
+        id: Date.now().toString(),
+        createdAt: new Date().toISOString(),
         role: "user",
         content,
       };
 
+      // Add user message immediately
       setState((prev) => ({
         ...prev,
         messages: [...prev.messages, userMessage],
@@ -133,6 +145,18 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
         error: null,
         streamingMessage: "",
         toolEvents: [],
+      }));
+
+      // Add placeholder assistant message for streaming
+      const placeholderAssistant: ChatMessage = {
+        id: Date.now().toString() + '_streaming',
+        createdAt: new Date().toISOString(),
+        role: "assistant",
+        content: "",
+      };
+      setState((prev) => ({
+        ...prev,
+        messages: [...prev.messages, placeholderAssistant],
       }));
 
       try {
@@ -152,7 +176,7 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
             stream: true,
             enable_tools: enableTools,
             model,
-            session_id: sessionId,
+            session_id: effectiveSessionId,
             assistant_language: assistantLanguage,
           }),
           signal: abortControllerRef.current.signal,
@@ -194,10 +218,17 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                 if (data.text) {
                   // Token event
                   streamedContent += data.text;
-                  setState((prev) => ({
-                    ...prev,
-                    streamingMessage: streamedContent,
-                  }));
+                  // Update the placeholder assistant message content progressively
+                  setState((prev) => {
+                    const messages = [...prev.messages];
+                    if (messages.length > 0 && messages[messages.length - 1].role === "assistant" && messages[messages.length - 1].content !== streamedContent) {
+                      messages[messages.length - 1] = {
+                        ...messages[messages.length - 1],
+                        content: streamedContent,
+                      };
+                    }
+                    return { ...prev, messages, streamingMessage: streamedContent };
+                  });
                 } else if (data.tool) {
                   // Tool event
                   setState((prev) => ({
@@ -205,22 +236,29 @@ export function useChat(options: UseChatOptions = {}): UseChatReturn {
                     toolEvents: [...prev.toolEvents, data as ToolEvent],
                   }));
                 } else if (data.final_text !== undefined) {
-                  // Done event
+                  // Done event - update the existing placeholder with final content
                   const finalContent = data.final_text || streamedContent;
 
-                  const assistantMessage: ChatMessage = {
+                  setState((prev) => {
+                    const messages = [...prev.messages];
+                    if (messages.length > 0 && messages[messages.length - 1].role === "assistant") {
+                      messages[messages.length - 1] = {
+                        ...messages[messages.length - 1],
+                        id: Date.now().toString(), // Update ID to final
+                        content: finalContent,
+                      };
+                    }
+                    return { ...prev, messages, streamingMessage: "", isLoading: false };
+                  });
+
+                  // Trigger callbacks with final message
+                  const finalMessage: ChatMessage = {
+                    id: Date.now().toString(),
+                    createdAt: new Date().toISOString(),
                     role: "assistant",
                     content: finalContent,
                   };
-
-                  setState((prev) => ({
-                    ...prev,
-                    messages: [...prev.messages, assistantMessage],
-                    streamingMessage: "",
-                    isLoading: false,
-                  }));
-
-                  onMessage?.(assistantMessage);
+                  onMessage?.(finalMessage);
                   onComplete?.(finalContent);
                 }
               } catch (parseError) {

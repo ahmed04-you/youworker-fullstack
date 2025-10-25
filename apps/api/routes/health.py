@@ -13,6 +13,7 @@ from apps.api.routes.deps import (
     get_ollama_client_optional,
     get_registry_optional,
 )
+from apps.api.auth.security import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ router = APIRouter()
 
 @router.get("/health")
 async def health_check(
+    current_user=Depends(get_current_user_optional),
     registry=Depends(get_registry_optional),
     ollama_client=Depends(get_ollama_client_optional),
     agent_loop=Depends(get_agent_loop_optional),
@@ -32,6 +34,9 @@ async def health_check(
     Status is 'degraded' if some MCP servers are unavailable.
     """
     from apps.api.config import settings
+
+    if current_user is None:
+        return {"status": "healthy"}
 
     mcp_status = {"healthy": [], "unhealthy": [], "total": 0}
 

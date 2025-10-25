@@ -16,8 +16,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from apps.api.config import settings
-from apps.api.auth.security import get_current_active_user, sanitize_input
-from apps.api.routes.deps import get_ingestion_pipeline
+from apps.api.auth.security import sanitize_input
+from apps.api.routes.deps import get_ingestion_pipeline, get_current_user_with_collection_access
 from packages.db import get_async_session
 
 logger = logging.getLogger(__name__)
@@ -46,30 +46,12 @@ class IngestResponse(BaseModel):
     errors: list[str] | None = None
 
 
-async def _get_current_user():
-    """Get current authenticated user."""
-    user = await get_current_active_user()
-    # Ensure root has access to default collection
-    try:
-        from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
-
-        async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=user.id, collection_name=DEFAULT_COLLECTION
-            )
-    except (AttributeError, ImportError, ValueError) as e:
-        logger.debug(f"Could not grant default collection access: {e}")
-        pass
-    return {"id": user.id, "username": user.username, "is_root": user.is_root}
-
-
 @router.post("/ingest")
 @limiter.limit("10/minute")
 async def ingest_endpoint(
     ingest_request: IngestRequest,
     request: Request,
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     ingestion_pipeline=Depends(get_ingestion_pipeline),
 ):
     """
@@ -196,7 +178,7 @@ async def ingest_upload_endpoint(
     request: Request,
     files: list[UploadFile] = File(...),
     tags: list[str] | None = Form(default=None),
-    current_user=Depends(_get_current_user),
+    current_user=Depends(get_current_user_with_collection_access),
     ingestion_pipeline=Depends(get_ingestion_pipeline),
 ):
     """Upload files, save them to a fixed directory, and ingest them.
@@ -208,6 +190,39 @@ async def ingest_upload_endpoint(
     """
     if not files:
         raise HTTPException(status_code=400, detail="No files uploaded")
+
+    # Validate MIME types and sizes (<100MB per file)
+    allowed_mimes = {
+        "application/pdf",
+        "text/plain",
+        "text/markdown",
+        "text/csv",
+        "application/json",
+        "image/png",
+        "image/jpeg",
+        "audio/mpeg",
+        "audio/wav",
+    }
+    max_size_bytes = 100 * 1024 * 1024  # 100MB
+
+    valid_files = []
+    for f in files:
+        if f.content_type not in allowed_mimes:
+            logger.warning(f"Rejected file {f.filename} with invalid MIME type: {f.content_type}")
+            continue
+
+        # Check size if available
+        if f.size and f.size > max_size_bytes:
+            logger.warning(f"Rejected file {f.filename}: size {f.size} exceeds {max_size_bytes}")
+            continue
+
+        valid_files.append(f)
+
+    if not valid_files:
+        raise HTTPException(
+            status_code=400,
+            detail="No valid files provided. Supported types: PDF, text, CSV, JSON, PNG, JPEG, MP3, WAV. Max size: 100MB per file."
+        )
 
     sanitized_tags: list[str] = []
     for tag in tags or []:
@@ -223,7 +238,7 @@ async def ingest_upload_endpoint(
         raise HTTPException(status_code=500, detail=f"Failed to create upload directory: {exc}")
 
     saved_paths: list[Path] = []
-    for f in files:
+    for f in valid_files:
         try:
             # Sanitize filename (very basic)
             name = os.path.basename(f.filename or "uploaded-file")

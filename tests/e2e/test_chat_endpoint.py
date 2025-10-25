@@ -20,7 +20,7 @@ API_BASE_URL = "http://localhost:8001"
 @pytest.fixture
 async def api_client():
     """Create async HTTP client."""
-    async with httpx.AsyncClient(timeout=300.0, headers={"X-API-Key": "dev-root-key"}) as client:
+    async with httpx.AsyncClient(timeout=300.0, headers={"X-API-Key": "rotated-dev-root-key"}) as client:
         yield client
 
 
@@ -32,7 +32,7 @@ async def test_health_check(api_client):
 
     data = response.json()
     assert data["status"] == "healthy"
-    assert "mcp_servers" in data
+    assert "mcp_servers" in data.get("components", {})
 
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_agent_single_tool_enforcement():
         response = await client.post(
             f"{API_BASE_URL}/v1/chat",
             json=request_data,
-            headers={"X-API-Key": "dev-root-key"},
+            headers={"X-API-Key": "rotated-dev-root-key"},
         )
         assert response.status_code == 200
 

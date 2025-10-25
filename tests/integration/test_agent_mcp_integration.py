@@ -7,10 +7,9 @@ These tests verify that the agent can correctly:
 3. Handle tool results
 4. Complete multi-turn conversations with tools
 """
-import asyncio
 import json
 import pytest
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 from packages.agent import AgentLoop, MCPRegistry
 from packages.llm import ChatMessage, ToolCall

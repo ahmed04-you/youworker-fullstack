@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8001
     log_level: str = "INFO"
-    root_api_key: str = "dev-root-key"
-    jwt_secret: str = "dev-jwt-secret"
+    root_api_key: str = "rotated-dev-root-key"
+    jwt_secret: str = "rotated-dev-jwt-secret"
     frontend_origin: str = "http://localhost:8000"
 
     # Database

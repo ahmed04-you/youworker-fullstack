@@ -2,7 +2,7 @@
 Unit tests for security utilities.
 """
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
+from unittest.mock import Mock, patch
 
 from apps.api.auth.security import (
     create_access_token,

@@ -1,5 +1,6 @@
 COMPOSE_FILE ?= ops/compose/docker-compose.yml
-COMPOSE_CMD ?= docker compose -f $(COMPOSE_FILE)
+COMPOSE_BIN ?= docker compose
+COMPOSE_CMD ?= $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 
 .PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup
 
@@ -22,9 +23,19 @@ help:
 	@echo "  ssl-setup        - Generate SSL certificates"
 	@echo "  start-ssl        - Start services with SSL setup"
 
-# Start all services
+# Start all services (GPU auto-detected and used if available)
 compose-up:
-	$(COMPOSE_CMD) up -d
+	@# Ensure SSL certs exist for nginx
+	@if [ ! -f data/nginx/ssl/cert.pem ] || [ ! -f data/nginx/ssl/key.pem ]; then \
+		echo "[compose-up] Generating local SSL certificates..."; \
+		./scripts/generate-ssl-cert.sh localhost 127.0.0.1; \
+	fi
+	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then \
+		echo "[compose-up] GPU detected and will be used for acceleration"; \
+	else \
+		echo "[compose-up] No GPU detected; services will run on CPU"; \
+	fi
+	@$(COMPOSE_CMD) up -d
 
 # Stop all services
 compose-down:
@@ -46,6 +57,23 @@ build:
 clean:
 	$(COMPOSE_CMD) down -v --rmi all
 	@echo "Cleaned up all containers, volumes, and images"
+
+# Reset persisted data and start fresh
+reset-data:
+	@echo "This will remove all persisted data under ./data"; \
+	read -p "Type 'yes' to proceed: " ans; \
+	if [ "$$ans" = "yes" ]; then \
+		echo "Stopping stack..."; \
+		$(COMPOSE_CMD) down; \
+		echo "Removing data directories as root (handles permissions)..."; \
+		docker run --rm -v "$(shell pwd)/data:/data" alpine:3 sh -c 'rm -rf /data/*'; \
+		echo "Re-creating expected directories..."; \
+		mkdir -p data/{postgres,qdrant,ollama,nginx/ssl,uploads,models,grafana,prometheus}; \
+		chmod -R u+rwX,go+rwX data; \
+		echo "Data reset complete."; \
+	else \
+		echo "Aborted."; \
+	fi
 
 # Show service status
 status:

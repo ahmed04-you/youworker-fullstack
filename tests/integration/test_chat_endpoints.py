@@ -41,7 +41,7 @@ def test_text_mode_sse_connection(api_base_url: str) -> None:
         },
         headers={
             "Accept": "text/event-stream",
-            "X-API-Key": "dev-root-key",
+            "X-API-Key": "rotated-dev-root-key",
         },
         stream=True,
         timeout=30,
@@ -72,7 +72,7 @@ def test_voice_turn_rejects_invalid_audio(api_base_url: str) -> None:
             "sample_rate": 16000,
             "expect_audio": False,
         },
-        headers={"X-API-Key": "dev-root-key"},
+        headers={"X-API-Key": "rotated-dev-root-key"},
     )
 
     assert response.status_code == 400
@@ -94,7 +94,7 @@ def test_voice_turn_returns_service_unavailable_without_stt(api_base_url: str) -
             "sample_rate": 16000,
             "expect_audio": False,
         },
-        headers={"X-API-Key": "dev-root-key"},
+        headers={"X-API-Key": "rotated-dev-root-key"},
     )
 
     # When faster-whisper is not installed we expect 503. If it is installed the
