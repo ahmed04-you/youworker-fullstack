@@ -14,14 +14,14 @@ NC='\033[0m' # No Color
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-MODELS_DIR="$PROJECT_ROOT/data/models/tts"
+# Use temporary directory for now
+MODELS_DIR="/tmp/piper-models"
 
 # Default voice model
-VOICE_NAME="${1:-it-riccardo_fasol-x-low}"
+VOICE_NAME="${1:-it_IT-riccardo-x_low}"
 
-# Piper releases URL
-PIPER_VERSION="v1.2.0"
-BASE_URL="https://github.com/rhasspy/piper/releases/download/$PIPER_VERSION"
+# Piper voices URL from Hugging Face
+BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main"
 
 echo -e "${GREEN}=== Piper TTS Model Downloader ===${NC}"
 echo ""
@@ -48,58 +48,47 @@ fi
 
 # Available Italian voices
 case "$VOICE_NAME" in
-    "it-riccardo_fasol-x-low")
-        ARCHIVE="voice-it-riccardo_fasol-x-low.tar.gz"
+    "it_IT-riccardo-x_low")
+        ONNX_FILE="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx"
+        JSON_FILE="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json"
+        ;;
+    "it_IT-paola-medium")
+        ONNX_FILE="it/it_IT/paola/medium/it_IT-paola-medium.onnx"
+        JSON_FILE="it/it_IT/paola/medium/it_IT-paola-medium.onnx.json"
         ;;
     *)
         echo -e "${RED}Unknown voice: $VOICE_NAME${NC}"
         echo ""
         echo "Available Italian voices:"
-        echo "  - it-riccardo_fasol-x-low (faster, lower quality)"
+        echo "  - it_IT-riccardo-x_low (faster, lower quality)"
+        echo "  - it_IT-paola-medium (better quality)"
         echo ""
         echo "Usage: $0 [voice_name]"
         exit 1
         ;;
 esac
 
-# Download URL
-DOWNLOAD_URL="$BASE_URL/$ARCHIVE"
+# Download URLs
+ONNX_URL="$BASE_URL/$ONNX_FILE"
+JSON_URL="$BASE_URL/$JSON_FILE"
 
 echo -e "${GREEN}Downloading model...${NC}"
-echo "URL: $DOWNLOAD_URL"
+echo "ONNX URL: $ONNX_URL"
+echo "JSON URL: $JSON_URL"
 echo ""
 
 # Download with progress
 cd "$MODELS_DIR"
 if command -v wget &> /dev/null; then
-    wget --progress=bar:force "$DOWNLOAD_URL" -O "$ARCHIVE"
+    wget --progress=bar:force "$ONNX_URL" -O "${VOICE_NAME}.onnx"
+    wget --progress=bar:force "$JSON_URL" -O "${VOICE_NAME}.onnx.json"
 elif command -v curl &> /dev/null; then
-    curl -L --progress-bar "$DOWNLOAD_URL" -o "$ARCHIVE"
+    curl -L --progress-bar "$ONNX_URL" -o "${VOICE_NAME}.onnx"
+    curl -L --progress-bar "$JSON_URL" -o "${VOICE_NAME}.onnx.json"
 else
     echo -e "${RED}Error: Neither wget nor curl is installed!${NC}"
     exit 1
 fi
-
-echo ""
-echo -e "${GREEN}Extracting model...${NC}"
-tar -xzf "$ARCHIVE"
-
-# Find extracted files
-ONNX_FILE=$(find . -name "*.onnx" -type f | head -n1)
-JSON_FILE=$(find . -name "*.onnx.json" -type f | head -n1)
-
-if [ -z "$ONNX_FILE" ] || [ -z "$JSON_FILE" ]; then
-    echo -e "${RED}Error: Expected model files not found after extraction!${NC}"
-    exit 1
-fi
-
-# Rename to standard format
-mv "$ONNX_FILE" "${VOICE_NAME}.onnx"
-mv "$JSON_FILE" "${VOICE_NAME}.onnx.json"
-
-# Clean up
-rm -f "$ARCHIVE"
-rm -rf $(find . -type d -name "it_IT-*" 2>/dev/null || true)
 
 echo ""
 echo -e "${GREEN}✓ Model installed successfully!${NC}"

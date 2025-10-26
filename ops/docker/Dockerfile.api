@@ -1,4 +1,4 @@
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 ARG ENABLE_GPU_TORCH=0
 
@@ -48,13 +48,13 @@ COPY README.md /app/README.md
 RUN set -eux; \
     mkdir -p /opt/youworker/tts /app/models/tts; \
     curl -L \
-      -o /tmp/voice-it-riccardo_fasol-x-low.tar.gz \
-      https://github.com/rhasspy/piper/releases/download/v0.0.2/voice-it-riccardo_fasol-x-low.tar.gz; \
-    tar -xzf /tmp/voice-it-riccardo_fasol-x-low.tar.gz -C /opt/youworker/tts; \
-    rm /tmp/voice-it-riccardo_fasol-x-low.tar.gz; \
-    cp /opt/youworker/tts/it-riccardo_fasol-x-low.onnx /app/models/tts/; \
-    cp /opt/youworker/tts/it-riccardo_fasol-x-low.onnx.json /app/models/tts/; \
-    rm -rf /opt/youworker/tts; \
+      -o /tmp/it_IT-riccardo-x_low.onnx \
+      https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx; \
+    curl -L \
+      -o /tmp/it_IT-riccardo-x_low.onnx.json \
+      https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json; \
+    mv /tmp/it_IT-riccardo-x_low.onnx /app/models/tts/; \
+    mv /tmp/it_IT-riccardo-x_low.onnx.json /app/models/tts/; \
     mkdir -p /data/uploads /data/examples /app/models && \
     chown -R appuser:appuser /app /data/uploads /data/examples /app/models
 

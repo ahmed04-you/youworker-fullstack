@@ -30,7 +30,7 @@ services:
       - ../../data/qdrant:/qdrant/storage
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "test -f /qdrant/storage/raft_state.json || exit 1"]
+      test: ["CMD-SHELL", "timeout 5 bash -c '</dev/tcp/localhost/6333' || exit 1"]
     environment:
       QDRANT__SERVICE__HTTP_PORT: 6333
       QDRANT__SERVICE__GRPC_PORT: 6334
@@ -196,7 +196,6 @@ services:
     volumes:
       - ../../examples/ingestion:/data/examples:ro
       - ../../data/uploads:/data/uploads
-      - ../../data/models:/app/models:ro
     depends_on:
       ollama:
         condition: service_healthy

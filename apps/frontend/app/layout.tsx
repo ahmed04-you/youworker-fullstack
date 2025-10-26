@@ -1,41 +1,35 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { GeistSans } from "geist/font/sans"
-import { GeistMono } from "geist/font/mono"
-import { Suspense } from "react"
-import { ThemeProvider } from "@/components/providers/theme-provider"
-import { ErrorBoundary } from "@/components/ui/error-boundary"
-import "./globals.css"
+import type { Metadata } from "next";
+import { Inter } from "next/font/google";
+import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
+
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "YouWorker.AI",
-  description: "Assistente operativo basato su IA con integrazione MCP",
-  generator: "v0.app",
-  icons: {
-    icon: { url: "/youco-logo.png", type: "image/png" },
-    shortcut: { url: "/youco-logo.png", type: "image/png" },
-    apple: { url: "/youco-logo.png", type: "image/png" },
-  },
-}
+  title: "YouWorker.AI - Intelligent AI Assistant",
+  description: "Your personal AI assistant powered by local LLMs with advanced capabilities",
+  keywords: ["AI", "assistant", "chatbot", "LLM", "productivity"],
+};
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+}: {
+  children: React.ReactNode;
+}) {
   return (
-    <html lang="it" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
-      </head>
-      <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
-        <ErrorBoundary>
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-            <Suspense fallback={null}>{children}</Suspense>
-          </ThemeProvider>
-        </ErrorBoundary>
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
-  )
+  );
 }

@@ -27,6 +27,7 @@ from packages.ingestion import IngestionPipeline
 
 # Import route modules
 from apps.api.routes.chat import router as chat_router
+from apps.api.routes.websocket import router as websocket_router
 from apps.api.routes.analytics import router as analytics_router
 from apps.api.routes import ingestion, crud, health
 
@@ -119,8 +120,6 @@ async def lifespan(app: FastAPI):
     logger.info("Parsing MCP server URLs...")
     mcp_server_configs = []
     if settings.mcp_server_urls:
-        from urllib.parse import urlparse
-
         def derive_server_id(raw_url: str) -> str:
             """Derive a stable server_id from a URL.
 
@@ -312,6 +311,9 @@ async def add_security_headers(request: Request, call_next):
 
 # Include route modules
 app.include_router(health.router)
+# WebSocket chat endpoint (no prefix to match /chat/{session_id})
+app.include_router(websocket_router)
+# HTTP chat endpoints (with /v1 prefix)
 app.include_router(chat_router)
 app.include_router(ingestion.router)
 app.include_router(crud.router)

@@ -1,75 +1,76 @@
 """
-Pydantic models for chat endpoints.
+Chat message models for unified chat API.
 """
 
-from typing import Any
+from datetime import datetime
+from typing import Any, Dict, Optional
 from pydantic import BaseModel, Field
 
 
-class ChatRequest(BaseModel):
-    """Chat request model."""
-
-    messages: list[dict[str, str]]  # [{role, content}]
-    session_id: str | None = None
-    stream: bool = True
-    enable_tools: bool = True
-    model: str | None = None
-    assistant_language: str | None = None
-
-
 class UnifiedChatRequest(BaseModel):
-    """Unified chat request that supports both text and audio input."""
-
-    messages: list[dict[str, str]]
-    text_input: str | None = None
-    audio_b64: str | None = None
+    """Request model for unified chat endpoint."""
+    text_input: Optional[str] = None
+    audio_b64: Optional[str] = None
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
-    expect_audio: bool = False
+    messages: Optional[list[Dict[str, Any]]] = None
+    session_id: Optional[str] = None
+    assistant_language: Optional[str] = None
     enable_tools: bool = True
-    session_id: str | None = None
-    model: str | None = None
-    stream: bool = True
-    assistant_language: str | None = None
+    model: Optional[str] = None
+    expect_audio: bool = False
 
 
 class UnifiedChatResponse(BaseModel):
-    """Unified chat response payload."""
+    """Response model for unified chat endpoint."""
+    content: Optional[str] = None
+    transcript: Optional[str] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    audio_b64: Optional[str] = None
+    audio_sample_rate: Optional[int] = None
+    stt_confidence: Optional[float] = None
+    stt_language: Optional[str] = None
+    tool_events: Optional[list[Dict[str, Any]]] = None
+    assistant_language: Optional[str] = None
 
-    content: str
-    transcript: str | None = None
-    metadata: dict[str, Any]
-    audio_b64: str | None = None
-    audio_sample_rate: int | None = None
-    stt_confidence: float | None = None
-    stt_language: str | None = None
-    tool_events: list[dict[str, Any]] = Field(default_factory=list)
-    logs: list[dict[str, str]] = Field(default_factory=list)
-    assistant_language: str | None = None
+
+class ChatRequest(BaseModel):
+    """Request model for streaming chat endpoint."""
+    messages: list[Dict[str, Any]]
+    session_id: Optional[str] = None
+    assistant_language: Optional[str] = None
+    enable_tools: bool = True
+    model: Optional[str] = None
+    stream: bool = True
 
 
 class VoiceTurnRequest(BaseModel):
-    """Turn-based voice interaction request."""
-
-    messages: list[dict[str, str]]
+    """Request model for voice turn endpoint."""
     audio_b64: str
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
-    expect_audio: bool = True
+    messages: Optional[list[Dict[str, Any]]] = None
+    session_id: Optional[str] = None
+    assistant_language: Optional[str] = None
     enable_tools: bool = True
-    session_id: str | None = None
-    model: str | None = None
-    assistant_language: str | None = None
+    model: Optional[str] = None
+    expect_audio: bool = False
 
 
 class VoiceTurnResponse(BaseModel):
-    """Voice turn response payload."""
-
+    """Response model for voice turn endpoint."""
     transcript: str
     assistant_text: str
-    metadata: dict[str, Any]
-    audio_b64: str | None = None
-    audio_sample_rate: int | None = None
-    stt_confidence: float | None = None
-    stt_language: str | None = None
-    tool_events: list[dict[str, Any]] = Field(default_factory=list)
-    logs: list[dict[str, str]] = Field(default_factory=list)
-    assistant_language: str | None = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+    audio_b64: Optional[str] = None
+    audio_sample_rate: Optional[int] = None
+    stt_confidence: Optional[float] = None
+    stt_language: Optional[str] = None
+    tool_events: Optional[list[Dict[str, Any]]] = None
+    logs: Optional[list[Dict[str, str]]] = None
+    assistant_language: Optional[str] = None
+
+
+class ChatMessage(BaseModel):
+    """Chat message model."""
+    role: str
+    content: str
+    timestamp: Optional[str] = None
