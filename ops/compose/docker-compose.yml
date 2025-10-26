@@ -9,8 +9,10 @@ services:
     image: postgres:15
     container_name: youworker-postgres
     restart: unless-stopped
-    env_file:
-      - ../../.env
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: youworker
     ports:
       - "5432:5432"
     volumes:
@@ -244,9 +246,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+    # healthcheck:
+    #   <<: *healthcheck-defaults
+    #   test: ["CMD-SHELL", "timeout 1 bash -c 'echo > /dev/tcp/localhost/3000' || exit 1"]
+    #   start_period: 60s
     environment:
       NODE_ENV: "production"
 

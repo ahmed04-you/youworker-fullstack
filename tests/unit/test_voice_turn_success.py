@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from apps.api import main
+from apps.api.routes.deps import get_current_user_with_collection_access
 
 
 def _make_wav(duration_ms: int = 50, sample_rate: int = 16000) -> bytes:
@@ -26,12 +27,21 @@ def _make_wav(duration_ms: int = 50, sample_rate: int = 16000) -> bytes:
 @pytest.fixture
 def voice_client(monkeypatch: pytest.MonkeyPatch):
     # Stub database session context manager
+    from unittest.mock import MagicMock, AsyncMock
+
     class FakeSession:
         id = 1
 
+    mock_session = AsyncMock()
+    mock_session.add = MagicMock()
+    mock_session.flush = AsyncMock()
+    mock_session.commit = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=AsyncMock(scalar_one_or_none=AsyncMock(return_value=None)))
+    mock_session.scalar = AsyncMock(return_value=None)
+
     @asynccontextmanager
-    async def fake_session() -> AsyncIterator[None]:
-        yield None
+    async def fake_session() -> AsyncIterator[AsyncMock]:
+        yield mock_session
 
     monkeypatch.setattr("packages.db.session.get_async_session", fake_session)
     monkeypatch.setattr("packages.db.get_async_session", fake_session)
@@ -41,8 +51,11 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
     async def noop(*args: Any, **kwargs: Any) -> None:
         return None
 
-    async def fake_get_or_create_session(*args: Any, **kwargs: Any) -> FakeSession:
-        return FakeSession()
+    async def fake_get_or_create_session(session: AsyncMock, *args: Any, **kwargs: Any) -> FakeSession:
+        cs = FakeSession()
+        session.add(cs)
+        await session.flush()
+        return cs
 
     monkeypatch.setattr("packages.db.crud.get_or_create_session", fake_get_or_create_session)
     monkeypatch.setattr("packages.db.crud.add_message", noop)
@@ -53,14 +66,13 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("packages.db.crud.start_tool_run", fake_start_tool_run)
     monkeypatch.setattr("packages.db.crud.finish_tool_run", noop)
 
-    class FakeUser:
-        id = 1
-        username = "root"
-        api_key = "dev-root-key"
-        is_root = True
+    async def fake_get_current_active_user() -> dict:
+        return {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
 
-    async def fake_ensure_root_user(*args: Any, **kwargs: Any) -> FakeUser:
-        return FakeUser()
+    main.app.dependency_overrides[get_current_user_with_collection_access] = lambda: {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
+
+    async def fake_ensure_root_user(*args: Any, **kwargs: Any) -> dict:
+        return {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
 
     async def fake_grant_collection_access(*args: Any, **kwargs: Any) -> None:
         return None
@@ -68,14 +80,6 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("packages.db.crud.ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
     monkeypatch.setattr("apps.api.auth.security.ensure_root_user", fake_ensure_root_user)
-
-    # Override FastAPI dependency for authentication
-    from apps.api.auth.security import get_current_active_user
-
-    async def fake_get_current_active_user() -> FakeUser:
-        return FakeUser()
-
-    main.app.dependency_overrides[get_current_active_user] = fake_get_current_active_user
 
     # Stub transcription and synthesis
     async def fake_transcribe(audio_pcm: bytes, sample_rate: int) -> dict[str, Any]:
@@ -110,6 +114,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
             async for event in fake_agent_loop(**kwargs):
                 yield event
 
+    from unittest.mock import Mock
     fake_agent_instance = FakeAgentLoop()
     main.app.state.agent_loop = fake_agent_instance
 

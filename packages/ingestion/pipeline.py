@@ -122,7 +122,12 @@ class IngestionPipeline:
         tasks = [
             asyncio.create_task(
                 self._process_item_task(
-                    idx, item, tags=tags, from_web=from_web, collection_name=collection_name, semaphore=semaphore
+                    idx,
+                    item,
+                    tags=tags,
+                    from_web=from_web,
+                    collection_name=collection_name,
+                    semaphore=semaphore,
                 )
             )
             for idx, item in enumerate(items)
@@ -172,7 +177,9 @@ class IngestionPipeline:
     ) -> tuple[int, IngestionItem, int, Exception | None]:
         async with semaphore:
             try:
-                chunk_count = await self._process_item(item, tags=tags, from_web=from_web, collection_name=collection_name)
+                chunk_count = await self._process_item(
+                    item, tags=tags, from_web=from_web, collection_name=collection_name
+                )
                 return (index, item, chunk_count, None)
             except Exception as exc:
                 logger.error(f"ingestion-item-error: {str(exc)}")

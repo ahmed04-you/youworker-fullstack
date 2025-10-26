@@ -123,7 +123,7 @@ async def unified_chat_endpoint(
         chat_session = await get_or_create_chat_session(
             db,
             user_id=current_user["id"],
-            external_id=unified_request.session_id,
+            external_id=unified_request.session_id or "default",
             model=request_model,
             enable_tools=unified_request.enable_tools,
         )
@@ -142,6 +142,7 @@ async def unified_chat_endpoint(
             collected_chunks: list[str] = []
             local_final_text = ""
             local_metadata: dict[str, Any] = {"assistant_language": assistant_language}
+            last_tool_run_id_local: Optional[int] = last_tool_run_id
 
             try:
                 async for event in agent_loop.run_until_completion(
@@ -156,8 +157,12 @@ async def unified_chat_endpoint(
 
                     if event_type == "tool":
                         async with get_async_session() as db:
-                            last_tool_run_id, data = await handle_tool_event(
-                                db, current_user["id"], chat_session_id, data, last_tool_run_id
+                            last_tool_run_id_local, data = await handle_tool_event(
+                                db,
+                                current_user["id"],
+                                chat_session_id,
+                                data,
+                                last_tool_run_id_local,
                             )
                         tool_events.append(data)
                         pad = pad_pending
@@ -306,7 +311,7 @@ async def unified_chat_endpoint(
     # Non-streaming response
     final_text = ""
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
-    last_tool_run_id_nonstream: Optional[int] = None
+    last_tool_run_id_nonstream: Optional[int] = last_tool_run_id
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,

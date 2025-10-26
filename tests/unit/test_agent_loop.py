@@ -65,10 +65,17 @@ async def test_agent_enforces_single_tool_rule(agent_loop, mock_ollama_client):
 
     messages = [ChatMessage(role="user", content="Test query")]
 
-    # Expect the raise for multiple tool calls
-    with pytest.raises(ToolCallViolationError):
-        async for event in agent_loop.run_turn_stepper(messages, language="it"):
-            pass
+    result = None
+    async for event in agent_loop.run_turn_stepper(messages, language="it"):
+        if event["type"] == "complete":
+            result = event["result"]
+            break
+
+    # Verify only first tool call is kept, no exception raised
+    assert result is not None
+    assert result.tool_calls is not None
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].id == "call_1"
 
 
 @pytest.mark.asyncio

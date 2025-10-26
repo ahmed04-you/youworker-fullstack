@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Sequence
+from typing import Any, MutableMapping, Sequence
 
 from packages.vectorstore.schema import DocumentSource
 

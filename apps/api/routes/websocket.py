@@ -238,7 +238,7 @@ async def handle_text_message(
         )
 
         # Get conversation history
-        conversation = prepare_chat_messages([])  # Load from session in real implementation
+        conversation = await prepare_chat_messages([])  # Load from session in real implementation
         conversation.append(LLMChatMessage(role="user", content=message.content))
 
         # Persist user message
@@ -431,7 +431,6 @@ async def stream_agent_response(
             elif event_type == "done":
                 # Final response
                 final_text = data.get("final_text", collected_text)
-                metadata = data.get("metadata", {})
 
                 # Persist final message
                 async with get_async_session() as db:
@@ -574,7 +573,7 @@ async def unified_chat_endpoint(
         raise HTTPException(status_code=400, detail="No content to process")
 
     # Build conversation
-    conversation = prepare_chat_messages(request.messages or [])
+    conversation = await prepare_chat_messages(request.messages or [])
     conversation.append(LLMChatMessage(role="user", content=text_content))
 
     assistant_language = resolve_assistant_language(request.assistant_language or "it")

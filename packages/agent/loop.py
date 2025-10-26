@@ -199,9 +199,10 @@ class AgentLoop:
             logger.info(f"Agent emitted {len(tool_calls_buffer)} tool call(s)")
 
             if len(tool_calls_buffer) > 1:
-                raise ToolCallViolationError(
-                    f"Agent emitted {len(tool_calls_buffer)} tool calls; only one allowed per turn"
+                logger.warning(
+                    f"Agent emitted {len(tool_calls_buffer)} tool calls; keeping only first"
                 )
+                tool_calls_buffer = tool_calls_buffer[:1]
 
             # Keep only the first tool call
             selected_tool_call = tool_calls_buffer[0]

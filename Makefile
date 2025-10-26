@@ -39,23 +39,23 @@ compose-up:
 
 # Stop all services
 compose-down:
-	$(COMPOSE_CMD) down
+	$(COMPOSE_CMD) --env-file .env down
 
 # View logs
 compose-logs:
-	$(COMPOSE_CMD) logs -f
+	$(COMPOSE_CMD) --env-file .env logs -f
 
 # Restart services
 compose-restart:
-	$(COMPOSE_CMD) restart
+	$(COMPOSE_CMD) --env-file .env restart
 
 # Build images
 build:
-	$(COMPOSE_CMD) build
+	$(COMPOSE_CMD) --env-file .env build
 
 # Clean everything
 clean:
-	$(COMPOSE_CMD) down -v --rmi all
+	$(COMPOSE_CMD) --env-file .env down -v --rmi all
 	@echo "Cleaned up all containers, volumes, and images"
 
 # Reset persisted data and start fresh
