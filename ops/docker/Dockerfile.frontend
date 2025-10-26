@@ -1,63 +1,33 @@
-FROM node:20-alpine AS base
-
-ENV NEXT_TELEMETRY_DISABLED=1
-WORKDIR /app
-
-RUN apk add --no-cache libc6-compat curl && rm -rf /var/cache/apk/*
-
-FROM base AS deps
+FROM node:20-alpine AS builder
 
 WORKDIR /app
+
+# Copy package files
 COPY apps/frontend/package*.json ./
 
-RUN npm ci --legacy-peer-deps --no-audit --no-fund
+# Install dependencies
+RUN npm ci
 
-FROM base AS build
+# Copy source code
+COPY apps/frontend/ .
 
-ARG NEXT_PUBLIC_API_BASE_URL
-ARG NEXT_PUBLIC_API_PORT
-ARG NEXT_PUBLIC_API_KEY
+# Build the application
+RUN npm run build
 
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
-COPY apps/frontend ./
-
-# Explicitly set environment variables for Next.js build
-# Next.js will embed NEXT_PUBLIC_* variables into the client bundle
-ENV NEXT_INTERNAL_API_BASE_URL=http://api:8001 \
-    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
-    NEXT_PUBLIC_API_PORT=${NEXT_PUBLIC_API_PORT} \
-    NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
-
-# Also create .env.production for Next.js to read
-RUN echo "NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}" > .env.production && \
-    echo "NEXT_PUBLIC_API_PORT=${NEXT_PUBLIC_API_PORT}" >> .env.production && \
-    echo "NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}" >> .env.production && \
-    cat .env.production
-
-RUN npm run build \
-    && find .next -name "*.js" -exec gzip -k {} \; \
-    && find .next -name "*.css" -exec gzip -k {} \;
-
-FROM base AS runner
-
-ARG NEXT_PUBLIC_API_BASE_URL
-ARG NEXT_PUBLIC_API_PORT
-ARG NEXT_PUBLIC_API_KEY
+# Production stage
+FROM node:20-alpine AS runner
 
 WORKDIR /app
-ENV NODE_ENV=production \
-    NEXT_INTERNAL_API_BASE_URL=http://api:8001 \
-    NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL} \
-    NEXT_PUBLIC_API_PORT=${NEXT_PUBLIC_API_PORT} \
-    NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY} \
-    PORT=3000 \
-    HOSTNAME=0.0.0.0
 
-COPY --from=build /app/public ./public
-COPY --from=build /app/.next/standalone ./
-COPY --from=build /app/.next/static ./.next/static
+ENV NODE_ENV production
+
+# Copy built application
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
 
 EXPOSE 3000
+
+ENV PORT 3000
 
 CMD ["node", "server.js"]

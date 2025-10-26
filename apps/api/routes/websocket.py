@@ -599,6 +599,13 @@ async def unified_chat_endpoint(
     )
 
 
+@router.get("/chat/", include_in_schema=False)
+@router.get("/chat", include_in_schema=False)
+async def chat_health_check():
+    """Health check endpoint for chat service."""
+    return {"status": "ok", "message": "Chat service is ready"}
+
+
 @router.get("/chat/test")
 async def websocket_test_page():
     """Simple test page for WebSocket connection."""

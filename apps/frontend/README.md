@@ -1,143 +1,36 @@
-# YouWorker.AI Frontend
-
-A modern, beautiful Next.js 16 frontend for YouWorker.AI - an intelligent AI assistant powered by local LLMs.
-
-## Features
-
-- 🎨 **Modern UI/UX** with Tailwind CSS and shadcn/ui components
-- 💬 **Real-time Chat** using WebSockets and ChatKit SDK
-- 🎤 **Voice Input** with waveform visualization
-- 📊 **Analytics Dashboard** with interactive charts
-- 📚 **Document Ingestion** with drag-and-drop upload
-- 📜 **Chat History** with search and filters
-- 🌓 **Dark/Light Mode** with system preference support
-- 📱 **Responsive Design** for mobile, tablet, and desktop
-- ♿ **Accessibility** with ARIA labels and keyboard navigation
-- 🔔 **Real-time Notifications** using Sonner
-
-## Tech Stack
-
-- **Framework**: Next.js 16 (App Router)
-- **Language**: TypeScript 5
-- **Styling**: Tailwind CSS 3
-- **UI Components**: shadcn/ui, Radix UI, ChatKit
-- **State Management**: Zustand
-- **Charts**: Recharts
-- **Icons**: Lucide React
-- **Animations**: Framer Motion
-- **Theme**: next-themes
+This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 18+ 
-- npm or yarn
-- Running backend API (see `apps/api/`)
-
-### Installation
+First, run the development server:
 
 ```bash
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.local .env.local
-# Edit .env.local with your API URLs
-
-# Run development server
 npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+# or
+bun dev
 ```
 
-### Environment Variables
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-```bash
-NEXT_PUBLIC_API_URL=http://localhost:8001
-NEXT_PUBLIC_WS_URL=ws://localhost:8001/ws
-NEXT_PUBLIC_APP_NAME=YouWorker.AI
-```
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-### Build for Production
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
-```bash
-npm run build
-npm start
-```
+## Learn More
 
-## Project Structure
+To learn more about Next.js, take a look at the following resources:
 
-```
-apps/frontend/
-├── app/                    # Next.js App Router pages
-│   ├── chat/              # Main chat interface
-│   ├── history/           # Chat session history
-│   ├── analytics/         # Analytics dashboard
-│   ├── ingest/            # Document ingestion
-│   ├── settings/          # User settings
-│   ├── layout.tsx         # Root layout
-│   └── globals.css        # Global styles
-├── components/            # Reusable React components
-│   ├── ui/               # shadcn/ui components
-│   ├── sidebar.tsx       # Navigation sidebar
-│   └── header.tsx        # Top header bar
-├── lib/                  # Utility functions and clients
-│   ├── api-client.ts     # REST API client
-│   ├── websocket-client.ts # WebSocket client
-│   └── utils.ts          # Helper functions
-└── public/               # Static assets
-```
+- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-## Features in Detail
+You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
-### Chat Interface
-- Real-time streaming responses
-- Message history persistence
-- Tool execution visualization
-- Voice input/output support
-- Markdown rendering
-- Code syntax highlighting
+## Deploy on Vercel
 
-### Analytics Dashboard
-- Session statistics
-- Token usage tracking
-- Tool usage metrics
-- Interactive charts and graphs
-- Date range filtering
+The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
-### Document Ingestion
-- Drag-and-drop file upload
-- Multiple file format support (PDF, text, audio, web)
-- Progress tracking
-- Collection management
-- Batch processing
-
-### Settings
-- Theme preferences (dark/light/system)
-- API key management
-- Model selection
-- Voice settings
-- Notification preferences
-
-## Development
-
-### Code Style
-
-- TypeScript strict mode enabled
-- ESLint for code quality
-- Prettier for code formatting
-- Component-first architecture
-
-### Adding New Features
-
-1. Create components in `components/`
-2. Add pages in `app/`
-3. Update API client in `lib/` if needed
-4. Add types in component files or separate `.d.ts` files
-
-## Contributing
-
-See [CONTRIBUTING.md](../../docs/CONTRIBUTING.md) for guidelines.
-
-## License
-
-Proprietary - All rights reserved
+Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
