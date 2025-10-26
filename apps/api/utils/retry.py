@@ -89,9 +89,7 @@ def retry_async(
 
                     # Check if we should retry this error
                     if not retry_checker(e):
-                        logger.warning(
-                            f"{func.__name__} failed with non-retryable error: {e}"
-                        )
+                        logger.warning(f"{func.__name__} failed with non-retryable error: {e}")
                         raise
 
                     # Don't sleep on the last attempt
@@ -103,9 +101,7 @@ def retry_async(
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.error(
-                            f"{func.__name__} failed after {max_attempts} attempts: {e}"
-                        )
+                        logger.error(f"{func.__name__} failed after {max_attempts} attempts: {e}")
 
             # If we get here, all attempts failed
             if last_exception:

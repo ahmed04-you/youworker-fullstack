@@ -4,7 +4,6 @@ Voice turn endpoint for audio-based interactions.
 
 import base64
 import logging
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -13,18 +12,19 @@ from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
+from typing import Optional
+
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
 from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
 from packages.agent import AgentLoop
 from packages.db import get_async_session
 from packages.llm import ChatMessage
 
+from .helpers import handle_tool_event, prepare_chat_messages, resolve_assistant_language
+
 from .models import VoiceTurnRequest, VoiceTurnResponse
-from .helpers import prepare_chat_messages, resolve_assistant_language
 from .persistence import (
     persist_last_user_message,
-    record_tool_start,
-    record_tool_end,
     persist_final_assistant_message,
     get_or_create_chat_session,
 )
@@ -70,10 +70,10 @@ async def voice_turn_endpoint(
         raise HTTPException(status_code=400, detail="Transcription produced empty text")
 
     # Build conversation history
-    conversation: list[ChatMessage] = prepare_chat_messages(voice_request.messages)
+    conversation: list[ChatMessage] = await prepare_chat_messages(voice_request.messages or [])
     conversation.append(ChatMessage(role="user", content=transcript))
 
-    assistant_language = resolve_assistant_language(voice_request.assistant_language)
+    assistant_language = resolve_assistant_language(voice_request.assistant_language or "")
     request_model = voice_request.model or settings.chat_model
 
     # Persist user turn
@@ -94,7 +94,7 @@ async def voice_turn_endpoint(
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
     tool_events: list[dict[str, Any]] = []
     logs: list[dict[str, str]] = []
-    pending_tool_run: int | None = None
+    last_tool_run_id_voice: Optional[int] = None
 
     try:
         async for event in agent_loop.run_until_completion(
@@ -107,48 +107,14 @@ async def voice_turn_endpoint(
             etype = event.get("event")
             data = event.get("data", {}) or {}
 
-            if etype == "token":
-                final_text += data.get("text", "")
-
-            elif etype == "tool":
+            if etype == "tool":
+                async with get_async_session() as db:
+                    last_tool_run_id_voice, data = await handle_tool_event(
+                        db, current_user["id"], chat_session_id, data, last_tool_run_id_voice
+                    )
                 tool_events.append(data)
-                status = data.get("status")
-                ts_raw = data.get("ts")
-                try:
-                    parsed_ts = datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
-                except (ValueError, TypeError) as e:
-                    logger.warning("Invalid timestamp format: %s", e)
-                    parsed_ts = datetime.utcnow()
-
-                if status == "start":
-                    async with get_async_session() as db:
-                        pending_tool_run = await record_tool_start(
-                            db,
-                            user_id=current_user["id"],
-                            session_id=chat_session_id,
-                            tool_name=data.get("tool"),
-                            args=data.get("args"),
-                            start_ts=parsed_ts,
-                        )
-                else:
-                    if pending_tool_run is not None:
-                        latency_val = data.get("latency_ms")
-                        latency_ms = None
-                        if isinstance(latency_val, (int, float)):
-                            latency_ms = int(latency_val)
-
-                        async with get_async_session() as db:
-                            await record_tool_end(
-                                db,
-                                run_id=pending_tool_run,
-                                status=status,
-                                end_ts=parsed_ts,
-                                latency_ms=latency_ms,
-                                result_preview=(data.get("result_preview") or None),
-                                tool_name=data.get("tool"),
-                            )
-                        pending_tool_run = None
-
+            elif etype == "token":
+                final_text += data.get("text", "")
             elif etype == "log":
                 logs.append(
                     {
@@ -157,7 +123,6 @@ async def voice_turn_endpoint(
                         "assistant_language": assistant_language,
                     }
                 )
-
             elif etype == "done":
                 meta = data.get("metadata", {}) or {}
                 if isinstance(meta, dict):

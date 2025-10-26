@@ -42,7 +42,9 @@ class ChatSession(AsyncAttrs, Base):
     title: Mapped[Optional[str]] = mapped_column(String(256))
     model: Mapped[Optional[str]] = mapped_column(String(128))
     enable_tools: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
 
     user: Mapped[User] = relationship(back_populates="sessions")
@@ -50,9 +52,7 @@ class ChatSession(AsyncAttrs, Base):
         back_populates="session", cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        Index("idx_chat_sessions_user_created", "user_id", created_at.desc()),
-    )
+    __table_args__ = (Index("idx_chat_sessions_user_created", "user_id", created_at.desc()),)
 
 
 class ChatMessage(AsyncAttrs, Base):
@@ -66,7 +66,9 @@ class ChatMessage(AsyncAttrs, Base):
     content: Mapped[str] = mapped_column(Text)
     tool_call_name: Mapped[Optional[str]] = mapped_column(String(256))
     tool_call_id: Mapped[Optional[str]] = mapped_column(String(128))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
     tokens_in: Mapped[Optional[int]] = mapped_column(Integer)
     tokens_out: Mapped[Optional[int]] = mapped_column(Integer)
 
@@ -74,8 +76,13 @@ class ChatMessage(AsyncAttrs, Base):
 
     __table_args__ = (
         Index("idx_chat_messages_session_created", "session_id", created_at.desc()),
-        Index("idx_chat_messages_tokens", "session_id", "tokens_in", "tokens_out",
-              postgresql_where=tokens_in.isnot(None)),
+        Index(
+            "idx_chat_messages_tokens",
+            "session_id",
+            "tokens_in",
+            "tokens_out",
+            postgresql_where=tokens_in.isnot(None),
+        ),
     )
 
 
@@ -108,10 +115,11 @@ class Tool(AsyncAttrs, Base):
         DateTime(timezone=True), default=datetime.utcnow
     )
 
-    @validates('input_schema')
+    @validates("input_schema")
     def validate_input_schema(self, key, value):
         if value:
             import json
+
             schema_json = json.dumps(value, ensure_ascii=False)
             if len(schema_json) > 10000:  # 10KB limit
                 raise ValueError("input_schema too large (max 10KB)")
@@ -134,7 +142,9 @@ class ToolRun(AsyncAttrs, Base):
     )
     tool_name: Mapped[str] = mapped_column(String(256), index=True)
     status: Mapped[str] = mapped_column(String(32), index=True)
-    start_ts: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    start_ts: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
     end_ts: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     latency_ms: Mapped[Optional[int]] = mapped_column(Integer)
     args: Mapped[Optional[dict]] = mapped_column(JSONB)
@@ -161,13 +171,13 @@ class IngestionRun(AsyncAttrs, Base):
     totals_files: Mapped[int] = mapped_column(Integer, default=0)
     totals_chunks: Mapped[int] = mapped_column(Integer, default=0)
     errors: Mapped[Optional[dict]] = mapped_column(JSONB)
-    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="success", index=True)
 
-    __table_args__ = (
-        Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),
-    )
+    __table_args__ = (Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),)
 
 
 class Document(AsyncAttrs, Base):
@@ -182,21 +192,22 @@ class Document(AsyncAttrs, Base):
     tags: Mapped[Optional[dict]] = mapped_column(JSONB)
     collection: Mapped[Optional[str]] = mapped_column(String(128), index=True)
     path_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, index=True
+    )
     last_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
-    @validates('tags')
+    @validates("tags")
     def validate_tags(self, key, value):
         if value:
             import json
+
             tags_json = json.dumps(value, ensure_ascii=False)
             if len(tags_json) > 5000:  # 5KB limit for tags
                 raise ValueError("tags too large (max 5KB)")
         return value
 
-    __table_args__ = (
-        Index("idx_documents_collection_created", "collection", created_at.desc()),
-    )
+    __table_args__ = (Index("idx_documents_collection_created", "collection", created_at.desc()),)
 
 
 class UserToolAccess(AsyncAttrs, Base):

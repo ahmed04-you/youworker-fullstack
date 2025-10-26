@@ -4,14 +4,13 @@ Persistence functions for unified chat API.
 
 from datetime import datetime
 from typing import Any, Dict, Optional
-from packages.db import get_async_session
 from packages.db.crud import (
     get_or_create_session,
     add_message,
     start_tool_run,
     finish_tool_run,
 )
-from packages.db.models import ChatSession, ChatMessage
+from packages.db.models import ChatSession
 
 
 async def persist_last_user_message(
@@ -107,7 +106,7 @@ async def get_chat_session_by_external_id(
 ) -> Optional[ChatSession]:
     """Get a chat session by external ID."""
     from sqlalchemy import select
-    
+
     q = select(ChatSession).where(ChatSession.external_id == external_id)
     result = await db.execute(q)
     return result.scalar_one_or_none()

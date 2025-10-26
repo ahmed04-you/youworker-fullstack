@@ -15,10 +15,15 @@ from typing import AsyncIterator, Dict, Any
 from packages.llm import OllamaClient, ChatMessage, ToolCall
 from packages.agent.registry import MCPRegistry
 
+
+class ToolCallViolationError(Exception):
+    """Raised when agent violates single-tool rule."""
+
+
 logger = logging.getLogger(__name__)
 
 AGENT_SYSTEM_PROMPTS: dict[str, str] = {
-    "it": """Sei YouWorker.AI, l'assistente professionale di YouWorker.
+    "it": """Sei YouWorker.AI, l'assistente professionale di YouCo.
 Parli esclusivamente in italiano, con un tono chiaro, concreto e orientato all'azione.
 
 Contesto e aspettative:
@@ -36,7 +41,7 @@ Linee guida di stile:
 - Se citi codice o comandi, utilizza blocchi formattati e specifica sempre il contesto (file, directory o prerequisiti).
 - In caso di limiti, incertezze o necessità di ulteriori dati dall'utente, esplicitali in modo proattivo e suggerisci i prossimi passi più efficaci.
 """,
-    "en": """You are YouWorker.AI, the professional assistant for YouWorker.
+    "en": """You are YouWorker.AI, the professional assistant for YouCo.
 Respond exclusively in English with a clear, actionable tone.
 
 Context & expectations:
@@ -194,9 +199,8 @@ class AgentLoop:
             logger.info(f"Agent emitted {len(tool_calls_buffer)} tool call(s)")
 
             if len(tool_calls_buffer) > 1:
-                logger.warning(
-                    f"SINGLE-TOOL VIOLATION: Agent emitted {len(tool_calls_buffer)} tool calls. "
-                    "Keeping only the first."
+                raise ToolCallViolationError(
+                    f"Agent emitted {len(tool_calls_buffer)} tool calls; only one allowed per turn"
                 )
 
             # Keep only the first tool call
@@ -246,10 +250,20 @@ class AgentLoop:
             else:
                 return str(result)
 
-        except Exception as e:
-            error_msg = f"Tool execution failed: {str(e)}"
+        except (ConnectionError, TimeoutError, OSError) as e:
+            error_msg = f"Network error in tool execution: {str(e)}"
             logger.error(error_msg)
-            return json.dumps({"error": error_msg})
+            return json.dumps({"error": error_msg, "type": "network_error"})
+
+        except ValueError as e:
+            error_msg = f"Invalid arguments for tool: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg, "type": "invalid_args"})
+
+        except Exception as e:
+            error_msg = f"Unexpected error in tool execution: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({"error": error_msg, "type": "unexpected_error"})
 
     async def run_until_completion(
         self,

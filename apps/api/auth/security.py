@@ -140,8 +140,14 @@ async def get_current_user_optional(
                 # Fall back to API key authentication
 
         # If JWT failed or not provided, try API key authentication
-        if not user and provided_api_key and secrets.compare_digest(provided_api_key, settings.root_api_key):
-            user = await _ensure_root_user_impl(session=db, username="root", api_key=provided_api_key)
+        if (
+            not user
+            and provided_api_key
+            and secrets.compare_digest(provided_api_key, settings.root_api_key)
+        ):
+            user = await _ensure_root_user_impl(
+                session=db, username="root", api_key=provided_api_key
+            )
             if user:
                 return user
 

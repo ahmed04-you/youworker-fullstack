@@ -7,6 +7,7 @@ Tools:
 - add: Add/subtract time delta from a timestamp
 - parse_natural: Parse natural language dates (e.g., "next Friday 3pm UTC")
 """
+
 import logging
 import json
 import re
@@ -369,11 +370,17 @@ async def mcp_socket(ws: WebSocket):
                 req = json.loads(raw)
             except Exception:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32700, "message": "Parse error", "data": {"raw": str(raw)[:200]}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {
+                                "code": -32700,
+                                "message": "Parse error",
+                                "data": {"raw": str(raw)[:200]},
+                            },
+                        }
+                    )
                 )
                 continue
 
@@ -388,11 +395,19 @@ async def mcp_socket(ws: WebSocket):
                         "serverInfo": {"name": "datetime", "version": "0.1.0"},
                         "capabilities": {"tools": {"list": True, "call": True}},
                     }
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
+                    )
 
                 elif method == "tools/list":
                     await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"tools": get_tools_schema()}})
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "result": {"tools": get_tools_schema()},
+                            }
+                        )
                     )
 
                 elif method == "tools/call":
@@ -419,39 +434,63 @@ async def mcp_socket(ws: WebSocket):
                         )
                     else:
                         await ws.send_text(
-                            json.dumps({
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {"code": -32601, "message": f"Unknown tool: {name}", "data": {"name": name}},
-                            })
+                            json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": req_id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": f"Unknown tool: {name}",
+                                        "data": {"name": name},
+                                    },
+                                }
+                            )
                         )
                         continue
 
                     await ws.send_text(
                         json.dumps(
-                            {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "json", "json": result}]}}
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "result": {"content": [{"type": "json", "json": result}]},
+                            }
                         )
                     )
 
                 elif method == "ping":
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
+                    )
 
                 else:
                     await ws.send_text(
-                        json.dumps({
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {"code": -32601, "message": "Method not found", "data": {"method": method}},
-                        })
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "error": {
+                                    "code": -32601,
+                                    "message": "Method not found",
+                                    "data": {"method": method},
+                                },
+                            }
+                        )
                     )
 
             except Exception as e:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {"code": -32000, "message": str(e), "data": {"type": type(e).__name__}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {
+                                "code": -32000,
+                                "message": str(e),
+                                "data": {"type": type(e).__name__},
+                            },
+                        }
+                    )
                 )
     except WebSocketDisconnect:
         logger.info("MCP WebSocket disconnected (datetime)")

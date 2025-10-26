@@ -5,7 +5,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock
 
 from packages.llm import ChatMessage, ToolCall
-from packages.agent import AgentLoop, MCPRegistry
+from packages.agent import AgentLoop, MCPRegistry, ToolCallViolationError
 
 
 @pytest.fixture
@@ -65,17 +65,10 @@ async def test_agent_enforces_single_tool_rule(agent_loop, mock_ollama_client):
 
     messages = [ChatMessage(role="user", content="Test query")]
 
-    # Consume streaming generator and capture final result
-    result = None
-    async for event in agent_loop.run_turn_stepper(messages, language="it"):
-        if event["type"] == "complete":
-            result = event["result"]
-
-    # Should enforce single-tool rule
-    assert result.requires_followup is True
-    assert result.tool_calls is not None
-    assert len(result.tool_calls) == 1  # Only first tool kept
-    assert result.tool_calls[0].id == "call_1"
+    # Expect the raise for multiple tool calls
+    with pytest.raises(ToolCallViolationError):
+        async for event in agent_loop.run_turn_stepper(messages, language="it"):
+            pass
 
 
 @pytest.mark.asyncio

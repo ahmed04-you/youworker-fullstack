@@ -5,7 +5,6 @@ Unified chat endpoint supporting both text and audio input.
 import asyncio
 import base64
 import logging
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Depends, Request
@@ -16,19 +15,22 @@ from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
+from typing import Optional
+
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
 from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
+from apps.api.utils.error_handling import handle_audio_errors, handle_ollama_errors
 from apps.api.utils.response_formatting import sse_format
 from packages.agent import AgentLoop
 from packages.db import get_async_session
 from packages.llm import ChatMessage
 
+from .helpers import handle_tool_event, prepare_chat_messages, resolve_assistant_language
+
+
 from .models import UnifiedChatRequest, UnifiedChatResponse
-from .helpers import prepare_chat_messages, resolve_assistant_language
 from .persistence import (
     persist_last_user_message,
-    record_tool_start,
-    record_tool_end,
     persist_final_assistant_message,
     get_or_create_chat_session,
 )
@@ -88,6 +90,8 @@ async def process_input(
 
 @router.post("/unified-chat", response_model=UnifiedChatResponse)
 @limiter.limit("30/minute")
+@handle_audio_errors
+@handle_ollama_errors
 async def unified_chat_endpoint(
     request: Request,
     unified_request: UnifiedChatRequest,
@@ -108,10 +112,10 @@ async def unified_chat_endpoint(
     text_content, transcript, stt_confidence, stt_language = await process_input(unified_request)
 
     # Build conversation
-    conversation: list[ChatMessage] = prepare_chat_messages(unified_request.messages)
+    conversation: list[ChatMessage] = await prepare_chat_messages(unified_request.messages or [])
     conversation.append(ChatMessage(role="user", content=text_content))
 
-    assistant_language = resolve_assistant_language(unified_request.assistant_language)
+    assistant_language = resolve_assistant_language(unified_request.assistant_language or "")
     request_model = unified_request.model or settings.chat_model
 
     # Create/get session
@@ -128,6 +132,7 @@ async def unified_chat_endpoint(
 
     tool_events: list[dict[str, Any]] = []
     logs: list[dict[str, str]] = []
+    last_tool_run_id: Optional[int] = None
 
     # Streaming response
     if unified_request.stream:
@@ -135,78 +140,31 @@ async def unified_chat_endpoint(
         async def generate():
             pad_pending = True
             collected_chunks: list[str] = []
-            last_tool_run_id: int | None = None
             local_final_text = ""
             local_metadata: dict[str, Any] = {"assistant_language": assistant_language}
 
             try:
-                event_iterator = agent_loop.run_until_completion(
+                async for event in agent_loop.run_until_completion(
                     messages=conversation,
                     enable_tools=unified_request.enable_tools,
                     max_iterations=settings.max_agent_iterations,
                     language=assistant_language,
                     model=request_model,
-                ).__aiter__()
-
-                while True:
-                    try:
-                        event = await asyncio.wait_for(
-                            event_iterator.__anext__(),
-                            timeout=HEARTBEAT_INTERVAL_SECONDS,
-                        )
-                    except asyncio.TimeoutError:
-                        heartbeat = {"event": "heartbeat", "data": {}}
-                        yield sse_format(heartbeat, pad=pad_pending)
-                        pad_pending = False
-                        await asyncio.sleep(0)
-                        continue
-                    except StopAsyncIteration:
-                        break
-
-                    pad = pad_pending
-                    pad_pending = False
-
+                ):
                     event_type = event.get("event")
                     data = event.get("data", {}) or {}
 
                     if event_type == "tool":
-                        tool_events.append(data)
-                        ts_raw = data.get("ts")
-                        try:
-                            parsed_ts = (
-                                datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
+                        async with get_async_session() as db:
+                            last_tool_run_id, data = await handle_tool_event(
+                                db, current_user["id"], chat_session_id, data, last_tool_run_id
                             )
-                        except (ValueError, TypeError) as exc:
-                            logger.warning("Invalid timestamp format: %s", exc)
-                            parsed_ts = datetime.utcnow()
-
-                        if data.get("status") == "start":
-                            async with get_async_session() as db:
-                                last_tool_run_id = await record_tool_start(
-                                    db,
-                                    user_id=current_user["id"],
-                                    session_id=chat_session_id,
-                                    tool_name=data.get("tool"),
-                                    args=data.get("args"),
-                                    start_ts=parsed_ts,
-                                )
-                        else:
-                            latency_val = data.get("latency_ms")
-                            latency_ms = None
-                            if isinstance(latency_val, (int, float)):
-                                latency_ms = int(latency_val)
-
-                            async with get_async_session() as db:
-                                await record_tool_end(
-                                    db,
-                                    run_id=last_tool_run_id,
-                                    status=data.get("status"),
-                                    end_ts=parsed_ts,
-                                    latency_ms=latency_ms,
-                                    result_preview=(data.get("result_preview") or None),
-                                    tool_name=data.get("tool"),
-                                )
-                            last_tool_run_id = None
+                        tool_events.append(data)
+                        pad = pad_pending
+                        pad_pending = False
+                        yield sse_format({"event": event_type, "data": data}, pad=pad)
+                        await asyncio.sleep(0)
+                        continue
 
                     elif event_type == "token":
                         if isinstance(data, dict):
@@ -215,11 +173,21 @@ async def unified_chat_endpoint(
                         else:
                             text = ""
                         collected_chunks.append(text)
+                        pad = pad_pending
+                        pad_pending = False
+                        yield sse_format(event, pad=pad)
+                        await asyncio.sleep(0)
+                        continue
 
                     elif event_type == "log":
                         if isinstance(data, dict):
                             data.setdefault("assistant_language", assistant_language)
                             logs.append(data.copy())
+                        pad = pad_pending
+                        pad_pending = False
+                        yield sse_format(event, pad=pad)
+                        await asyncio.sleep(0)
+                        continue
 
                     elif event_type == "done":
                         if not isinstance(data, dict):
@@ -251,7 +219,9 @@ async def unified_chat_endpoint(
                         if unified_request.expect_audio and persisted_text:
                             try:
                                 # Allow fallback beep when TTS voice is unavailable.
-                                synth_result = await synthesize_speech(persisted_text, fallback=True)
+                                synth_result = await synthesize_speech(
+                                    persisted_text, fallback=True
+                                )
                                 if synth_result:
                                     wav_bytes, sr = synth_result
                                     audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -272,9 +242,20 @@ async def unified_chat_endpoint(
                             assistant_language=assistant_language,
                         )
                         event["data"] = response.model_dump()
+                        pad = pad_pending
+                        pad_pending = False
+                        yield sse_format(event, pad=pad)
+                        await asyncio.sleep(0)
+                        continue
 
-                    yield sse_format(event, pad=pad)
-                    await asyncio.sleep(0)
+                    # Heartbeat for long-running
+                    try:
+                        await asyncio.wait_for(asyncio.sleep(0), timeout=HEARTBEAT_INTERVAL_SECONDS)
+                    except asyncio.TimeoutError:
+                        heartbeat = {"event": "heartbeat", "data": {}}
+                        yield sse_format(heartbeat, pad=pad_pending)
+                        pad_pending = False
+                        continue
 
             except (HTTPStatusError, Exception) as e:
                 error_msg = (
@@ -325,6 +306,7 @@ async def unified_chat_endpoint(
     # Non-streaming response
     final_text = ""
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
+    last_tool_run_id_nonstream: Optional[int] = None
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
@@ -336,11 +318,14 @@ async def unified_chat_endpoint(
         etype = event.get("event")
         data = event.get("data", {}) or {}
 
-        if etype == "token":
-            final_text += data.get("text", "")
-        elif etype == "tool":
+        if etype == "tool":
+            async with get_async_session() as db:
+                last_tool_run_id_nonstream, data = await handle_tool_event(
+                    db, current_user["id"], chat_session_id, data, last_tool_run_id_nonstream
+                )
             tool_events.append(data)
-            # Similar tool handling as streaming...
+        elif etype == "token":
+            final_text += data.get("text", "")
         elif etype == "log":
             logs.append(
                 {

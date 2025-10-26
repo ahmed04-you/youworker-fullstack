@@ -141,7 +141,9 @@ def validate_file_path(
     return resolved_path
 
 
-def validate_tags(tags: list[str] | None, max_tags: int = 10, max_tag_length: int = 128) -> list[str]:
+def validate_tags(
+    tags: list[str] | None, max_tags: int = 10, max_tag_length: int = 128
+) -> list[str]:
     """
     Validate and sanitize a list of tags.
 

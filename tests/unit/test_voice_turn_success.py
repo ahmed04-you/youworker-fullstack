@@ -101,15 +101,17 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
         }
 
     class FakeAgentLoop:
-        model = "test-model"
+        def __init__(self):
+            self.ollama_client = Mock()
+            self.registry = Mock()
+            self.model = "test-model"
 
         async def run_until_completion(self, **kwargs: Any) -> AsyncIterator[dict[str, Any]]:
             async for event in fake_agent_loop(**kwargs):
                 yield event
 
-    original_agent_loop = main.agent_loop
-    main.agent_loop = FakeAgentLoop()
-    main.app.state.agent_loop = main.agent_loop
+    fake_agent_instance = FakeAgentLoop()
+    main.app.state.agent_loop = fake_agent_instance
 
     original_lifespan = main.app.router.lifespan_context
 
@@ -124,8 +126,7 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
 
     # Restore globals after test
     main.app.router.lifespan_context = original_lifespan
-    main.agent_loop = original_agent_loop
-    main.app.state.agent_loop = original_agent_loop
+    main.app.state.agent_loop = None  # Or original if saved
     main.app.dependency_overrides.clear()
 
 

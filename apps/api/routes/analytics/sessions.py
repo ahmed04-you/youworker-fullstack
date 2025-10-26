@@ -32,9 +32,7 @@ async def get_session_activity(
             select(
                 func.date_trunc("day", ChatSession.created_at).label("period"),
                 func.count(ChatSession.id).label("session_count"),
-                func.sum(case((ChatSession.enable_tools, 1), else_=0)).label(
-                    "tools_enabled_count"
-                ),
+                func.sum(case((ChatSession.enable_tools, 1), else_=0)).label("tools_enabled_count"),
             )
             .where(
                 and_(

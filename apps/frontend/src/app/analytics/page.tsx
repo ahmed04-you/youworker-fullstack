@@ -244,7 +244,7 @@ export default function AnalyticsPage() {
                           outerRadius={80}
                           fill="#8884d8"
                           dataKey="value"
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent }: any) => `${name} ${Math.round((percent || 0) * 100)}%`}
                         >
                           {tools.tools.map((tool, index) => (
                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -365,7 +365,7 @@ export default function AnalyticsPage() {
                                   outerRadius={80}
                                   fill="#8884d8"
                                   dataKey="value"
-                                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                  label={({ name, percent }: any) => `${name} ${Math.round((percent || 0) * 100)}%`}
                                 >
                                   {Object.entries(ingestion.by_type).map(([type, count], index) => (
                                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

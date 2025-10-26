@@ -221,7 +221,7 @@ async def ingest_upload_endpoint(
     if not valid_files:
         raise HTTPException(
             status_code=400,
-            detail="No valid files provided. Supported types: PDF, text, CSV, JSON, PNG, JPEG, MP3, WAV. Max size: 100MB per file."
+            detail="No valid files provided. Supported types: PDF, text, CSV, JSON, PNG, JPEG, MP3, WAV. Max size: 100MB per file.",
         )
 
     sanitized_tags: list[str] = []

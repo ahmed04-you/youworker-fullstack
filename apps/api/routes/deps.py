@@ -61,17 +61,17 @@ async def get_current_user_with_collection_access(
 ):
     """
     Get current authenticated user and ensure access to default collection.
-    
+
     This is a shared dependency used across multiple route modules.
-    Returns a dict with user info: {id, username, is_root}
+    Returns the User object.
     """
     from packages.db import get_async_session
-    
+
     # Ensure root has access to default collection
     try:
         from packages.vectorstore.schema import DEFAULT_COLLECTION
         from packages.db.crud import grant_user_collection_access
-        
+
         async with get_async_session() as db:
             await grant_user_collection_access(
                 db, user_id=current_user.id, collection_name=DEFAULT_COLLECTION
@@ -79,9 +79,5 @@ async def get_current_user_with_collection_access(
     except (AttributeError, ImportError, ValueError):
         # Silent fail - collection access is a nice-to-have
         pass
-    
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "is_root": current_user.is_root,
-    }
+
+    return current_user

@@ -60,12 +60,7 @@ root_logger.handlers = [handler]
 logger = logging.getLogger(__name__)
 
 
-# Global instances
-ollama_client: OllamaClient | None = None
-registry: MCPRegistry | None = None
-agent_loop: AgentLoop | None = None
-vector_store: QdrantStore | None = None
-ingestion_pipeline: IngestionPipeline | None = None
+# No global instances - use app.state exclusively
 
 # Rate limiter configuration
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
@@ -74,7 +69,6 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
-    global ollama_client, registry, agent_loop, vector_store, ingestion_pipeline
 
     logger.info("Starting up API service...")
 
@@ -95,31 +89,29 @@ async def lifespan(app: FastAPI):
 
     # Initialize Ollama client
     logger.info("Initializing Ollama client...")
-    ollama_client = OllamaClient(
+    app.state.ollama_client = OllamaClient(
         base_url=settings.ollama_base_url,
         auto_pull=settings.ollama_auto_pull,
     )
     logger.info("Ollama client initialized")
-    app.state.ollama_client = ollama_client
 
     # Initialize vector store
     logger.info("Initializing vector store...")
-    vector_store = QdrantStore(
+    app.state.vector_store = QdrantStore(
         url=settings.qdrant_url,
         embedding_dim=settings.embedding_dim,
         default_collection=settings.qdrant_collection,
     )
     logger.info("Vector store initialized")
-    app.state.vector_store = vector_store
 
     # Initialize ingestion pipeline
-    ingestion_pipeline = IngestionPipeline(settings=settings)  # type: ignore
-    app.state.ingestion_pipeline = ingestion_pipeline
+    app.state.ingestion_pipeline = IngestionPipeline(settings=settings)  # type: ignore
 
     # Parse MCP server URLs
     logger.info("Parsing MCP server URLs...")
     mcp_server_configs = []
     if settings.mcp_server_urls:
+
         def derive_server_id(raw_url: str) -> str:
             """Derive a stable server_id from a URL.
 
@@ -160,14 +152,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"Configured MCP servers: {mcp_server_configs}")
 
     # Initialize MCP registry
-    registry = MCPRegistry(server_configs=mcp_server_configs)
-    app.state.registry = registry
+    app.state.registry = MCPRegistry(server_configs=mcp_server_configs)
 
     # Connect to all MCP servers and discover tools
     logger.info("About to connect to MCP servers...")
     try:
-        await registry.connect_all()
-        logger.info(f"Connected to {len(registry.clients)} MCP servers")
+        await app.state.registry.connect_all()
+        logger.info(f"Connected to {len(app.state.registry.clients)} MCP servers")
 
         # Persist MCP servers and tools on refresh
         async def persist_registry(tools: dict[str, Any], clients: dict[str, Any]):
@@ -192,24 +183,23 @@ async def lifespan(app: FastAPI):
                     tool_rows.append((tool.server_id, qname, tool.description, tool.input_schema))
                 await upsert_tools(db, smap, tool_rows)
 
-        registry.set_refreshed_callback(persist_registry)
+        app.state.registry.set_refreshed_callback(persist_registry)
         # Trigger initial persist now
-        await persist_registry(registry.tools, registry.clients)
+        await persist_registry(app.state.registry.tools, app.state.registry.clients)
         # Start periodic refresh of tools
         refresh_interval = max(0, settings.mcp_refresh_interval)
-        await registry.start_periodic_refresh(interval_seconds=refresh_interval)
+        await app.state.registry.start_periodic_refresh(interval_seconds=refresh_interval)
     except (ConnectionError, TimeoutError, OSError) as e:
         logger.error(f"Failed to connect to MCP servers: {e}")
         # Continue anyway - some servers may be unavailable
 
     # Initialize agent loop
-    agent_loop = AgentLoop(
-        ollama_client=ollama_client,
-        registry=registry,
+    app.state.agent_loop = AgentLoop(
+        ollama_client=app.state.ollama_client,
+        registry=app.state.registry,
         model=settings.chat_model,
         default_language=settings.agent_default_language,
     )
-    app.state.agent_loop = agent_loop
 
     logger.info("API service ready")
 
@@ -217,13 +207,13 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("Shutting down API service...")
-    if ollama_client:
-        await ollama_client.close()
-    if registry:
-        await registry.stop_periodic_refresh()
-        await registry.close_all()
-    if vector_store:
-        await vector_store.close()
+    if app.state.ollama_client:
+        await app.state.ollama_client.close()
+    if app.state.registry:
+        await app.state.registry.stop_periodic_refresh()
+        await app.state.registry.close_all()
+    if app.state.vector_store:
+        await app.state.vector_store.close()
 
 
 # Create FastAPI app
@@ -251,10 +241,17 @@ for origin in settings.frontend_origin.split(","):
     if not origin:
         continue
     try:
-        # Validate URL format
+        # Validate URL format with stricter checks
         parsed = urlparse(origin)
-        if not parsed.scheme or not parsed.netloc:
-            logger.warning(f"Invalid CORS origin format: {origin}")
+        if not (
+            parsed.scheme in {"http", "https"}
+            and parsed.netloc
+            and not parsed.path
+            and not parsed.params
+            and not parsed.query
+            and not parsed.fragment
+        ):
+            logger.warning(f"Invalid CORS origin format (must be scheme://host): {origin}")
             continue
         allowed_origins.append(origin)
     except Exception as e:
@@ -262,8 +259,7 @@ for origin in settings.frontend_origin.split(","):
         continue
 
 if not allowed_origins:
-    allowed_origins = ["http://localhost:8000"]
-    logger.warning("No valid CORS origins provided, using default: http://localhost:8000")
+    raise ValueError("No valid CORS origins provided; check FRONTEND_ORIGIN setting")
 
 logger.info("CORS configured for origins: %s", allowed_origins)
 

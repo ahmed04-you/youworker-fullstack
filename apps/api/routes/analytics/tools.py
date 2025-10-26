@@ -31,9 +31,7 @@ async def get_tool_performance(
             select(
                 ToolRun.tool_name,
                 func.count(ToolRun.id).label("total_runs"),
-                func.sum(case((ToolRun.status == "success", 1), else_=0)).label(
-                    "successful_runs"
-                ),
+                func.sum(case((ToolRun.status == "success", 1), else_=0)).label("successful_runs"),
                 func.avg(ToolRun.latency_ms).label("avg_latency"),
                 func.min(ToolRun.latency_ms).label("min_latency"),
                 func.max(ToolRun.latency_ms).label("max_latency"),
@@ -91,9 +89,7 @@ async def get_tool_timeline(
                 date_trunc.label("period"),
                 ToolRun.tool_name,
                 func.count(ToolRun.id).label("run_count"),
-                func.sum(case((ToolRun.status == "success", 1), else_=0)).label(
-                    "success_count"
-                ),
+                func.sum(case((ToolRun.status == "success", 1), else_=0)).label("success_count"),
             )
             .where(
                 and_(

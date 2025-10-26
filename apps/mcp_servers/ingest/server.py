@@ -6,6 +6,7 @@ Tools:
 - path: Ingest a file or directory from an allowlisted path
 - status: Show last N ingestion runs with counts and errors
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -72,7 +73,11 @@ def _allowlisted_path(raw: str) -> Path:
     p = Path(raw).resolve()
     # Allowlist: /data, repo-local to_ingest, examples/ingestion
     allow: list[Path] = []
-    for base in ("/data", str(Path.cwd() / "to_ingest"), str(Path.cwd() / "examples" / "ingestion")):
+    for base in (
+        "/data",
+        str(Path.cwd() / "to_ingest"),
+        str(Path.cwd() / "examples" / "ingestion"),
+    ):
         try:
             allow.append(Path(base).resolve())
         except Exception:
@@ -131,7 +136,9 @@ class JobResult:
     errors: list[str]
 
 
-async def ingest_url(url: str, tags: list[str] | None = None, collection: str | None = None) -> dict[str, Any]:
+async def ingest_url(
+    url: str, tags: list[str] | None = None, collection: str | None = None
+) -> dict[str, Any]:
     if not pipeline:
         return {"error": "Ingestion pipeline not initialized"}
     try:
@@ -154,9 +161,11 @@ async def ingest_url(url: str, tags: list[str] | None = None, collection: str | 
         finished = datetime.now(timezone.utc).isoformat()
 
         errors = [
-            f"{err.get('target') or err.get('path')}: {err.get('error')}"
-            if isinstance(err, dict)
-            else str(err)
+            (
+                f"{err.get('target') or err.get('path')}: {err.get('error')}"
+                if isinstance(err, dict)
+                else str(err)
+            )
             for err in (report.errors or [])
         ]
         rec = {
@@ -186,7 +195,7 @@ async def ingest_url(url: str, tags: list[str] | None = None, collection: str | 
                     finished_at=datetime.fromisoformat(finished),
                     status="success" if not errors else "partial",
                 )
-                for f in (report.files or []):
+                for f in report.files or []:
                     uri = f.get("uri")
                     path = f.get("path")
                     ph = hashlib.sha256((uri or path or "").encode("utf-8")).hexdigest()
@@ -220,7 +229,9 @@ async def ingest_url(url: str, tags: list[str] | None = None, collection: str | 
         return rec
 
 
-async def ingest_path(path: str, recursive: bool = False, tags: list[str] | None = None, collection: str | None = None) -> dict[str, Any]:
+async def ingest_path(
+    path: str, recursive: bool = False, tags: list[str] | None = None, collection: str | None = None
+) -> dict[str, Any]:
     if not pipeline:
         return {"error": "Ingestion pipeline not initialized"}
     try:
@@ -242,9 +253,11 @@ async def ingest_path(path: str, recursive: bool = False, tags: list[str] | None
         )
         finished = datetime.now(timezone.utc).isoformat()
         errors = [
-            f"{err.get('target') or err.get('path')}: {err.get('error')}"
-            if isinstance(err, dict)
-            else str(err)
+            (
+                f"{err.get('target') or err.get('path')}: {err.get('error')}"
+                if isinstance(err, dict)
+                else str(err)
+            )
             for err in (report.errors or [])
         ]
         rec = {
@@ -273,7 +286,7 @@ async def ingest_path(path: str, recursive: bool = False, tags: list[str] | None
                     finished_at=datetime.fromisoformat(finished),
                     status="success" if not errors else "partial",
                 )
-                for f in (report.files or []):
+                for f in report.files or []:
                     uri = f.get("uri")
                     path = f.get("path")
                     ph = hashlib.sha256((uri or path or "").encode("utf-8")).hexdigest()
@@ -413,11 +426,17 @@ async def mcp_socket(ws: WebSocket):
                 req = json.loads(raw)
             except Exception:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32700, "message": "Parse error", "data": {"raw": str(raw)[:200]}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {
+                                "code": -32700,
+                                "message": "Parse error",
+                                "data": {"raw": str(raw)[:200]},
+                            },
+                        }
+                    )
                 )
                 continue
 
@@ -432,11 +451,19 @@ async def mcp_socket(ws: WebSocket):
                         "serverInfo": {"name": "ingest", "version": "0.1.0"},
                         "capabilities": {"tools": {"list": True, "call": True}},
                     }
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
+                    )
 
                 elif method == "tools/list":
                     await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"tools": get_tools_schema()}})
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "result": {"tools": get_tools_schema()},
+                            }
+                        )
                     )
 
                 elif method == "tools/call":
@@ -459,39 +486,63 @@ async def mcp_socket(ws: WebSocket):
                         result = ingest_status(limit=arguments.get("limit", 10))
                     else:
                         await ws.send_text(
-                            json.dumps({
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {"code": -32601, "message": f"Unknown tool: {name}", "data": {"name": name}},
-                            })
+                            json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": req_id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": f"Unknown tool: {name}",
+                                        "data": {"name": name},
+                                    },
+                                }
+                            )
                         )
                         continue
 
                     await ws.send_text(
                         json.dumps(
-                            {"jsonrpc": "2.0", "id": req_id, "result": {"content": [{"type": "json", "json": result}]}}
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "result": {"content": [{"type": "json", "json": result}]},
+                            }
                         )
                     )
 
                 elif method == "ping":
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
+                    )
 
                 else:
                     await ws.send_text(
-                        json.dumps({
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {"code": -32601, "message": "Method not found", "data": {"method": method}},
-                        })
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "error": {
+                                    "code": -32601,
+                                    "message": "Method not found",
+                                    "data": {"method": method},
+                                },
+                            }
+                        )
                     )
 
             except Exception as e:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {"code": -32000, "message": str(e), "data": {"type": type(e).__name__}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {
+                                "code": -32000,
+                                "message": str(e),
+                                "data": {"type": type(e).__name__},
+                            },
+                        }
+                    )
                 )
     except WebSocketDisconnect:
         logger.info("MCP WebSocket disconnected (ingest)")
@@ -499,4 +550,5 @@ async def mcp_socket(ws: WebSocket):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=7004)

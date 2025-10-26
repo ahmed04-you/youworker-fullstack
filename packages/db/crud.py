@@ -28,6 +28,7 @@ def _hash_api_key(api_key: str) -> str:
 async def ensure_root_user(session, *, username: str, api_key: str) -> User:
     # session is already an AsyncSession from the context manager
     import logging
+
     logger = logging.getLogger(__name__)
     logger.warning(f"Session type: {type(session)}")
     q = select(User).where(User.username == username)
@@ -342,7 +343,12 @@ async def get_user_sessions(
     session: AsyncSession, user_id: int, limit: int = 50
 ) -> list[ChatSession]:
     """Get user's chat sessions ordered by most recent."""
-    q = select(ChatSession).where(ChatSession.user_id == user_id).order_by(ChatSession.updated_at.desc()).limit(limit)
+    q = (
+        select(ChatSession)
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(limit)
+    )
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -392,7 +398,13 @@ async def get_user_ingestion_runs(
     offset: int = 0,
 ) -> list[IngestionRun]:
     """Get user's ingestion runs ordered by most recent."""
-    q = select(IngestionRun).where(IngestionRun.user_id == user_id).order_by(IngestionRun.started_at.desc()).limit(limit).offset(offset)
+    q = (
+        select(IngestionRun)
+        .where(IngestionRun.user_id == user_id)
+        .order_by(IngestionRun.started_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(q)
     return list(result.scalars().all())
 
@@ -404,7 +416,13 @@ async def get_user_tool_runs(
     offset: int = 0,
 ) -> list[ToolRun]:
     """Get user's tool execution logs ordered by most recent."""
-    q = select(ToolRun).where(ToolRun.user_id == user_id).order_by(ToolRun.start_ts.desc()).limit(limit).offset(offset)
+    q = (
+        select(ToolRun)
+        .where(ToolRun.user_id == user_id)
+        .order_by(ToolRun.start_ts.desc())
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(q)
     return list(result.scalars().all())
 

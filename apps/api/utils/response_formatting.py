@@ -17,7 +17,9 @@ def success_response(data: Any, message: str | None = None) -> dict[str, Any]:
     return response
 
 
-def error_response(error: str, code: int = 500, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def error_response(
+    error: str, code: int = 500, details: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Format an error response."""
     response = {
         "success": False,

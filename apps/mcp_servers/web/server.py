@@ -8,6 +8,7 @@ Tools:
 - extract_readable: Extract main article content with readability
 - crawl: Crawl a page and its outgoing links (depth 1–2)
 """
+
 import asyncio
 import os
 import ipaddress
@@ -228,7 +229,9 @@ async def head_url(url: str, follow_redirects: bool = False) -> dict[str, Any]:
         return {"error": f"HEAD request failed: {exc}", "url": url}
 
 
-async def extract_readable(url: str, include_links: bool = False, max_chars: int = 5000) -> dict[str, Any]:
+async def extract_readable(
+    url: str, include_links: bool = False, max_chars: int = 5000
+) -> dict[str, Any]:
     """Extract main article content and metadata using readability-lxml."""
     if not http_client:
         return {"error": "HTTP client not initialized"}
@@ -281,7 +284,9 @@ async def extract_readable(url: str, include_links: bool = False, max_chars: int
     full_soup = BeautifulSoup(html, "html.parser")
     meta: dict[str, Any] = {}
     for name in ("description", "og:description", "og:site_name", "author"):
-        tag = full_soup.find("meta", attrs={"name": name}) or full_soup.find("meta", attrs={"property": name})
+        tag = full_soup.find("meta", attrs={"name": name}) or full_soup.find(
+            "meta", attrs={"property": name}
+        )
         if tag and tag.get("content"):
             meta[name] = tag.get("content")
 
@@ -319,7 +324,11 @@ async def crawl(
     start_host = urlparse(start_url).hostname
 
     # Simple robots.txt respect (optional, default enabled)
-    respect_robots = os.environ.get("WEB_CRAWL_RESPECT_ROBOTS", "1").strip() not in {"0", "false", "False"}
+    respect_robots = os.environ.get("WEB_CRAWL_RESPECT_ROBOTS", "1").strip() not in {
+        "0",
+        "false",
+        "False",
+    }
     robots_cache: dict[str, set[str]] = {}
 
     async def allowed_by_robots(target: str) -> bool:
@@ -355,7 +364,7 @@ async def crawl(
                 continue
             if s.lower().startswith("user-agent:"):
                 agent = s.split(":", 1)[1].strip()
-                agent_star = (agent == "*")
+                agent_star = agent == "*"
             elif agent_star and s.lower().startswith("disallow:"):
                 rule = s.split(":", 1)[1].strip()
                 if rule:
@@ -367,6 +376,7 @@ async def crawl(
 
     # BFS crawl
     from collections import deque
+
     visited: set[str] = set()
     queue = deque([(start_url, 0)])
     results: list[dict[str, Any]] = []
@@ -695,11 +705,17 @@ async def mcp_socket(ws: WebSocket):
                 req = json.loads(raw)
             except Exception:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": None,
-                        "error": {"code": -32700, "message": "Parse error", "data": {"raw": str(raw)[:200]}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": None,
+                            "error": {
+                                "code": -32700,
+                                "message": "Parse error",
+                                "data": {"raw": str(raw)[:200]},
+                            },
+                        }
+                    )
                 )
                 continue
 
@@ -714,11 +730,19 @@ async def mcp_socket(ws: WebSocket):
                         "serverInfo": {"name": "web", "version": "0.1.0"},
                         "capabilities": {"tools": {"list": True, "call": True}},
                     }
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
+                    )
 
                 elif method == "tools/list":
                     await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"tools": get_tools_schema()}})
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "result": {"tools": get_tools_schema()},
+                            }
+                        )
                     )
 
                 elif method == "tools/call":
@@ -755,11 +779,17 @@ async def mcp_socket(ws: WebSocket):
                         )
                     else:
                         await ws.send_text(
-                            json.dumps({
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {"code": -32601, "message": f"Unknown tool: {name}", "data": {"name": name}},
-                            })
+                            json.dumps(
+                                {
+                                    "jsonrpc": "2.0",
+                                    "id": req_id,
+                                    "error": {
+                                        "code": -32601,
+                                        "message": f"Unknown tool: {name}",
+                                        "data": {"name": name},
+                                    },
+                                }
+                            )
                         )
                         continue
 
@@ -774,24 +804,38 @@ async def mcp_socket(ws: WebSocket):
                     )
 
                 elif method == "ping":
-                    await ws.send_text(json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}}))
+                    await ws.send_text(
+                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
+                    )
 
                 else:
                     await ws.send_text(
-                        json.dumps({
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {"code": -32601, "message": "Method not found", "data": {"method": method}},
-                        })
+                        json.dumps(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": req_id,
+                                "error": {
+                                    "code": -32601,
+                                    "message": "Method not found",
+                                    "data": {"method": method},
+                                },
+                            }
+                        )
                     )
 
             except Exception as e:
                 await ws.send_text(
-                    json.dumps({
-                        "jsonrpc": "2.0",
-                        "id": req_id,
-                        "error": {"code": -32000, "message": str(e), "data": {"type": type(e).__name__}},
-                    })
+                    json.dumps(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "error": {
+                                "code": -32000,
+                                "message": str(e),
+                                "data": {"type": type(e).__name__},
+                            },
+                        }
+                    )
                 )
 
     except WebSocketDisconnect:

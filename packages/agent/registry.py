@@ -164,9 +164,15 @@ class MCPRegistry:
             # Always call with the qualified name to preserve server namespace
             result = await client.call_tool(tool.name, arguments)
             return result
+        except (ConnectionError, TimeoutError, OSError) as e:
+            logger.error(f"Network error in tool {tool_name}: {e}")
+            raise ConnectionError(f"Tool {tool_name} unavailable due to network issue: {e}")
+        except ValueError as e:
+            logger.error(f"Invalid arguments for tool {tool_name}: {e}")
+            raise ValueError(f"Invalid arguments for tool {tool_name}: {e}")
         except Exception as e:
-            logger.error(f"Tool execution failed: {tool_name} - {e}")
-            raise
+            logger.error(f"Unexpected error in tool {tool_name}: {e}")
+            raise RuntimeError(f"Tool {tool_name} execution failed: {e}")
 
     async def close_all(self) -> None:
         """Close all MCP client connections."""
@@ -201,20 +207,7 @@ class MCPRegistry:
         self._qualified_to_exposed = qualified_to_exposed
 
     def _sanitize_exposed(self, qualified_name: str) -> str:
-        # Basic sanitation: replace non-alphanumeric and dots with underscores
-        exposed = []
-        for ch in qualified_name:
-            if ch.isalnum():
-                exposed.append(ch)
-            elif ch in {".", "-", "/"}:
-                exposed.append("_")
-            else:
-                exposed.append("_")
-        # Avoid leading digits
-        s = "".join(exposed)
-        if s and s[0].isdigit():
-            s = f"t_{s}"
-        return s
+        return qualified_name.replace(".", "_").replace("-", "_").replace("/", "_")
 
     async def start_periodic_refresh(self, interval_seconds: int = 90) -> None:
         if interval_seconds <= 0:
