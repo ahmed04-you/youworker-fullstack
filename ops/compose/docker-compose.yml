@@ -10,9 +10,9 @@ services:
     container_name: youworker-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: youworker
+      POSTGRES_USER: ${POSTGRES_USER:-youworker}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-youworker}
     ports:
       - "5432:5432"
     volumes:
@@ -47,7 +47,8 @@ services:
       - ../../data/ollama:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0
-      OLLAMA_ORIGINS: "*"
+      # SECURITY: Restrict origins to internal network only
+      OLLAMA_ORIGINS: "http://api:8001,http://mcp_semantic:7002,http://mcp_ingest:7004"
     deploy:
       resources:
         reservations:
@@ -64,9 +65,9 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_web
-      cache_from:
-        - mcp_web:latest
     container_name: youworker-mcp-web
+    env_file:
+      - ../../.env
     command: ["uvicorn", "apps.mcp_servers.web.server:app", "--host", "0.0.0.0", "--port", "7001"]
     restart: unless-stopped
     ports:
@@ -81,9 +82,9 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_semantic
-      cache_from:
-        - mcp_semantic:latest
     container_name: youworker-mcp-semantic
+    env_file:
+      - ../../.env
     command: ["uvicorn", "apps.mcp_servers.semantic.server:app", "--host", "0.0.0.0", "--port", "7002"]
     restart: unless-stopped
     ports:
@@ -105,9 +106,9 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_datetime
-      cache_from:
-        - mcp_datetime:latest
     container_name: youworker-mcp-datetime
+    env_file:
+      - ../../.env
     command: ["uvicorn", "apps.mcp_servers.datetime.server:app", "--host", "0.0.0.0", "--port", "7003"]
     restart: unless-stopped
     ports:
@@ -122,8 +123,6 @@ services:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_ingest
-      cache_from:
-        - mcp_ingest:latest
     container_name: youworker-mcp-ingest
     command: ["uvicorn", "apps.mcp_servers.ingest.server:app", "--host", "0.0.0.0", "--port", "7004"]
     restart: unless-stopped
@@ -155,15 +154,14 @@ services:
       QDRANT_URL: "http://qdrant:6333"
     volumes:
       - ../../data/uploads:/data/uploads
-      - ../../examples/ingestion:/data/examples:ro
 
   mcp_units:
     build:
       context: ../..
       dockerfile: ops/docker/Dockerfile.mcp_units
-      cache_from:
-        - mcp_units:latest
     container_name: youworker-mcp-units
+    env_file:
+      - ../../.env
     command: ["uvicorn", "apps.mcp_servers.units.server:app", "--host", "0.0.0.0", "--port", "7005"]
     restart: unless-stopped
     ports:
@@ -182,8 +180,6 @@ services:
       dockerfile: ops/docker/Dockerfile.api
       args:
         ENABLE_GPU_TORCH: ${ENABLE_GPU_TORCH:-0}
-      cache_from:
-        - api:latest
     container_name: youworker-api
     env_file:
       - ../../.env
@@ -191,12 +187,10 @@ services:
       PYTHONUNBUFFERED: "1"
       OLLAMA_BASE_URL: "http://ollama:11434"
       QDRANT_URL: "http://qdrant:6333"
-      ROOT_API_KEY: "secure-dev-root-key-2025-v1"
     restart: unless-stopped
     ports:
       - "8001:8001"
     volumes:
-      - ../../examples/ingestion:/data/examples:ro
       - ../../data/uploads:/data/uploads
     depends_on:
       ollama:
@@ -237,8 +231,6 @@ services:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
         NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8000}
         NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-secure-dev-root-key-2025-v1}
-      cache_from:
-        - frontend:latest
     container_name: youworker-frontend
     env_file:
       - ../../.env
@@ -246,10 +238,10 @@ services:
     depends_on:
       api:
         condition: service_healthy
-    # healthcheck:
-    #   <<: *healthcheck-defaults
-    #   test: ["CMD-SHELL", "timeout 1 bash -c 'echo > /dev/tcp/localhost/3000' || exit 1"]
-    #   start_period: 60s
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      start_period: 60s
     environment:
       NODE_ENV: "production"
 

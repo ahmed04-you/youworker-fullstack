@@ -19,6 +19,7 @@ from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from apps.api.config import settings
+from apps.api.middleware import IPWhitelistMiddleware, get_ip_whitelist_from_env
 from packages.llm import OllamaClient
 from packages.agent import MCPRegistry, AgentLoop
 from packages.vectorstore import QdrantStore
@@ -29,6 +30,7 @@ from packages.ingestion import IngestionPipeline
 from apps.api.routes.chat import router as chat_router
 from apps.api.routes.websocket import router as websocket_router
 from apps.api.routes.analytics import router as analytics_router
+from apps.api.routes.auth import router as auth_router
 from apps.api.routes import ingestion, crud, health
 
 # Correlation ID context variable for request tracing
@@ -75,12 +77,11 @@ async def lifespan(app: FastAPI):
     # Ensure ingestion directories exist
     from pathlib import Path
 
-    for dir_path in [settings.ingest_upload_root, settings.ingest_examples_dir]:
-        try:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
-            logger.info(f"Ensured directory exists: {dir_path}")
-        except (OSError, PermissionError) as e:
-            logger.warning(f"Could not create directory {dir_path}: {e}")
+    try:
+        Path(settings.ingest_upload_root).mkdir(parents=True, exist_ok=True)
+        logger.info("Ensured directory exists: %s", settings.ingest_upload_root)
+    except (OSError, PermissionError) as e:
+        logger.warning("Could not create directory %s: %s", settings.ingest_upload_root, e)
 
     # Initialize database (fail hard if unavailable)
     logger.info("Initializing database...")
@@ -271,6 +272,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add IP whitelist middleware for production security
+whitelisted_ips = get_ip_whitelist_from_env()
+app.add_middleware(
+    IPWhitelistMiddleware,
+    whitelisted_ips=whitelisted_ips,
+    enabled=(settings.app_env == "production"),
+)
+
 
 # Correlation ID middleware for request tracing
 @app.middleware("http")
@@ -307,6 +316,7 @@ async def add_security_headers(request: Request, call_next):
 
 # Include route modules
 app.include_router(health.router)
+app.include_router(auth_router)  # Authentication endpoints
 # WebSocket chat endpoint (no prefix to match /chat/{session_id})
 app.include_router(websocket_router)
 # HTTP chat endpoints (with /v1 prefix)

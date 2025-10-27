@@ -1,14 +1,21 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
+import { Menu, Home, FileText, Clock, BarChart3, Settings, LogOut, User } from "lucide-react";
+
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Menu, Home, FileText, Clock, BarChart3, Settings } from "lucide-react";
-import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger, navigationMenuTriggerStyle } from "@/components/ui/navigation-menu";
-import Link from "next/link";
-import { useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const { username, logout, isAuthenticated } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+  };
 
   return (
     <>
@@ -21,8 +28,17 @@ export function Sidebar() {
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
           <div className="flex flex-col h-full">
-            <div className="p-4 border-b">
-              <h2 className="text-xl font-bold">YouWorker.AI</h2>
+            <div className="p-4 border-b space-y-2">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold">YouWorker.AI</h2>
+                <ThemeToggle />
+              </div>
+              {isAuthenticated && username && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="h-3 w-3" />
+                  <span>{username}</span>
+                </div>
+              )}
             </div>
             <nav className="flex-1 p-4 space-y-2">
               <Link href="/" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
@@ -46,6 +62,18 @@ export function Sidebar() {
                 Settings
               </Link>
             </nav>
+            {isAuthenticated && (
+              <div className="p-4 border-t">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={handleLogout}
+                >
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Logout
+                </Button>
+              </div>
+            )}
           </div>
         </SheetContent>
       </Sheet>
@@ -53,8 +81,17 @@ export function Sidebar() {
       {/* Desktop sidebar */}
       <div className="hidden md:block w-64 border-r bg-background">
         <div className="flex flex-col h-full">
-          <div className="p-4 border-b">
-            <h2 className="text-xl font-bold">YouWorker.AI</h2>
+          <div className="p-4 border-b space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold">YouWorker.AI</h2>
+              <ThemeToggle />
+            </div>
+            {isAuthenticated && username && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <User className="h-3 w-3" />
+                <span>{username}</span>
+              </div>
+            )}
           </div>
           <nav className="flex-1 p-4 space-y-2">
             <Link href="/" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
@@ -78,6 +115,18 @@ export function Sidebar() {
               Settings
             </Link>
           </nav>
+          {isAuthenticated && (
+            <div className="p-4 border-t">
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={handleLogout}
+              >
+                <LogOut className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </>

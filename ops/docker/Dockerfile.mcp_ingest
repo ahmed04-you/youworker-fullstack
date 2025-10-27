@@ -29,8 +29,8 @@ COPY ops/alembic /app/ops/alembic
 COPY apps/__init__.py /app/apps/__init__.py
 COPY apps/mcp_servers /app/apps/mcp_servers
 
-RUN mkdir -p /data/uploads /data/examples \
-    && chown -R appuser:appuser /app /data/uploads /data/examples
+RUN mkdir -p /data/uploads \
+    && chown -R appuser:appuser /app /data/uploads
 
 EXPOSE 7004
 

@@ -73,11 +73,10 @@ async def ingest_endpoint(
 
         logger.info("Ingestion request: path=%s, tags=%s", target, sanitized_tags)
 
-        # Allow ingesting the fixed examples directory without exposing filesystem paths in the UI
+        # Allow ingesting the pre-approved uploads directory without exposing filesystem paths in the UI
         if ingest_request.use_examples_dir:
-            target = settings.ingest_examples_dir
+            target = settings.ingest_upload_root
             from_web = False
-            # examples dir usually contains subfolders
             recursive = True
         elif not from_web:
             # Validate local paths to prevent path traversal attacks
@@ -85,18 +84,12 @@ async def ingest_endpoint(
                 # Resolve the path and ensure it doesn't escape allowed directories
                 resolved_path = Path(target).resolve()
                 upload_root = Path(settings.ingest_upload_root).resolve()
-                examples_root = Path(settings.ingest_examples_dir).resolve()
 
-                # Check if path is within allowed directories
-                is_in_upload = resolved_path == upload_root or upload_root in resolved_path.parents
-                is_in_examples = (
-                    resolved_path == examples_root or examples_root in resolved_path.parents
-                )
-
-                if not (is_in_upload or is_in_examples):
+                # Check if path is within the upload directory
+                if not (resolved_path == upload_root or upload_root in resolved_path.parents):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Path must be within allowed directories: {settings.ingest_upload_root} or {settings.ingest_examples_dir}",
+                        detail=f"Path must be within allowed directory: {settings.ingest_upload_root}",
                     )
             except (ValueError, OSError) as e:
                 raise HTTPException(status_code=400, detail=f"Invalid path: {e}")

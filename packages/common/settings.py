@@ -23,9 +23,16 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8001
     log_level: str = "INFO"
+    app_env: str = "development"  # production, development, staging
     root_api_key: str = "rotated-dev-root-key"
     jwt_secret: str = "rotated-dev-jwt-secret"
     frontend_origin: str = "http://localhost:8000"
+    whitelisted_ips: str = ""  # Comma-separated IPs for production access control
+
+    # Authentik SSO integration
+    authentik_enabled: bool = False
+    authentik_header_name: str = "x-authentik-api-key"
+    authentik_forward_user_header: str | None = None
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/youworker"
@@ -60,7 +67,6 @@ class Settings(BaseSettings):
     # Ingest HTTP settings
     ingest_user_agent: str | None = None
     ingest_upload_root: str = "data/uploads"
-    ingest_examples_dir: str = "data/examples"
 
     # Web crawling
     crawl_max_depth: int = 2

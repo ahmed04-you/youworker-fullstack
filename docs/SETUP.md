@@ -283,7 +283,6 @@ TTS_MODEL_DIR=/app/models/tts     # Model directory
 ```bash
 # Document Processing
 INGEST_UPLOAD_ROOT=/data/uploads
-INGEST_EXAMPLES_DIR=/data/examples
 INGEST_ACCELERATOR=auto          # auto, cpu, cuda
 INGEST_GPU_DEVICE=cuda
 MAX_AGENT_ITERATIONS=50

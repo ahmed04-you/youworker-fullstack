@@ -18,7 +18,6 @@ def mock_settings():
     settings = Mock()
     settings.root_api_key = "test-api-key"
     settings.ingest_upload_root = "/data/uploads"
-    settings.ingest_examples_dir = "/data/examples"
     return settings
 
 
@@ -71,8 +70,7 @@ def test_validate_file_path_success(mock_settings):
     with patch('apps.api.auth.security.settings', mock_settings):
         # Test valid paths within allowed directories
         assert validate_file_path("/data/uploads/test.txt") is True
-        assert validate_file_path("/data/examples/doc.pdf") is True
-        assert validate_file_path("/data/examples/subdir/file.txt") is True
+        assert validate_file_path("/data/uploads/subdir/file.txt") is True
 
 
 def test_validate_file_path_failure(mock_settings):
@@ -83,6 +81,7 @@ def test_validate_file_path_failure(mock_settings):
         assert validate_file_path("/data/uploads/../etc/passwd") is False
         
         # Test paths outside allowed directories
+        assert validate_file_path("/data/examples/doc.pdf") is False
         assert validate_file_path("/tmp/test.txt") is False
         assert validate_file_path("/etc/config") is False
         

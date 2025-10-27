@@ -55,8 +55,8 @@ RUN set -eux; \
       https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json; \
     mv /tmp/it_IT-riccardo-x_low.onnx /app/models/tts/; \
     mv /tmp/it_IT-riccardo-x_low.onnx.json /app/models/tts/; \
-    mkdir -p /data/uploads /data/examples /app/models && \
-    chown -R appuser:appuser /app /data/uploads /data/examples /app/models
+    mkdir -p /data/uploads /app/models && \
+    chown -R appuser:appuser /app /data/uploads /app/models
 
 EXPOSE 8001
 
