@@ -29,15 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import {
-  API_BASE_URL,
-  ApiError,
-  StreamController,
-  postEventStream,
-  apiDelete,
-  apiGet,
-  apiPatch,
-} from "@/lib/api-client";
+import { ApiError, StreamController, postEventStream, apiDelete, apiGet, apiPatch } from "@/lib/api-client";
 import {
   ChatLogEntry,
   ChatToolEvent,

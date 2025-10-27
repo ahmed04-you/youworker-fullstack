@@ -161,9 +161,7 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
     username = "root"
 
     if settings.authentik_forward_user_header:
-        forwarded_username = _extract_header_value(
-            request, settings.authentik_forward_user_header
-        )
+        forwarded_username = _extract_header_value(request, settings.authentik_forward_user_header)
         if forwarded_username:
             username = forwarded_username
 

@@ -1,4 +1,12 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8001";
+const PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+const INTERNAL_API_BASE_URL = process.env.NEXT_INTERNAL_API_BASE_URL;
+
+function getApiBaseUrl(): string {
+  if (typeof window === "undefined") {
+    return INTERNAL_API_BASE_URL || PUBLIC_API_BASE_URL || "http://api:8001";
+  }
+  return PUBLIC_API_BASE_URL || window.location.origin;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -33,8 +41,9 @@ export interface StreamController {
 }
 
 function resolveUrl(path: string, query?: FetchOptions["query"]): string {
+  const apiBaseUrl = getApiBaseUrl();
   const isAbsolute = /^https?:\/\//i.test(path);
-  const url = new URL(isAbsolute ? path : `${API_BASE_URL}${path}`);
+  const url = new URL(isAbsolute ? path : `${apiBaseUrl}${path}`);
   if (query) {
     Object.entries(query)
       .filter(([, value]) => value !== undefined && value !== null)
@@ -234,5 +243,4 @@ export function postEventStream<T = unknown>(
   };
 }
 
-export { API_BASE_URL };
-
+export { getApiBaseUrl };

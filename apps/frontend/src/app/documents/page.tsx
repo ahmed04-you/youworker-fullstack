@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
-import { apiDelete, apiGet, API_BASE_URL, ApiError } from "@/lib/api-client";
+import { apiDelete, apiGet, ApiError, getApiBaseUrl } from "@/lib/api-client";
 import {
   DocumentRecord,
   DocumentsResponse,
@@ -75,6 +75,7 @@ const parseTags = (tags: string) =>
 export default function DocumentsPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
@@ -182,7 +183,7 @@ export default function DocumentsPage() {
         formData.append("collection", collectionName);
       }
 
-      const response = await fetch(`${API_BASE_URL}/v1/ingest/upload`, {
+      const response = await fetch(`${apiBaseUrl}/v1/ingest/upload`, {
         method: "POST",
         credentials: "include",
         body: formData,
@@ -212,7 +213,7 @@ export default function DocumentsPage() {
     if (!targetPath.trim()) return;
     setPathIngesting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/ingest`, {
+      const response = await fetch(`${apiBaseUrl}/v1/ingest`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -246,7 +247,7 @@ export default function DocumentsPage() {
     if (!inputUrl.trim()) return;
     setUrlIngesting(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/ingest`, {
+      const response = await fetch(`${apiBaseUrl}/v1/ingest`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -294,7 +295,7 @@ export default function DocumentsPage() {
         formData.append("collection", collectionName);
       }
 
-      const response = await fetch(`${API_BASE_URL}/v1/ingest/upload`, {
+      const response = await fetch(`${apiBaseUrl}/v1/ingest/upload`, {
         method: "POST",
         credentials: "include",
         body: formData,

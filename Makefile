@@ -25,6 +25,9 @@ help:
 
 # Start all services (GPU auto-detected and used if available)
 compose-up:
+	@# Ensure required data directories exist with permissive access for containers
+	@mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models data/grafana data/prometheus
+	@chmod -R u+rwX,go+rwX data 2>/dev/null || true
 	@# Ensure SSL certs exist for nginx
 	@if [ ! -f data/nginx/ssl/cert.pem ] || [ ! -f data/nginx/ssl/key.pem ]; then \
 		echo "[compose-up] Generating local SSL certificates..."; \
