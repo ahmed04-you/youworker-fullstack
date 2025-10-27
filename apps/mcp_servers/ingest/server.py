@@ -71,24 +71,16 @@ async def health_check():
 
 def _allowlisted_path(raw: str) -> Path:
     p = Path(raw).resolve()
-    # Allowlist: /data, repo-local to_ingest, examples/ingestion
-    allow: list[Path] = []
-    for base in (
-        "/data",
-        str(Path.cwd() / "to_ingest"),
-        str(Path.cwd() / "examples" / "ingestion"),
-    ):
-        try:
-            allow.append(Path(base).resolve())
-        except Exception:
-            continue
-    for base in allow:
-        try:
-            p.relative_to(base)
-            return p
-        except Exception:
-            continue
-    raise ValueError("Path not allowed; must be under /data, to_ingest, or examples/ingestion")
+    # Allowlist: /data (containers mount uploads here)
+    try:
+        base = Path("/data").resolve()
+    except Exception as exc:
+        raise ValueError("Upload root unavailable") from exc
+    try:
+        p.relative_to(base)
+        return p
+    except Exception as exc:
+        raise ValueError("Path not allowed; must be under /data") from exc
 
 
 async def _ensure_safe_url(raw_url: str) -> str:

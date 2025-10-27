@@ -23,7 +23,6 @@ fi
 # 3. Crea directory necessarie
 echo "📁 Creazione directory dati..."
 mkdir -p data/{postgres,qdrant,ollama,nginx/ssl,uploads,models}
-mkdir -p examples/ingestion
 
 # 4. Scarica modelli TTS se necessario
 if [ ! -d "data/models/piper-voices" ]; then

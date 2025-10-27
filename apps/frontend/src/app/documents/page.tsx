@@ -221,7 +221,6 @@ export default function DocumentsPage() {
           from_web: false,
           recursive: true,
           tags: parseTags(tagInput),
-          use_examples_dir: false,
         }),
       });
       if (!response.ok) {

@@ -34,7 +34,6 @@ class IngestRequest(BaseModel):
     from_web: bool = False
     recursive: bool = False
     tags: list[str] | None = None
-    use_examples_dir: bool = False
 
 
 class IngestResponse(BaseModel):
@@ -73,12 +72,7 @@ async def ingest_endpoint(
 
         logger.info("Ingestion request: path=%s, tags=%s", target, sanitized_tags)
 
-        # Allow ingesting the pre-approved uploads directory without exposing filesystem paths in the UI
-        if ingest_request.use_examples_dir:
-            target = settings.ingest_upload_root
-            from_web = False
-            recursive = True
-        elif not from_web:
+        if not from_web:
             # Validate local paths to prevent path traversal attacks
             try:
                 # Resolve the path and ensure it doesn't escape allowed directories

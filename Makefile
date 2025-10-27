@@ -190,7 +190,6 @@ start-ssl-prod:
 setup-dirs:
 	@echo "Creating necessary directories..."
 	mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models
-	mkdir -p examples/ingestion
 
 # Full setup (directories + SSL + start)
 setup-full: setup-dirs ssl-setup compose-up
