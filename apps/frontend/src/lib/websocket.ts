@@ -32,6 +32,7 @@ export class ChatWebSocket {
   private isConnecting = false;
   private messageQueue: any[] = [];
   private callbacks: WebSocketCallbacks = {};
+  private reconnectTimeout: NodeJS.Timeout | null = null;
 
   constructor(baseUrl: string) {
     this.url = baseUrl.replace(/^http/, 'ws');
@@ -155,13 +156,20 @@ export class ChatWebSocket {
   }
 
   private scheduleReconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+    }
     if (this.reconnectAttempts < this.maxReconnectAttempts && this.sessionId) {
       this.reconnectAttempts++;
-      setTimeout(() => this.connect(this.sessionId!), this.reconnectDelay * this.reconnectAttempts);
+      this.reconnectTimeout = setTimeout(() => this.connect(this.sessionId!), this.reconnectDelay * this.reconnectAttempts);
     }
   }
 
   disconnect() {
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
     this.ws?.close(1000, "User disconnect");
     this.messageQueue = [];
   }

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+import sqlalchemy as sa
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -17,8 +18,32 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncAttrs
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
+from sqlalchemy.types import TypeDecorator
 
 from .session import Base
+
+
+class EncryptedContent(TypeDecorator):
+    """Store text content as binary for future encryption support."""
+
+    impl = sa.LargeBinary
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value
+        if isinstance(value, str):
+            return value.encode("utf-8")
+        raise TypeError("content must be str or bytes")
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value).decode("utf-8")
+        return value
 
 
 class User(AsyncAttrs, Base):
@@ -63,7 +88,7 @@ class ChatMessage(AsyncAttrs, Base):
         ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(String(16), index=True)
-    content: Mapped[str] = mapped_column(Text)
+    content: Mapped[Optional[str]] = mapped_column(EncryptedContent, nullable=True)
     tool_call_name: Mapped[Optional[str]] = mapped_column(String(256))
     tool_call_id: Mapped[Optional[str]] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(
@@ -82,6 +107,12 @@ class ChatMessage(AsyncAttrs, Base):
             "tokens_in",
             "tokens_out",
             postgresql_where=tokens_in.isnot(None),
+        ),
+        Index(
+            "idx_chat_messages_encrypted",
+            "session_id",
+            "created_at",
+            postgresql_where=sa.text("content IS NOT NULL"),
         ),
     )
 
@@ -236,3 +267,13 @@ class UserCollectionAccess(AsyncAttrs, Base):
         ForeignKey("document_collections.id", ondelete="CASCADE")
     )
     __table_args__ = (UniqueConstraint("user_id", "collection_id", name="uq_user_collection"),)
+
+
+class UserDocumentAccess(AsyncAttrs, Base):
+    __tablename__ = "user_document_access"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+
+    __table_args__ = (UniqueConstraint("user_id", "document_id", name="uq_user_document"),)

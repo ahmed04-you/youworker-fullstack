@@ -94,16 +94,18 @@ YouWorker.AI follows a microservices-inspired architecture with containerized co
 - **Health** ([`routes/health.py`](../apps/api/routes/health.py)): Health check endpoint
 
 #### c. Audio Pipeline ([`audio_pipeline.py`](../apps/api/audio_pipeline.py))
-- Speech-to-text transcription (Faster Whisper)
-- Text-to-speech synthesis (Piper TTS)
-- Audio format conversion and resampling
-- GPU acceleration support
+    - Speech-to-text transcription (Faster Whisper)
+    - Text-to-speech synthesis (Piper TTS)
+    - Audio format conversion and resampling
+    - GPU acceleration support
+    - Streaming support for real-time voice interactions
 
 #### d. WebSocket Manager ([`websocket_manager.py`](../apps/api/websocket_manager.py))
-- Connection pooling and lifecycle management
-- Heartbeat monitoring
-- Message broadcasting
-- Session management
+    - Connection pooling and lifecycle management
+    - Heartbeat monitoring
+    - Message broadcasting
+    - Session management
+    - Auto-reconnect and exponential backoff
 
 ### 3. Core Packages
 

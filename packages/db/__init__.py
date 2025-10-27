@@ -12,6 +12,7 @@ from .models import (
     UserToolAccess,
     DocumentCollection,
     UserCollectionAccess,
+    UserDocumentAccess,
 )
 from .crud import ensure_root_user
 
@@ -30,5 +31,6 @@ __all__ = [
     "UserToolAccess",
     "DocumentCollection",
     "UserCollectionAccess",
+    "UserDocumentAccess",
     "ensure_root_user",
 ]

@@ -1,72 +1,55 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: 36 62% 96%;
-  --foreground: 18 23% 16%;
-  --card: 36 55% 99%;
-  --card-foreground: 24 30% 20%;
-  --popover: 36 55% 99%;
-  --popover-foreground: 18 23% 16%;
-  --primary: 354 74% 40%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 30 52% 90%;
-  --secondary-foreground: 26 25% 24%;
-  --muted: 30 24% 78%;
-  --muted-foreground: 26 20% 40%;
-  --accent: 16 61% 88%;
-  --accent-foreground: 20 35% 24%;
-  --destructive: 0 70% 45%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 30 32% 86%;
-  --input: 30 32% 86%;
-  --ring: 354 74% 43%;
-  --radius: 1rem;
-}
-
-.dark {
-  --background: 24 32% 8%;
-  --foreground: 30 30% 92%;
-  --card: 24 28% 10%;
-  --card-foreground: 30 30% 92%;
-  --popover: 24 28% 10%;
-  --popover-foreground: 30 30% 92%;
-  --primary: 354 74% 48%;
-  --primary-foreground: 0 0% 100%;
-  --secondary: 24 16% 18%;
-  --secondary-foreground: 30 30% 92%;
-  --muted: 24 14% 22%;
-  --muted-foreground: 30 18% 72%;
-  --accent: 354 32% 24%;
-  --accent-foreground: 30 30% 92%;
-  --destructive: 0 70% 40%;
-  --destructive-foreground: 0 0% 100%;
-  --border: 24 16% 22%;
-  --input: 24 16% 22%;
-  --ring: 354 74% 55%;
-}
-
-@layer base {
-  :root {
-    font-family: "Inter", system-ui, sans-serif;
+/* Performance optimization: Use backdrop-blur only on interactive elements */
+@layer components {
+  .card-blur {
+    @apply bg-card/70 backdrop-blur;
   }
 
+  .card-blur-light {
+    @apply bg-card/60;
+  }
+
+  .dialog-blur {
+    @apply bg-card/70 backdrop-blur;
+  }
+
+  .header-blur {
+    @apply bg-card/70 backdrop-blur;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
   * {
-    border-color: hsl(var(--border));
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
+}
 
-  body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    background: radial-gradient(circle at top left, hsl(16 61% 92%) 0%, transparent 50%),
-      radial-gradient(circle at bottom right, hsl(354 74% 90%) 0%, transparent 55%),
-      hsl(var(--background));
-    min-height: 100vh;
-    transition: background-color 200ms ease, color 200ms ease;
-  }
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
 
-  .dark body {
-    background: radial-gradient(circle at top left, hsl(355 45% 16%) 0%, transparent 55%),
-      radial-gradient(circle at bottom right, hsl(12 45% 14%) 0%, transparent 55%),
-      hsl(var(--background));
-  }
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
 }

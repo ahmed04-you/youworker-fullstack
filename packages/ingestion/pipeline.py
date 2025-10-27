@@ -44,9 +44,9 @@ logger = get_logger(__name__)
 class PipelineConfig:
     """Mutable configuration for the ingestion pipeline."""
 
+    chunk_size: int
+    chunk_overlap: int
     recursive: bool = True
-    chunk_size: int = 500
-    chunk_overlap: int = 50
     max_concurrency: int = 4
 
 
@@ -60,10 +60,11 @@ class IngestionPipeline:
         config: PipelineConfig | None = None,
     ) -> None:
         self._settings = settings or get_settings()
-        self._config = config or PipelineConfig()
-        ingest_concurrency = getattr(self._settings, "ingest_max_concurrency", None)
-        if isinstance(ingest_concurrency, int) and ingest_concurrency > 0:
-            self._config.max_concurrency = ingest_concurrency
+        self._config = config or PipelineConfig(
+            chunk_size=self._settings.ingest_chunk_size,
+            chunk_overlap=self._settings.ingest_chunk_overlap,
+            max_concurrency=self._settings.ingest_max_concurrency,
+        )
         self._temp_dirs: list[Path] = []
         self._active_ingestions = 0
 

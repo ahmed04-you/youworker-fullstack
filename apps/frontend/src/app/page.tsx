@@ -1,35 +1,27 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
-  BookOpen,
   BrainCircuit,
-  ChevronRight,
   Cpu,
   Loader2,
-  LogOut,
   MessageCircle,
-  Mic,
   Plus,
   Radio,
-  RefreshCw,
-  Send,
   Sparkles,
-  StopCircle,
-  Trash2,
-  Volume2,
+  ArrowDown,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth-context";
-import { ApiError, StreamController, postEventStream, apiDelete, apiGet, apiPatch } from "@/lib/api-client";
+import { ApiError, postEventStream, apiDelete, apiGet, apiPatch } from "@/lib/api-client";
+import { SessionSidebar } from "./_components/SessionSidebar";
+import { ChatComposer } from "./_components/ChatComposer";
+import { InsightSidebar } from "./_components/InsightSidebar";
+import { MobileSessionDrawer } from "./_components/MobileSessionDrawer";
 import {
   ChatLogEntry,
   ChatToolEvent,
@@ -38,6 +30,10 @@ import {
   SessionSummary,
   UnifiedChatStreamPayload,
 } from "@/lib/types";
+
+import { getTokenText, normalizeToolEvents, normalizeLogEntries } from "@/lib/utils/normalize";
+import { useAutoScroll } from "@/hooks/useAutoScroll";
+import { useChatState } from "@/hooks/useChatState";
 
 type Role = SessionMessage["role"];
 
@@ -72,80 +68,8 @@ interface HealthStatus {
   };
 }
 
-const DEFAULT_MODEL = "gpt-oss:20b";
-const DEFAULT_LANGUAGE = "en";
 const MAX_HISTORY = 6_000;
-
-function getTokenText(data: unknown) {
-  if (typeof data === "string") {
-    return data;
-  }
-  if (typeof data === "object" && data !== null && "text" in data) {
-    const value = (data as { text?: unknown }).text;
-    return typeof value === "string" ? value : "";
-  }
-  return "";
-}
-
-function normalizeToolEvents(source: unknown): ChatToolEvent[] {
-  if (!Array.isArray(source)) {
-    return [];
-  }
-  return source
-    .map((item) => {
-      if (typeof item !== "object" || item === null) {
-        return null;
-      }
-      const candidate = item as Record<string, unknown>;
-      const tool = typeof candidate.tool === "string" ? candidate.tool : undefined;
-      const status = typeof candidate.status === "string" ? candidate.status : undefined;
-      if (!tool || !status) {
-        return null;
-      }
-      const normalized: ChatToolEvent = {
-        tool,
-        status,
-      };
-      if (candidate.latency_ms && typeof candidate.latency_ms === "number") {
-        normalized.latency_ms = candidate.latency_ms;
-      }
-      if (candidate.result_preview && typeof candidate.result_preview === "string") {
-        normalized.result_preview = candidate.result_preview;
-      }
-      if (candidate.ts && typeof candidate.ts === "string") {
-        normalized.ts = candidate.ts;
-      }
-      if (candidate.args && typeof candidate.args === "object") {
-        normalized.args = candidate.args as Record<string, unknown>;
-      }
-      return normalized;
-    })
-    .filter((entry): entry is ChatToolEvent => entry !== null);
-}
-
-function normalizeLogEntries(source: unknown): ChatLogEntry[] {
-  if (!Array.isArray(source)) {
-    return [];
-  }
-  return source
-    .map((item) => {
-      if (typeof item !== "object" || item === null) {
-        return null;
-      }
-      const value = item as Record<string, unknown>;
-      const level = typeof value.level === "string" ? value.level : undefined;
-      const msg = typeof value.msg === "string" ? value.msg : undefined;
-      if (!level || !msg) {
-        return null;
-      }
-      const normalized: ChatLogEntry = { level, msg };
-      if (value.assistant_language && typeof value.assistant_language === "string") {
-        normalized.assistant_language = value.assistant_language;
-      }
-      return normalized;
-    })
-    .filter((entry): entry is ChatLogEntry => entry !== null);
-}
+const DEFAULT_MODEL = "gpt-oss:20b";
 
 function formatTime(date: Date) {
   return new Intl.DateTimeFormat(undefined, {
@@ -171,39 +95,78 @@ export default function ChatPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [sessionsLoading, setSessionsLoading] = useState(false);
-  const [activeSession, setActiveSession] = useState<SessionSummary | null>(null);
-  const [sessionIdentifier, setSessionIdentifier] = useState<string>(() => crypto.randomUUID());
+  const chat = useChatState();
+  const {
+    sessions,
+    sessionsLoading,
+    activeSession,
+    sessionIdentifier,
+    messages,
+    input,
+    isStreaming,
+    streamController,
+    toolTimeline,
+    logEntries,
+    transcript,
+    sttMeta,
+    isRecording,
+    enableTools,
+    expectAudio,
+    assistantLanguage,
+    selectedModel,
+    health,
+    healthLoading,
+    messagesRef,
+    audioContextRef,
+    recordingStopResolver,
+    setSessions,
+    setSessionsLoading,
+    setActiveSession,
+    setSessionIdentifier,
+    setMessages,
+    addMessage,
+    updateMessage,
+    setInput,
+    setStreamController,
+    setIsStreaming,
+    setToolTimeline,
+    setLogEntries,
+    addToolEvent,
+    addLogEntry,
+    setTranscript,
+    setSttMeta,
+    setIsRecording,
+    setEnableTools,
+    setExpectAudio,
+    setAssistantLanguage,
+    setSelectedModel,
+    setHealth,
+    setHealthLoading,
+    clearStreamData,
+    startNewSession,
+    updateMessagesRef,
+  } = chat;
 
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const messagesRef = useRef<ConversationMessage[]>([]);
-  const [input, setInput] = useState("");
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamController, setStreamController] = useState<StreamController | null>(null);
+  const { scrollRef: messageListRef, hasNewMessages, scrollToBottom } = useAutoScroll<HTMLDivElement>({
+    enabled: true,
+    threshold: 100,
+  });
 
-  const [toolTimeline, setToolTimeline] = useState<ChatToolEvent[]>([]);
-  const [logEntries, setLogEntries] = useState<ChatLogEntry[]>([]);
-  const [transcript, setTranscript] = useState<string | null>(null);
-  const [sttMeta, setSttMeta] = useState<{ confidence?: number; language?: string }>({});
-
-  const [enableTools, setEnableTools] = useState(true);
-  const [expectAudio, setExpectAudio] = useState(false);
-  const [assistantLanguage, setAssistantLanguage] = useState(DEFAULT_LANGUAGE);
-  const [selectedModel, setSelectedModel] = useState(DEFAULT_MODEL);
-
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [healthLoading, setHealthLoading] = useState(false);
-
-  const [isRecording, setIsRecording] = useState(false);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const recordingStopResolver = useRef<(() => void) | null>(null);
-
-  const messageListRef = useRef<HTMLDivElement | null>(null);
+  const filteredSessionHistory = useCallback(
+    () =>
+      messagesRef.current
+        .filter((msg) => msg.role !== "system" && !msg.streaming)
+        .map((msg) => ({
+          role: msg.role,
+          content: msg.content,
+        }))
+        .slice(-MAX_HISTORY),
+    []
+  );
 
   useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages]);
+    updateMessagesRef(messages);
+  }, [messages, updateMessagesRef]);
 
   useEffect(() => {
     if (isAuthenticated && !authLoading) {
@@ -218,20 +181,6 @@ export default function ChatPage() {
     }
   }, [isAuthenticated, authLoading, router]);
 
-  useEffect(() => {
-    if (messageListRef.current) {
-      messageListRef.current.scrollTop = messageListRef.current.scrollHeight;
-    }
-  }, [messages, isStreaming]);
-
-  const filteredSessionHistory = () =>
-    messagesRef.current
-      .filter((msg) => msg.role !== "system" && !msg.streaming)
-      .map((msg) => ({
-        role: msg.role,
-        content: msg.content,
-      }))
-      .slice(-MAX_HISTORY);
 
   const refreshSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -271,13 +220,13 @@ export default function ChatPage() {
     setHealthLoading(true);
     try {
       const data = await apiGet<HealthStatus>("/health");
-      setHealth(data);
+      setHealth(data, false);
     } catch (error) {
       console.error("Health request failed", error);
     } finally {
       setHealthLoading(false);
     }
-  }, []);
+  }, [setHealth, setHealthLoading]);
 
   const loadSessionMessages = useCallback(
     async (session: SessionSummary) => {
@@ -296,7 +245,7 @@ export default function ChatPage() {
         setEnableTools(detail.session.enable_tools);
         setSelectedModel(detail.session.model || DEFAULT_MODEL);
         setMessages(
-          sortedMessages.map((message) => ({
+          sortedMessages.map((message: SessionMessage) => ({
             id: String(message.id),
             role: message.role,
             content: message.content,
@@ -315,23 +264,6 @@ export default function ChatPage() {
     []
   );
 
-  const startNewSession = () => {
-    const identifier = crypto.randomUUID();
-    setActiveSession({
-      id: -1,
-      external_id: identifier,
-      title: null,
-      model: selectedModel,
-      enable_tools: true,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    setSessionIdentifier(identifier);
-    setMessages([]);
-    setToolTimeline([]);
-    setLogEntries([]);
-    setTranscript(null);
-  };
 
   const handleSelectSession = async (session: SessionSummary) => {
     if (isStreaming) {
@@ -381,9 +313,10 @@ export default function ChatPage() {
     streamController?.cancel();
     setStreamController(null);
     setIsStreaming(false);
-    setMessages((prev) =>
-      prev.map((msg) => (msg.streaming ? { ...msg, streaming: false } : msg))
-    );
+    const streamingMsg = messages.find((msg) => msg.streaming);
+    if (streamingMsg) {
+      updateMessage(streamingMsg.id, streamingMsg.content, false);
+    }
   };
 
   const playAudio = (audioB64: string | null | undefined) => {
@@ -422,7 +355,8 @@ export default function ChatPage() {
       streaming: true,
     };
 
-    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    addMessage(userMessage);
+    addMessage(assistantMessage);
     setInput("");
     setTranscript(null);
     setToolTimeline([]);
@@ -448,47 +382,35 @@ export default function ChatPage() {
           if (event.event === "token") {
             const tokenText = getTokenText(event.data);
             if (tokenText) {
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMessage.id
-                    ? { ...msg, content: msg.content + String(tokenText) }
-                    : msg
-                )
-              );
+              const currentMsg = messagesRef.current.find(m => m.id === assistantMessage.id);
+              if (currentMsg) {
+                updateMessage(assistantMessage.id, currentMsg.content + String(tokenText), true);
+              }
             }
           } else if (event.event === "tool") {
             const [eventData] = normalizeToolEvents([event.data as ChatToolEvent]);
             if (eventData) {
-              setToolTimeline((prev) => [...prev, eventData].slice(-20));
+              addToolEvent(eventData);
             }
           } else if (event.event === "log") {
             const [logEntry] = normalizeLogEntries([event.data]);
             if (logEntry) {
-              setLogEntries((prev) => [...prev, logEntry].slice(-40));
+              addLogEntry(logEntry);
             }
           } else if (event.event === "done") {
             const data = event.data as UnifiedChatStreamPayload;
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === assistantMessage.id
-                  ? {
-                      ...msg,
-                      content: data.content || data.final_text || msg.content,
-                      streaming: false,
-                    }
-                  : msg
-              )
+            const currentMsg = messagesRef.current.find(m => m.id === assistantMessage.id);
+            updateMessage(
+              assistantMessage.id,
+              data.content || data.final_text || currentMsg?.content || "",
+              false
             );
             if (data.tool_events) {
               const normalized = normalizeToolEvents(data.tool_events);
-              if (normalized.length) {
-                setToolTimeline((prev) => [...prev, ...normalized].slice(-50));
-              }
+              normalized.forEach(addToolEvent);
             }
             const normalizedLogs = normalizeLogEntries(data.logs);
-            if (normalizedLogs.length) {
-              setLogEntries((prev) => [...prev, ...normalizedLogs].slice(-40));
-            }
+            normalizedLogs.forEach(addLogEntry);
             setTranscript(data.transcript || null);
             setSttMeta({
               confidence: data.stt_confidence || undefined,
@@ -568,7 +490,8 @@ export default function ChatPage() {
         streaming: true,
       };
 
-      setMessages((prev) => [...prev, userMessage, assistantMessage]);
+      addMessage(userMessage);
+      addMessage(assistantMessage);
       setIsStreaming(true);
       setToolTimeline([]);
       setLogEntries([]);
@@ -593,47 +516,35 @@ export default function ChatPage() {
             if (event.event === "token") {
               const tokenText = getTokenText(event.data);
               if (tokenText) {
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === assistantMessage.id
-                      ? { ...msg, content: msg.content + String(tokenText) }
-                      : msg
-                  )
-                );
+                const currentMsg = messagesRef.current.find(m => m.id === assistantMessage.id);
+                if (currentMsg) {
+                  updateMessage(assistantMessage.id, currentMsg.content + String(tokenText), true);
+                }
               }
             } else if (event.event === "tool") {
               const [eventData] = normalizeToolEvents([event.data as ChatToolEvent]);
               if (eventData) {
-                setToolTimeline((prev) => [...prev, eventData].slice(-20));
+                addToolEvent(eventData);
               }
             } else if (event.event === "log") {
               const [logEntry] = normalizeLogEntries([event.data]);
               if (logEntry) {
-                setLogEntries((prev) => [...prev, logEntry].slice(-40));
+                addLogEntry(logEntry);
               }
             } else if (event.event === "done") {
               const data = event.data as UnifiedChatStreamPayload;
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === assistantMessage.id
-                    ? {
-                        ...msg,
-                        content: data.content || data.final_text || msg.content,
-                        streaming: false,
-                      }
-                    : msg
-                )
+              const currentMsg = messagesRef.current.find(m => m.id === assistantMessage.id);
+              updateMessage(
+                assistantMessage.id,
+                data.content || data.final_text || currentMsg?.content || "",
+                false
               );
               if (data.tool_events) {
                 const normalized = normalizeToolEvents(data.tool_events);
-                if (normalized.length) {
-                  setToolTimeline((prev) => [...prev, ...normalized].slice(-50));
-                }
+                normalized.forEach(addToolEvent);
               }
               const normalizedLogs = normalizeLogEntries(data.logs);
-              if (normalizedLogs.length) {
-                setLogEntries((prev) => [...prev, ...normalizedLogs].slice(-40));
-              }
+              normalizedLogs.forEach(addLogEntry);
               if (data.transcript) {
                 setTranscript(data.transcript);
                 setSttMeta({
@@ -672,8 +583,8 @@ export default function ChatPage() {
 
   if (!isAuthenticated && !authLoading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="rounded-3xl border border-border bg-card/70 px-8 py-12 text-center shadow-xl backdrop-blur">
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <div className="w-full max-w-md rounded-3xl border border-border bg-card/70 px-8 py-12 text-center shadow-xl backdrop-blur">
           <h1 className="text-2xl font-semibold text-foreground">
             Redirecting to authenticate…
           </h1>
@@ -684,119 +595,43 @@ export default function ChatPage() {
 
   return (
     <div className="flex h-full">
-      <aside className="hidden w-[320px] flex-col border-r border-border/60 bg-card/70 p-4 lg:flex">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Workspace</p>
-            <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
-          </div>
-          <Button size="icon" variant="ghost" onClick={() => refreshSessions()}>
-            {sessionsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        <Button
-          variant="secondary"
-          className="mb-4 w-full gap-2 rounded-2xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
-          onClick={startNewSession}
-        >
-          <Plus className="h-4 w-4" />
-          New Conversation
-        </Button>
-
-        <div className="flex-1 space-y-3 overflow-auto pr-2">
-          {sessions.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground">
-              No sessions yet. Start chatting to create your first conversation.
-            </div>
-          ) : (
-            sessions.map((session) => {
-              const isActive = activeSession?.id === session.id;
-              return (
-                <button
-                  key={session.id}
-                  className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                    isActive
-                      ? "border-primary/60 bg-primary/10 shadow-sm"
-                      : "border-transparent bg-background/60 hover:border-border/80 hover:bg-background"
-                  }`}
-                  onClick={() => handleSelectSession(session)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-foreground">
-                        {deriveSessionName(session)}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {new Date(session.updated_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <Badge variant="outline" className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary">
-                      {session.model ? session.model.split(":")[0] : "auto"}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 font-medium text-primary">
-                      <Sparkles className="h-3 w-3" />
-                      {session.enable_tools ? "Tools" : "Chat"}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="ml-auto h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleRenameSession(session);
-                      }}
-                    >
-                      <Sparkles className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDeleteSession(session);
-                      }}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-
-        <div className="mt-4 rounded-2xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">
-          <p className="flex items-center gap-2 font-medium text-foreground">
-            <BookOpen className="h-4 w-4 text-primary" />
-            Knowledge Hub
-          </p>
-          <p className="mt-1">
-            Curate documents and tools that fuel the agent&apos;s reasoning.{" "}
-            <Link href="/documents" className="text-primary underline">
-              Visit documents →
-            </Link>
-          </p>
-        </div>
-      </aside>
+      <SessionSidebar
+        sessions={sessions}
+        sessionsLoading={sessionsLoading}
+        activeSession={activeSession}
+        onRefresh={refreshSessions}
+        onNewSession={startNewSession}
+        onSelectSession={handleSelectSession}
+        onRenameSession={handleRenameSession}
+        onDeleteSession={handleDeleteSession}
+      />
 
       <main className="flex flex-1 flex-col">
         <div className="border-b border-border/60 bg-card/70 px-6 py-4 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Active session
-              </p>
-              <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
-                <MessageCircle className="h-5 w-5 text-primary" />
-                {deriveSessionName(activeSession)}
-                <Badge variant="outline" className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary">
-                  {selectedModel.split(":")[0]}
-                </Badge>
-              </h1>
+            <div className="flex items-center gap-3">
+              <MobileSessionDrawer
+                sessions={sessions}
+                sessionsLoading={sessionsLoading}
+                activeSession={activeSession}
+                onRefresh={refreshSessions}
+                onNewSession={startNewSession}
+                onSelectSession={handleSelectSession}
+                onRenameSession={handleRenameSession}
+                onDeleteSession={handleDeleteSession}
+              />
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Active session
+                </p>
+                <h1 className="flex items-center gap-2 text-2xl font-semibold text-foreground">
+                  <MessageCircle className="h-5 w-5 text-primary" />
+                  {deriveSessionName(activeSession)}
+                  <Badge variant="outline" className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary">
+                    {selectedModel.split(":")[0]}
+                  </Badge>
+                </h1>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -825,7 +660,7 @@ export default function ChatPage() {
         </div>
 
         <div className="flex flex-1 flex-col gap-6 overflow-hidden px-6 py-6 xl:flex-row">
-          <section className="flex-1">
+          <section className="flex-1 relative">
             <div
               ref={messageListRef}
               className="flex h-[calc(100vh-320px)] flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
@@ -894,271 +729,46 @@ export default function ChatPage() {
               )}
             </div>
 
-            <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl backdrop-blur">
-              <div className="flex flex-col gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                    <span>Assistant language</span>
-                    <Input
-                      value={assistantLanguage}
-                      onChange={(event) => setAssistantLanguage(event.target.value)}
-                      className="h-7 w-16 rounded-full border-0 bg-transparent px-2 text-xs font-semibold uppercase text-foreground"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-                    <span>Model</span>
-                    <Input
-                      value={selectedModel}
-                      onChange={(event) => setSelectedModel(event.target.value)}
-                      className="h-7 w-[140px] rounded-full border-0 bg-transparent px-2 text-xs font-semibold text-foreground"
-                    />
-                  </div>
-                  <Button
-                    variant={enableTools ? "default" : "outline"}
-                    className="rounded-full"
-                    onClick={() => setEnableTools((prev) => !prev)}
-                  >
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    {enableTools ? "Tools active" : "Enable tools"}
-                  </Button>
-                  <Button
-                    variant={expectAudio ? "default" : "outline"}
-                    className="rounded-full"
-                    onClick={() => setExpectAudio((prev) => !prev)}
-                  >
-                    <Volume2 className="mr-2 h-4 w-4" />
-                    {expectAudio ? "Voice-on" : "Voice-off"}
-                  </Button>
-                </div>
+            {hasNewMessages && (
+              <Button
+                onClick={() => scrollToBottom()}
+                className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full shadow-lg"
+                size="sm"
+              >
+                <ArrowDown className="mr-2 h-4 w-4" />
+                New messages
+              </Button>
+            )}
 
-                <textarea
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" && !event.shiftKey) {
-                      event.preventDefault();
-                      void handleSendText();
-                    }
-                  }}
-                  placeholder="Ask anything… Request a plan, run a tool, or brainstorm in crimson style."
-                  className="min-h-[110px] w-full rounded-2xl border border-border/70 bg-background/70 p-4 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
-                />
-
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="icon"
-                      className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
-                      onClick={() => (isRecording ? stopRecording() : startRecording())}
-                      disabled={isStreaming}
-                    >
-                      {isRecording ? (
-                        <StopCircle className="h-4 w-4" />
-                      ) : (
-                        <Mic className="h-4 w-4" />
-                      )}
-                    </Button>
-                    <span>{isRecording ? "Recording… release to send." : "Hold to speak."}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isStreaming && (
-                      <Button variant="ghost" onClick={stopStreaming} className="rounded-full">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        Stop response
-                      </Button>
-                    )}
-                    <Button
-                      onClick={() => handleSendText()}
-                      disabled={!input.trim() || isStreaming}
-                      className="rounded-full px-6"
-                    >
-                      {isStreaming ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Streaming…
-                        </>
-                      ) : (
-                        <>
-                          <Send className="mr-2 h-4 w-4" />
-                          Send
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <ChatComposer
+              input={input}
+              onInputChange={setInput}
+              onSendText={handleSendText}
+              isStreaming={isStreaming}
+              isRecording={isRecording}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              onStopStreaming={stopStreaming}
+              assistantLanguage={assistantLanguage}
+              onAssistantLanguageChange={setAssistantLanguage}
+              selectedModel={selectedModel}
+              onSelectedModelChange={setSelectedModel}
+              enableTools={enableTools}
+              onToggleTools={() => setEnableTools(!enableTools)}
+              expectAudio={expectAudio}
+              onToggleAudio={() => setExpectAudio(!expectAudio)}
+            />
           </section>
 
-          <aside className="hidden w-[320px] space-y-5 xl:flex xl:flex-col">
-            <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Tool timeline
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {toolTimeline.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Tools spring into action while you chat. You&apos;ll see them here in real time.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {toolTimeline.slice(-6).map((event, index) => (
-                      <div
-                        key={`${event.tool}-${event.status}-${index}`}
-                        className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-xs"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-foreground">{event.tool}</span>
-                          <Badge
-                            className={`rounded-full text-[10px] uppercase tracking-wider ${
-                              event.status === "start"
-                                ? "bg-primary/10 text-primary"
-                                : event.status === "success"
-                                  ? "bg-emerald-100 text-emerald-600"
-                                  : "bg-destructive/10 text-destructive"
-                            }`}
-                          >
-                            {event.status}
-                          </Badge>
-                        </div>
-                        {event.latency_ms && (
-                          <p className="mt-1 text-muted-foreground">
-                            {event.latency_ms} ms •{" "}
-                            {event.result_preview?.slice(0, 60)}
-                            {event.result_preview && event.result_preview.length > 60 ? "…" : ""}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Link
-                  href="/analytics"
-                  className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-                >
-                  View analytics <ChevronRight className="h-3 w-3" />
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <Cpu className="h-4 w-4 text-primary" />
-                  Reasoning trace
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs">
-                {logEntries.length === 0 ? (
-                  <p className="text-muted-foreground">
-                    We&apos;ll surface the thought process, warnings, and tool diagnostics here.
-                  </p>
-                ) : (
-                  logEntries.slice(-8).map((log, index) => (
-                    <div
-                      key={`${log.level}-${index}`}
-                      className="rounded-2xl border border-border/40 bg-background/60 px-3 py-2"
-                    >
-                      <span className="font-semibold uppercase tracking-wide text-primary">
-                        {log.level}
-                      </span>
-                      <p className="mt-1 text-muted-foreground">{log.msg}</p>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <Volume2 className="h-4 w-4 text-primary" />
-                  Voice capture
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {transcript ? (
-                  <div className="space-y-2 text-sm">
-                    <p className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground">
-                      {transcript}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Confidence {(sttMeta.confidence ?? 0).toFixed(2)} •{" "}
-                      {sttMeta.language?.toUpperCase() || "auto"}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    When you speak to YouWorker we transcribe locally and surface the transcript
-                    here.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-                  <ArrowRight className="h-4 w-4 text-primary" />
-                  System health
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs">
-                {health ? (
-                  <>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={`rounded-full text-[10px] uppercase tracking-wider ${
-                          health.status === "healthy"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-amber-100 text-amber-700"
-                        }`}
-                      >
-                        {health.status}
-                      </Badge>
-                      <span className="text-muted-foreground">
-                        {health.components?.agent === "ready"
-                          ? "Agent ready"
-                          : "Agent warming up"}
-                      </span>
-                    </div>
-                    <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2">
-                      <p className="font-semibold text-foreground">Models</p>
-                      <div className="mt-2 space-y-1">
-                        {health.components?.ollama?.models &&
-                          Object.entries(health.components.ollama.models).map(([key, model]) => (
-                            <div
-                              key={key}
-                              className="flex items-center justify-between text-muted-foreground"
-                            >
-                              <span>{model.name}</span>
-                              <span
-                                className={
-                                  model.available
-                                    ? "text-emerald-600"
-                                    : "text-destructive font-medium"
-                                }
-                              >
-                                {model.available ? "ready" : "missing"}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">
-                    Health data will appear once the agent connects to the backend.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </aside>
+          <InsightSidebar
+            toolTimeline={toolTimeline}
+            logEntries={logEntries}
+            transcript={transcript}
+            sttMeta={sttMeta}
+            health={health}
+            healthLoading={healthLoading}
+            onRefreshHealth={fetchHealth}
+          />
         </div>
       </main>
     </div>

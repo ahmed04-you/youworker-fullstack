@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { ShieldAlert, Sparkles, DoorOpen, Cookie, Loader2 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
+import { useTranslations } from "@/components/language-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,32 +21,29 @@ import { Badge } from "@/components/ui/badge";
 export default function SettingsPage() {
   const { isAuthenticated, username, logout, isLoading } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const { t } = useTranslations("settings");
 
-  const statusBadge = useMemo(() => {
-    if (isLoading) {
-      return { label: "Checking status…", variant: "outline" as const };
-    }
-    if (isAuthenticated) {
-      return { label: "Authenticated", variant: "default" as const };
-    }
-    return { label: "Guest mode", variant: "secondary" as const };
-  }, [isAuthenticated, isLoading]);
+  const statusBadge = isLoading
+    ? { label: t("hero.status.loading"), variant: "outline" as const }
+    : isAuthenticated
+    ? { label: t("hero.status.authenticated"), variant: "default" as const }
+    : { label: t("hero.status.guest"), variant: "secondary" as const };
+
+  const statusMessage = isAuthenticated
+    ? t("hero.statusMessage.authenticated", { username: username ?? "root" })
+    : t("hero.statusMessage.guest");
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
       await logout();
-      toast.success("Signed out successfully.");
+      toast.success(t("authentication.card.logoutSuccess"));
     } catch (error) {
-      toast.error("Logout failed. Please retry.");
+      toast.error(t("authentication.card.logoutError"));
     } finally {
       setIsLoggingOut(false);
     }
   };
-
-  const statusMessage = isAuthenticated
-    ? `Signed in as ${username ?? "root"}.`
-    : "Log in with your API key to unlock the full workspace.";
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 lg:px-8">
@@ -51,15 +51,13 @@ export default function SettingsPage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">
-              Control center
+              {t("hero.eyebrow")}
             </p>
             <h1 className="text-2xl font-semibold text-foreground">
-              Personalize your YouWorker experience
+              {t("hero.heading")}
             </h1>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-              Manage authentication, learn how sessions are protected, and surface quick links for
-              everyday workflows. Cream-forward visuals keep the experience calm, even when YouWorker
-              is in crimson acceleration.
+              {t("hero.description")}
             </p>
           </div>
           <div className="flex flex-col items-start gap-2 text-xs text-muted-foreground sm:flex-row sm:items-center">
@@ -80,16 +78,15 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <ShieldAlert className="h-4 w-4 text-primary" />
-              Authentication
+              {t("authentication.title")}
             </CardTitle>
-            <CardDescription>Cookie-based access to every backend capability.</CardDescription>
+            <CardDescription>{t("authentication.description")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-5 text-sm">
             <div className="rounded-2xl border border-border/60 bg-background/80 p-4">
               <p className="font-medium text-foreground">{statusMessage}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                YouWorker uses secure, HTTP-only cookies issued by the backend. Tokens refresh
-                automatically so you stay connected during longer analysis sessions.
+                {t("authentication.card.statusBody")}
               </p>
             </div>
             <div className="grid gap-3">
@@ -97,10 +94,10 @@ export default function SettingsPage() {
                 <Cookie className="mt-1 h-4 w-4 text-primary" />
                 <div>
                   <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                    Session cookies
+                    {t("authentication.card.sessionCookiesTitle")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    JWT tokens are stored in HttpOnly cookies. Client-side code never sees raw keys.
+                    {t("authentication.card.sessionCookiesBody")}
                   </p>
                 </div>
               </div>
@@ -108,11 +105,10 @@ export default function SettingsPage() {
                 <Sparkles className="mt-1 h-4 w-4 text-primary" />
                 <div>
                   <p className="text-xs font-semibold text-foreground uppercase tracking-wide">
-                    Continuous refresh
+                    {t("authentication.card.continuousRefreshTitle")}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Tokens refresh a minute before expiry so long-running chats and analytics stay
-                    authorized.
+                    {t("authentication.card.continuousRefreshBody")}
                   </p>
                 </div>
               </div>
@@ -129,19 +125,18 @@ export default function SettingsPage() {
                   {isLoggingOut ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Signing out…
+                      {t("authentication.card.logoutWorking")}
                     </>
                   ) : (
                     <>
                       <DoorOpen className="mr-2 h-4 w-4" />
-                      Sign out
+                      {t("authentication.card.logoutButton")}
                     </>
                   )}
                 </Button>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Open the login dialog to authenticate with your API key. The form appears
-                  automatically when you’re not authenticated.
+                  {t("authentication.card.unauthenticatedMessage")}
                 </p>
               )}
             </div>
@@ -152,28 +147,32 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-sm font-semibold">
               <Sparkles className="h-4 w-4 text-primary" />
-              Workspace Preferences
+              {t("preferences.title")}
             </CardTitle>
-            <CardDescription>
-              Tune environment defaults so the agent behaves exactly how your team expects.
-            </CardDescription>
+            <CardDescription>{t("preferences.description")}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
             <PreferenceTile
-              title="Theme adaptation"
-              description="Switch between light, dark, or system theme using the sidebar toggle."
+              title={t("preferences.theme.title")}
+              description={t("preferences.theme.description")}
+              action={<ThemeToggle aria-label="Toggle theme" />}
             />
             <PreferenceTile
-              title="Voice-ready UI"
-              description="Microphone controls live in the chat composer whenever you need push-to-talk."
+              title={t("preferences.language.title")}
+              description={t("preferences.language.description")}
+              action={<LanguageSwitcher aria-label="Switch language" />}
             />
             <PreferenceTile
-              title="Analytics clarity"
-              description="Dashboards adopt cream + crimson, adapting to theme for easier scanning."
+              title={t("preferences.voice.title")}
+              description={t("preferences.voice.description")}
             />
             <PreferenceTile
-              title="Session insights"
-              description="Every conversation is stored with the originating model, tool usage, and timestamps."
+              title={t("preferences.analytics.title")}
+              description={t("preferences.analytics.description")}
+            />
+            <PreferenceTile
+              title={t("preferences.sessions.title")}
+              description={t("preferences.sessions.description")}
             />
           </CardContent>
         </Card>
@@ -182,11 +181,28 @@ export default function SettingsPage() {
   );
 }
 
-function PreferenceTile({ title, description }: { title: string; description: string }) {
+function PreferenceTile({
+  title,
+  description,
+  action,
+}: {
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm">
-      <p className="text-sm font-medium text-foreground">{title}</p>
-      <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{description}</p>
-    </div>
+    <article className="group rounded-2xl border border-border/60 bg-background/70 p-4 shadow-sm hover:shadow-md transition-all duration-200 focus-within:ring-2 focus-within:ring-primary/30">
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-medium text-foreground group-hover:text-primary">{title}</h3>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {description}
+        </p>
+      </div>
+      {action ? (
+        <div className="mt-3">
+          {action}
+        </div>
+      ) : null}
+    </article>
   );
 }

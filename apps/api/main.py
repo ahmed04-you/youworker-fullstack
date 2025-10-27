@@ -33,6 +33,8 @@ from apps.api.routes.analytics import router as analytics_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes import ingestion, crud, health
 
+from .services.startup import StartupService
+
 # Correlation ID context variable for request tracing
 correlation_id_var: ContextVar[str] = ContextVar("correlation_id", default="")
 
@@ -67,154 +69,14 @@ logger = logging.getLogger(__name__)
 # Rate limiter configuration
 limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 
+startup_service = StartupService()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
-
-    logger.info("Starting up API service...")
-
-    # Ensure ingestion directories exist
-    from pathlib import Path
-
-    try:
-        Path(settings.ingest_upload_root).mkdir(parents=True, exist_ok=True)
-        logger.info("Ensured directory exists: %s", settings.ingest_upload_root)
-    except (OSError, PermissionError) as e:
-        logger.warning("Could not create directory %s: %s", settings.ingest_upload_root, e)
-
-    # Initialize database (fail hard if unavailable)
-    logger.info("Initializing database...")
-    await init_database(settings)  # type: ignore
-    logger.info("Database initialized")
-
-    # Initialize Ollama client
-    logger.info("Initializing Ollama client...")
-    app.state.ollama_client = OllamaClient(
-        base_url=settings.ollama_base_url,
-        auto_pull=settings.ollama_auto_pull,
-    )
-    logger.info("Ollama client initialized")
-
-    # Initialize vector store
-    logger.info("Initializing vector store...")
-    app.state.vector_store = QdrantStore(
-        url=settings.qdrant_url,
-        embedding_dim=settings.embedding_dim,
-        default_collection=settings.qdrant_collection,
-    )
-    logger.info("Vector store initialized")
-
-    # Initialize ingestion pipeline
-    app.state.ingestion_pipeline = IngestionPipeline(settings=settings)  # type: ignore
-
-    # Parse MCP server URLs
-    logger.info("Parsing MCP server URLs...")
-    mcp_server_configs = []
-    if settings.mcp_server_urls:
-
-        def derive_server_id(raw_url: str) -> str:
-            """Derive a stable server_id from a URL.
-
-            Rules:
-            - Use hostname if present, else last path segment
-            - Strip common prefixes: 'mcp', 'mcp-', 'mcp_'
-            - Strip port and surrounding slashes
-            - Fallback to the entire hostname if nothing remains
-            """
-            try:
-                parsed = urlparse(raw_url)
-                host = (parsed.hostname or "").strip().strip("/")
-                if host:
-                    base = host
-                else:
-                    # e.g., ws:///mcp_web
-                    base = parsed.path.strip("/") or raw_url
-
-                # Remove common prefixes
-                for prefix in ("mcp-", "mcp_", "mcp"):
-                    if base.startswith(prefix):
-                        base = base[len(prefix) :]
-                        break
-
-                # Final cleanup
-                base = base.split(".")[0]  # drop domain if any
-                base = base or (parsed.hostname or "server").split(".")[0]
-                return base
-            except (ValueError, AttributeError):
-                return "server"
-
-        for url in settings.mcp_server_urls.split(","):
-            url = url.strip()
-            if url:
-                server_id = derive_server_id(url)
-                mcp_server_configs.append({"server_id": server_id, "url": url})
-
-    logger.info(f"Configured MCP servers: {mcp_server_configs}")
-
-    # Initialize MCP registry
-    app.state.registry = MCPRegistry(server_configs=mcp_server_configs)
-
-    # Connect to all MCP servers and discover tools
-    logger.info("About to connect to MCP servers...")
-    try:
-        await app.state.registry.connect_all()
-        logger.info(f"Connected to {len(app.state.registry.clients)} MCP servers")
-
-        # Persist MCP servers and tools on refresh
-        async def persist_registry(tools: dict[str, Any], clients: dict[str, Any]):
-            from packages.db import get_async_session
-            from packages.db.crud import upsert_mcp_servers, upsert_tools
-
-            async with get_async_session() as db:
-                # Servers
-                servers = []
-                for sid, client in clients.items():
-                    servers.append(
-                        (
-                            sid,
-                            client.ws_url.replace("ws://", "http://").replace("wss://", "https://"),
-                            client.is_healthy,
-                        )
-                    )
-                smap = await upsert_mcp_servers(db, servers)
-                # Tools
-                tool_rows = []
-                for qname, tool in tools.items():
-                    tool_rows.append((tool.server_id, qname, tool.description, tool.input_schema))
-                await upsert_tools(db, smap, tool_rows)
-
-        app.state.registry.set_refreshed_callback(persist_registry)
-        # Trigger initial persist now
-        await persist_registry(app.state.registry.tools, app.state.registry.clients)
-        # Start periodic refresh of tools
-        refresh_interval = max(0, settings.mcp_refresh_interval)
-        await app.state.registry.start_periodic_refresh(interval_seconds=refresh_interval)
-    except (ConnectionError, TimeoutError, OSError) as e:
-        logger.error(f"Failed to connect to MCP servers: {e}")
-        # Continue anyway - some servers may be unavailable
-
-    # Initialize agent loop
-    app.state.agent_loop = AgentLoop(
-        ollama_client=app.state.ollama_client,
-        registry=app.state.registry,
-        model=settings.chat_model,
-        default_language=settings.agent_default_language,
-    )
-
-    logger.info("API service ready")
-
+    await startup_service.initialize(app)
     yield
-
-    # Cleanup
-    logger.info("Shutting down API service...")
-    if app.state.ollama_client:
-        await app.state.ollama_client.close()
-    if app.state.registry:
-        await app.state.registry.stop_periodic_refresh()
-        await app.state.registry.close_all()
-    if app.state.vector_store:
-        await app.state.vector_store.close()
+    await startup_service.shutdown(app)
 
 
 # Create FastAPI app

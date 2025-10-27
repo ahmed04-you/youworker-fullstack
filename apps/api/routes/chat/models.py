@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field
 class UnifiedChatRequest(BaseModel):
     """Request model for unified chat endpoint."""
 
-    text_input: Optional[str] = None
-    audio_b64: Optional[str] = None
+    text_input: Optional[str] = Field(None, max_length=4000)
+    audio_b64: Optional[str] = Field(None, max_length=10000000)  # ~10MB base64
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
     messages: Optional[list[Dict[str, Any]]] = None
     session_id: Optional[str] = None

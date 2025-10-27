@@ -15,10 +15,14 @@ import {
   Tag,
   Trash2,
   UploadCloud,
+  Tags,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
-import { apiDelete, apiGet, ApiError, getApiBaseUrl } from "@/lib/api-client";
+import { apiDelete, apiGet, ApiError, getApiBaseUrl, apiPost } from "@/lib/api-client";
+import { useDocumentSelection } from "@/hooks/useDocumentSelection";
 import {
   DocumentRecord,
   DocumentsResponse,
@@ -77,12 +81,23 @@ export default function DocumentsPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
 
+  const {
+    selectedIds,
+    selectedCount,
+    toggleDocument,
+    selectAll,
+    clearSelection,
+    isSelected,
+  } = useDocumentSelection();
+
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [documentsLoading, setDocumentsLoading] = useState(false);
   const [runs, setRuns] = useState<IngestionRunRecord[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
 
   const [selectedCollection, setSelectedCollection] = useState<string>("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [bulkTagInput, setBulkTagInput] = useState("");
 
   const [uploading, setUploading] = useState(false);
   const [pathIngesting, setPathIngesting] = useState(false);
@@ -121,11 +136,20 @@ export default function DocumentsPage() {
   }, [documents]);
 
   const filteredDocuments = useMemo(() => {
-    if (selectedCollection === "all") {
-      return documents;
+    let filtered = documents;
+    if (selectedCollection !== "all") {
+      filtered = filtered.filter((doc) => doc.collection === selectedCollection);
     }
-    return documents.filter((doc) => doc.collection === selectedCollection);
-  }, [documents, selectedCollection]);
+    if (searchTerm) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter((doc) => {
+        const name = getDocumentName(doc).toLowerCase();
+        const tags = doc.tags?.tags?.join(' ').toLowerCase() || '';
+        return name.includes(term) || tags.includes(term);
+      });
+    }
+    return filtered;
+  }, [documents, selectedCollection, searchTerm]);
 
   const totalBytes = documents.reduce((acc, doc) => acc + (doc.bytes_size || 0), 0);
   const totalChunks = runs.reduce((acc, run) => acc + (run.totals_chunks || 0), 0);
@@ -168,6 +192,49 @@ export default function DocumentsPage() {
     } catch (error) {
       console.error(error);
       toast.error("Failed to delete document.");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedCount === 0) return;
+
+    if (!window.confirm(`Delete ${selectedCount} documents? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Delete documents in parallel
+      await Promise.all(
+        selectedIds.map((id) => apiDelete(`/v1/documents/${id}`))
+      );
+      toast.success(`${selectedCount} documents deleted.`);
+      clearSelection();
+      await refreshDocuments();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete some documents.");
+    }
+  };
+
+  const handleBulkTag = async () => {
+    if (selectedCount === 0 || !bulkTagInput.trim()) return;
+
+    try {
+      const tags = parseTags(bulkTagInput);
+      // This would require a bulk tag API endpoint
+      // For now, we'll update each document individually
+      await Promise.all(
+        selectedIds.map((id) =>
+          apiPost(`/v1/documents/${id}/tags`, { tags })
+        )
+      );
+      toast.success(`Tags added to ${selectedCount} documents.`);
+      clearSelection();
+      setBulkTagInput("");
+      await refreshDocuments();
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to tag some documents.");
     }
   };
 
@@ -459,19 +526,32 @@ export default function DocumentsPage() {
             </TabsList>
 
             <TabsContent value="files" className="space-y-4">
-              <div className="rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-6 text-sm">
-                <p className="font-semibold text-primary">Drop documents</p>
-                <p className="mt-1 text-muted-foreground">
-                  PDFs, text, Markdown, audio, or JSON up to 100 MB each.
-                </p>
-                <Input
-                  type="file"
-                  multiple
-                  onChange={(event) =>
-                    setFiles(event.target.files ? Array.from(event.target.files) : [])
-                  }
-                  className="mt-4 cursor-pointer border border-border/60 bg-background/80"
-                />
+              <div
+                className="group rounded-2xl border-2 border-dashed border-border/60 bg-background/80 p-6 text-center transition-colors hover:border-primary/40 focus:border-primary/40"
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setFiles(Array.from(e.dataTransfer.files));
+                }}
+                onDragOver={(e) => e.preventDefault()}
+                onDragEnter={(e) => e.preventDefault()}
+                onDragLeave={(e) => e.preventDefault()}
+              >
+                <div className="flex flex-col items-center justify-center">
+                  <UploadCloud className="h-8 w-8 text-muted-foreground mb-2 group-hover:text-primary" />
+                  <p className="font-semibold text-primary mb-1">Drop documents here</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    PDFs, text, Markdown, audio, or JSON up to 100 MB each.
+                  </p>
+                  <Input
+                    type="file"
+                    multiple
+                    onChange={(event) =>
+                      setFiles(event.target.files ? Array.from(event.target.files) : [])
+                    }
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                    aria-label="Upload files"
+                  />
+                </div>
               </div>
               <Button
                 className="rounded-full"
@@ -613,7 +693,8 @@ export default function DocumentsPage() {
             <select
               value={selectedCollection}
               onChange={(event) => setSelectedCollection(event.target.value)}
-              className="h-9 rounded-full border border-border/70 bg-background/80 px-4 text-xs font-medium text-foreground focus:outline-none"
+              className="h-9 rounded-full border border-border/70 bg-background/80 px-4 text-xs font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30"
+              aria-label="Select collection"
             >
               <option value="all">All collections</option>
               {collections.map((collection) => (
@@ -622,7 +703,14 @@ export default function DocumentsPage() {
                 </option>
               ))}
             </select>
-            <Button variant="outline" size="sm" onClick={() => refreshDocuments()}>
+            <Input
+              placeholder="Search documents..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="h-9 flex-1 max-w-md rounded-full border border-border/70 bg-background/80 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-primary/30"
+              aria-label="Search documents"
+            />
+            <Button variant="outline" size="sm" onClick={() => refreshDocuments()} aria-label="Refresh documents">
               {documentsLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -632,16 +720,93 @@ export default function DocumentsPage() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
+          <div className="mb-4 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Showing {filteredDocuments.length} of {documents.length} documents
+                {selectedCount > 0 && ` (${selectedCount} selected)`}
+              </p>
+              {searchTerm && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSearchTerm('')}
+                  className="text-xs h-8 w-20"
+                >
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            {selectedCount > 0 && (
+              <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-primary/40 bg-primary/10 px-4 py-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearSelection}
+                  className="h-8"
+                >
+                  Clear selection
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Input
+                    placeholder="Add tags (comma-separated)"
+                    value={bulkTagInput}
+                    onChange={(e) => setBulkTagInput(e.target.value)}
+                    className="h-8 w-64 text-xs"
+                  />
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={handleBulkTag}
+                    disabled={!bulkTagInput.trim()}
+                    className="h-8 rounded-full"
+                  >
+                    <Tags className="mr-2 h-3 w-3" />
+                    Tag {selectedCount}
+                  </Button>
+                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  className="ml-auto h-8 rounded-full"
+                >
+                  <Trash2 className="mr-2 h-3 w-3" />
+                  Delete {selectedCount}
+                </Button>
+              </div>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-background/80">
-                  <TableHead>Name</TableHead>
-                  <TableHead>Collection</TableHead>
-                  <TableHead>Source</TableHead>
-                  <TableHead>Size</TableHead>
-                  <TableHead>Indexed</TableHead>
-                  <TableHead className="w-[90px]">Actions</TableHead>
+                  <TableHead scope="col" className="w-[50px]">
+                    <button
+                      onClick={() => {
+                        if (selectedCount === filteredDocuments.length) {
+                          clearSelection();
+                        } else {
+                          selectAll(filteredDocuments.map((doc) => doc.id));
+                        }
+                      }}
+                      className="flex items-center justify-center"
+                      aria-label="Select all documents"
+                    >
+                      {selectedCount === filteredDocuments.length && filteredDocuments.length > 0 ? (
+                        <CheckSquare className="h-4 w-4" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </button>
+                  </TableHead>
+                  <TableHead scope="col">Name</TableHead>
+                  <TableHead scope="col">Collection</TableHead>
+                  <TableHead scope="col">Source</TableHead>
+                  <TableHead scope="col">Size</TableHead>
+                  <TableHead scope="col">Indexed</TableHead>
+                  <TableHead className="w-[90px]" scope="col">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -659,7 +824,20 @@ export default function DocumentsPage() {
                   </TableRow>
                 ) : (
                   filteredDocuments.map((doc) => (
-                    <TableRow key={doc.id} className="transition hover:bg-background/70">
+                    <TableRow key={doc.id} role="row" className="transition hover:bg-background/70">
+                      <TableCell className="w-[50px]">
+                        <button
+                          onClick={() => toggleDocument(doc.id)}
+                          className="flex items-center justify-center"
+                          aria-label={`Select document ${getDocumentName(doc)}`}
+                        >
+                          {isSelected(doc.id) ? (
+                            <CheckSquare className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                      </TableCell>
                       <TableCell className="max-w-[220px]">
                         <p className="truncate text-sm font-medium text-foreground">
                           {getDocumentName(doc)}
@@ -693,7 +871,12 @@ export default function DocumentsPage() {
                           variant="ghost"
                           size="icon"
                           className="rounded-full text-muted-foreground hover:text-destructive"
-                          onClick={() => handleDeleteDocument(doc.id)}
+                          onClick={(e) => {
+                            if (window.confirm(`Delete ${getDocumentName(doc)}? This action cannot be undone.`)) {
+                              handleDeleteDocument(doc.id);
+                            }
+                          }}
+                          aria-label={`Delete document ${getDocumentName(doc)}`}
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>

@@ -5,10 +5,12 @@ import { Moon, Sun, Laptop } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
+import { useTranslations } from "@/components/language-provider";
 
 export function ThemeToggle() {
   const { setTheme, resolvedTheme, theme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const { t } = useTranslations("theme");
 
   useEffect(() => {
     setMounted(true);
@@ -42,7 +44,12 @@ export function ThemeToggle() {
       <Laptop className="h-4 w-4" />
     );
 
-  const label = displayTheme === "system" ? "System" : iconTheme === "dark" ? "Dark" : "Light";
+  const label =
+    displayTheme === "system"
+      ? t("system")
+      : iconTheme === "dark"
+      ? t("dark")
+      : t("light");
 
   return (
     <Button
@@ -50,10 +57,10 @@ export function ThemeToggle() {
       size="sm"
       className="inline-flex items-center gap-2 rounded-full text-xs text-muted-foreground hover:text-primary"
       onClick={cycleTheme}
-      aria-label="Toggle theme"
+      aria-label={t("aria")}
     >
       {icon}
-      <span className="hidden sm:inline">{label}</span>
+      <span>{label}</span>
     </Button>
   );
 }

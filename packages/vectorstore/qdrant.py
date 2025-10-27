@@ -82,6 +82,8 @@ class QdrantStore:
                         size=self.embedding_dim,
                         distance=Distance.COSINE,
                     ),
+                    shard_number=4,  # Enable sharding for large collections
+                    replication_factor=2,  # For high availability
                 )
             else:
                 logger.debug(f"Collection {collection_name} already exists")

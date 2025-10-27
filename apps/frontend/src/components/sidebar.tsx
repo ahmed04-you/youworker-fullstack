@@ -2,20 +2,29 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Menu, Home, FileText, Clock, BarChart3, Settings, LogOut, User } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/lib/auth-context";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useAuth } from "@/lib/auth-context";
+import { useTranslations } from "@/components/language-provider";
 
 export function Sidebar() {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const pathname = usePathname();
   const { username, logout, isAuthenticated } = useAuth();
+  const { t } = useTranslations("sidebar");
 
   const handleLogout = async () => {
     await logout();
   };
+
+  const navLinkClass = (href: string) =>
+    `flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors ${
+      pathname === href ? "bg-accent text-accent-foreground" : ""
+    }`;
 
   return (
     <>
@@ -23,7 +32,7 @@ export function Sidebar() {
       <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-6 w-6" />
+            <Menu className="h-6 w-6" aria-label="Open navigation menu" />
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-64 p-0">
@@ -40,24 +49,24 @@ export function Sidebar() {
                 </div>
               )}
             </div>
-            <nav className="flex-1 p-4 space-y-2">
-              <Link href="/" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
+            <nav className="flex-1 p-4 space-y-2" role="navigation" aria-label="Main navigation">
+              <Link href="/" className={navLinkClass("/")} aria-current={pathname === "/" ? "page" : undefined}>
                 <Home className="h-4 w-4" />
                 Chat
               </Link>
-              <Link href="/documents" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
+              <Link href="/documents" className={navLinkClass("/documents")} aria-current={pathname === "/documents" ? "page" : undefined}>
                 <FileText className="h-4 w-4" />
                 Documents
               </Link>
-              <Link href="/sessions" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
+              <Link href="/sessions" className={navLinkClass("/sessions")} aria-current={pathname === "/sessions" ? "page" : undefined}>
                 <Clock className="h-4 w-4" />
                 Sessions
               </Link>
-              <Link href="/analytics" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
+              <Link href="/analytics" className={navLinkClass("/analytics")} aria-current={pathname === "/analytics" ? "page" : undefined}>
                 <BarChart3 className="h-4 w-4" />
                 Analytics
               </Link>
-              <Link href="/settings" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
+              <Link href="/settings" className={navLinkClass("/settings")} aria-current={pathname === "/settings" ? "page" : undefined}>
                 <Settings className="h-4 w-4" />
                 Settings
               </Link>
@@ -68,6 +77,7 @@ export function Sidebar() {
                   variant="outline"
                   className="w-full justify-start"
                   onClick={handleLogout}
+                  aria-label="Logout"
                 >
                   <LogOut className="h-4 w-4 mr-2" />
                   Logout
@@ -82,9 +92,8 @@ export function Sidebar() {
       <div className="hidden md:block w-64 border-r bg-background">
         <div className="flex flex-col h-full">
           <div className="p-4 border-b space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold">YouWorker.AI</h2>
-              <ThemeToggle />
+            <div className="flex items-center">
+              <h2 className="text-xl font-bold">{t("title")}</h2>
             </div>
             {isAuthenticated && username && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -93,27 +102,27 @@ export function Sidebar() {
               </div>
             )}
           </div>
-          <nav className="flex-1 p-4 space-y-2">
-            <Link href="/" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
-              <Home className="h-4 w-4" />
-              Chat
-            </Link>
-            <Link href="/documents" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
-              <FileText className="h-4 w-4" />
-              Documents
-            </Link>
-            <Link href="/sessions" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
-              <Clock className="h-4 w-4" />
-              Sessions
-            </Link>
-            <Link href="/analytics" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
-              <BarChart3 className="h-4 w-4" />
-              Analytics
-            </Link>
-            <Link href="/settings" className="flex items-center gap-2 p-2 rounded-md hover:bg-accent">
-              <Settings className="h-4 w-4" />
-              Settings
-            </Link>
+          <nav className="flex-1 p-4 space-y-2" role="navigation" aria-label="Main navigation">
+              <Link href="/" className={navLinkClass("/")} aria-current={pathname === "/" ? "page" : undefined}>
+                <Home className="h-4 w-4" />
+                {t("links.chat")}
+              </Link>
+              <Link href="/documents" className={navLinkClass("/documents")} aria-current={pathname === "/documents" ? "page" : undefined}>
+                <FileText className="h-4 w-4" />
+                {t("links.documents")}
+              </Link>
+              <Link href="/sessions" className={navLinkClass("/sessions")} aria-current={pathname === "/sessions" ? "page" : undefined}>
+                <Clock className="h-4 w-4" />
+                {t("links.sessions")}
+              </Link>
+              <Link href="/analytics" className={navLinkClass("/analytics")} aria-current={pathname === "/analytics" ? "page" : undefined}>
+                <BarChart3 className="h-4 w-4" />
+                {t("links.analytics")}
+              </Link>
+              <Link href="/settings" className={navLinkClass("/settings")} aria-current={pathname === "/settings" ? "page" : undefined}>
+                <Settings className="h-4 w-4" />
+                {t("links.settings")}
+              </Link>
           </nav>
           {isAuthenticated && (
             <div className="p-4 border-t">
@@ -121,9 +130,10 @@ export function Sidebar() {
                 variant="outline"
                 className="w-full justify-start"
                 onClick={handleLogout}
+                aria-label="Logout"
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                Logout
+                {t("logout")}
               </Button>
             </div>
           )}
