@@ -17,6 +17,15 @@ router = APIRouter(prefix="/v1")
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _extract_user_id(user) -> int:
+    """Return user id supporting ORM model or dict."""
+    if hasattr(user, "id"):
+        return getattr(user, "id")
+    if isinstance(user, dict) and "id" in user:
+        return user["id"]
+    raise TypeError("Unable to determine user id")
+
+
 # ==================== SESSION ENDPOINTS ====================
 
 
@@ -26,10 +35,11 @@ async def list_sessions(
     limit: int = Query(default=50, le=100),
 ):
     """List user's chat sessions."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import get_user_sessions
 
-        sessions = await get_user_sessions(db, user_id=current_user["id"], limit=limit)
+        sessions = await get_user_sessions(db, user_id=user_id, limit=limit)
         return {
             "sessions": [
                 {
@@ -51,12 +61,11 @@ async def get_session(
     session_id: int, current_user=Depends(get_current_user_with_collection_access)
 ):
     """Get a specific chat session with all messages."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import get_session_with_messages
 
-        session = await get_session_with_messages(
-            db, session_id=session_id, user_id=current_user["id"]
-        )
+        session = await get_session_with_messages(db, session_id=session_id, user_id=user_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
 
@@ -89,10 +98,11 @@ async def delete_session_endpoint(
     session_id: int, current_user=Depends(get_current_user_with_collection_access)
 ):
     """Delete a chat session and all its messages."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import delete_session
 
-        success = await delete_session(db, session_id=session_id, user_id=current_user["id"])
+        success = await delete_session(db, session_id=session_id, user_id=user_id)
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
         await db.commit()
@@ -106,11 +116,12 @@ async def update_session(
     current_user=Depends(get_current_user_with_collection_access),
 ):
     """Update a chat session's title."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import update_session_title
 
         success = await update_session_title(
-            db, session_id=session_id, user_id=current_user["id"], title=title
+            db, session_id=session_id, user_id=user_id, title=title
         )
         if not success:
             raise HTTPException(status_code=404, detail="Session not found")
@@ -129,12 +140,13 @@ async def list_documents(
     offset: int = Query(default=0, ge=0),
 ):
     """List ingested documents."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import get_user_documents
 
         documents = await get_user_documents(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             collection=collection,
             limit=limit,
             offset=offset,
@@ -190,12 +202,13 @@ async def list_ingestion_runs(
     offset: int = Query(default=0, ge=0),
 ):
     """List ingestion run history."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import get_user_ingestion_runs
 
         runs = await get_user_ingestion_runs(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             limit=limit,
             offset=offset,
         )
@@ -226,10 +239,11 @@ async def delete_ingestion_run_endpoint(
     run_id: int, current_user=Depends(get_current_user_with_collection_access)
 ):
     """Delete an ingestion run record."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import delete_ingestion_run
 
-        success = await delete_ingestion_run(db, run_id=run_id, user_id=current_user["id"])
+        success = await delete_ingestion_run(db, run_id=run_id, user_id=user_id)
         if not success:
             raise HTTPException(status_code=404, detail="Ingestion run not found")
         await db.commit()
@@ -246,12 +260,13 @@ async def list_tool_runs(
     offset: int = Query(default=0, ge=0),
 ):
     """List tool execution logs."""
+    user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
         from packages.db.crud import get_user_tool_runs
 
         runs = await get_user_tool_runs(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             limit=limit,
             offset=offset,
         )
