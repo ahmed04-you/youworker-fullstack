@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
-import { apiDelete, apiGet, ApiError, getApiBaseUrl, apiPost } from "@/lib/api-client";
+import { apiDelete, apiFetch, apiGet, apiPost } from "@/lib/api-client";
 import { useDocumentSelection } from "@/hooks/useDocumentSelection";
 import {
   DocumentRecord,
@@ -79,7 +79,6 @@ const parseTags = (tags: string) =>
 export default function DocumentsPage() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const apiBaseUrl = useMemo(() => getApiBaseUrl(), []);
 
   const {
     selectedIds,
@@ -250,20 +249,11 @@ export default function DocumentsPage() {
         formData.append("collection", collectionName);
       }
 
-      const response = await fetch(`${apiBaseUrl}/v1/ingest/upload`, {
+      await apiFetch("/v1/ingest/upload", {
         method: "POST",
         credentials: "include",
         body: formData,
       });
-
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new ApiError(
-          details?.detail || "Upload failed",
-          response.status,
-          details
-        );
-      }
 
       toast.success("Upload completed. Documents are being processed.");
       setFiles([]);
@@ -280,25 +270,12 @@ export default function DocumentsPage() {
     if (!targetPath.trim()) return;
     setPathIngesting(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/v1/ingest`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path_or_url: targetPath.trim(),
-          from_web: false,
-          recursive: true,
-          tags: parseTags(tagInput),
-        }),
+      await apiPost("/v1/ingest", {
+        path_or_url: targetPath.trim(),
+        from_web: false,
+        recursive: true,
+        tags: parseTags(tagInput),
       });
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new ApiError(
-          details?.detail || "Ingestion failed",
-          response.status,
-          details
-        );
-      }
       toast.success("Local content queued for ingestion.");
       setTargetPath("");
       await Promise.all([refreshDocuments(), refreshRuns()]);
@@ -314,25 +291,12 @@ export default function DocumentsPage() {
     if (!inputUrl.trim()) return;
     setUrlIngesting(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/v1/ingest`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path_or_url: inputUrl.trim(),
-          from_web: true,
-          recursive: false,
-          tags: parseTags(tagInput),
-        }),
+      await apiPost("/v1/ingest", {
+        path_or_url: inputUrl.trim(),
+        from_web: true,
+        recursive: false,
+        tags: parseTags(tagInput),
       });
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new ApiError(
-          details?.detail || "URL ingestion failed",
-          response.status,
-          details
-        );
-      }
       toast.success("URL queued for ingestion.");
       setInputUrl("");
       await Promise.all([refreshDocuments(), refreshRuns()]);
@@ -362,20 +326,11 @@ export default function DocumentsPage() {
         formData.append("collection", collectionName);
       }
 
-      const response = await fetch(`${apiBaseUrl}/v1/ingest/upload`, {
+      await apiFetch("/v1/ingest/upload", {
         method: "POST",
         credentials: "include",
         body: formData,
       });
-
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new ApiError(
-          details?.detail || "Text ingestion failed",
-          response.status,
-          details
-        );
-      }
 
       toast.success("Text ingested successfully.");
       setRawText("");

@@ -1,5 +1,11 @@
 const PUBLIC_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 const INTERNAL_API_BASE_URL = process.env.NEXT_INTERNAL_API_BASE_URL;
+const CSRF_HEADER_NAME = "X-CSRF-Token";
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS", "TRACE"]);
+
+let csrfToken: string | null = null;
+let csrfTokenExpiresAt: number | null = null;
+let csrfTokenPromise: Promise<string> | null = null;
 
 function getApiBaseUrl(): string {
   if (typeof window === "undefined") {
@@ -86,19 +92,100 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return parseJson<T>(response);
 }
 
+interface CsrfTokenResponse {
+  csrf_token: string;
+  expires_at?: string;
+}
+
+function invalidateCsrfToken() {
+  csrfToken = null;
+  csrfTokenExpiresAt = null;
+}
+
+function csrfTokenIsFresh(): boolean {
+  if (!csrfToken) {
+    return false;
+  }
+  if (!csrfTokenExpiresAt) {
+    return true;
+  }
+  const now = Date.now();
+  // Refresh token slightly before expiry to avoid race conditions.
+  return now + 30_000 < csrfTokenExpiresAt;
+}
+
+async function loadCsrfToken(): Promise<string> {
+  const url = resolveUrl("/v1/auth/csrf-token");
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: {
+      Accept: "application/json",
+    },
+  });
+
+  const data = await handleResponse<CsrfTokenResponse>(response);
+  if (!data || !data.csrf_token) {
+    throw new ApiError("CSRF token endpoint returned an invalid response", response.status, data);
+  }
+
+  csrfToken = data.csrf_token;
+  if (data.expires_at) {
+    const parsed = Date.parse(data.expires_at);
+    csrfTokenExpiresAt = Number.isFinite(parsed) ? parsed : null;
+  } else {
+    csrfTokenExpiresAt = null;
+  }
+  return csrfToken;
+}
+
+async function ensureCsrfToken(): Promise<string> {
+  if (csrfTokenIsFresh()) {
+    return csrfToken as string;
+  }
+
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = loadCsrfToken()
+      .catch((error) => {
+        invalidateCsrfToken();
+        throw error;
+      })
+      .finally(() => {
+        csrfTokenPromise = null;
+      });
+  }
+
+  return csrfTokenPromise;
+}
+
 export async function apiFetch<T = unknown>(
   path: string,
   { query, headers, credentials = "include", ...init }: FetchOptions = {}
 ): Promise<T> {
   const url = resolveUrl(path, query);
+  const method = (init.method || "GET").toUpperCase();
+
+  const requestHeaders: Record<string, string> = {
+    Accept: "application/json",
+    ...(headers || {}),
+  };
+
+  if (!SAFE_METHODS.has(method) && !requestHeaders[CSRF_HEADER_NAME]) {
+    const token = await ensureCsrfToken();
+    requestHeaders[CSRF_HEADER_NAME] = token;
+  }
+
   const response = await fetch(url, {
     ...init,
-    headers: {
-      Accept: "application/json",
-      ...headers,
-    },
+    method,
+    headers: requestHeaders,
     credentials,
   });
+
+  if (!response.ok && response.status === 403 && !SAFE_METHODS.has(method)) {
+    invalidateCsrfToken();
+  }
+
   return handleResponse<T>(response);
 }
 
@@ -177,6 +264,11 @@ export function postEventStream<T = unknown>(
 
   (async () => {
     try {
+      const csrfHeader =
+        options.method && SAFE_METHODS.has(options.method.toUpperCase())
+          ? undefined
+          : await ensureCsrfToken();
+
       const response = await fetch(url, {
         method: options.method || "POST",
         body: JSON.stringify(body),
@@ -184,6 +276,7 @@ export function postEventStream<T = unknown>(
           Accept: "text/event-stream",
           "Content-Type": "application/json",
           ...(options.headers || {}),
+          ...(csrfHeader ? { [CSRF_HEADER_NAME]: csrfHeader } : {}),
         },
         credentials: options.credentials || "include",
         signal: controller.signal,

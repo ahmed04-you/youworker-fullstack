@@ -2,14 +2,133 @@
 Helper functions for unified chat API.
 """
 
-from datetime import datetime
-from typing import Any, AsyncIterator, Dict, List, Optional
+from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator, Dict, List, Optional
+
+from apps.api.config import settings as api_settings
 from packages.db import get_async_session
 from packages.llm import ChatMessage as LLMChatMessage
 
-from .persistence import record_tool_start, record_tool_end
+from .persistence import record_tool_end, record_tool_start
+
+
+class ToolEventRecorder:
+    """
+    Persist tool lifecycle events while tracking the associated ToolRun row.
+
+    Call sites can reuse a single recorder during a request to avoid juggling
+    run identifiers across asynchronous boundaries.
+    """
+
+    def __init__(
+        self,
+        user_id: int,
+        session_id: Optional[int],
+        *,
+        db_factory=get_async_session,
+    ) -> None:
+        self._user_id = user_id
+        self._session_id = session_id
+        self._db_factory = db_factory
+        self._last_run_id: Optional[int] = None
+        self._logger = logging.getLogger(f"{__name__}.ToolEventRecorder")
+
+    async def record(self, event_data: Dict[str, Any] | None) -> Dict[str, Any]:
+        """
+        Persist the supplied tool event and return a sanitized copy.
+
+        `event_data` must contain a `tool` name and a `status` field. Any
+        persistence errors are logged but do not surface to the caller so
+        streaming responses remain resilient.
+        """
+        data = dict(event_data or {})
+        status_raw = str(data.get("status") or "").lower()
+
+        ts_raw = data.get("ts")
+        try:
+            timestamp = datetime.fromisoformat(ts_raw) if ts_raw else datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            self._logger.warning("Invalid tool timestamp '%s'; using current time", ts_raw)
+            timestamp = datetime.now(timezone.utc)
+
+        tool_name = data.get("tool")
+        if not isinstance(tool_name, str) or not tool_name:
+            self._logger.warning("Ignoring tool event without valid tool name: %s", data)
+            return data
+
+        if status_raw in {"", "start"}:
+            args = data.get("args")
+            if not isinstance(args, dict):
+                if args is not None:
+                    self._logger.warning("Unexpected args payload for tool start: %s", type(args))
+                args = {}
+
+            try:
+                async with self._db_factory() as db:
+                    run = await record_tool_start(
+                        db,
+                        user_id=self._user_id,
+                        session_id=self._session_id,
+                        tool_name=tool_name,
+                        args=args,
+                        start_ts=timestamp,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive logging
+                self._logger.error(
+                    "Failed to persist tool start for %s: %s", tool_name, exc, exc_info=True
+                )
+                self._last_run_id = None
+                return data
+
+            run_id = getattr(run, "id", None)
+            if isinstance(run_id, int):
+                self._last_run_id = run_id
+                data["run_id"] = run_id
+            else:
+                self._last_run_id = None
+            data["args"] = args
+            return data
+
+        # Handle end / error style events
+        run_id = self._last_run_id or data.get("run_id")
+        run_id = run_id if isinstance(run_id, int) else None
+        if run_id is None:
+            self._logger.warning(
+                "Received %s event for %s without matching start; skipping persistence",
+                status_raw or "end",
+                tool_name,
+            )
+            return data
+
+        latency_val = data.get("latency_ms")
+        latency_ms = int(latency_val) if isinstance(latency_val, (int, float)) else None
+        db_status = "success" if status_raw in {"end", "success", ""} else status_raw
+
+        try:
+            async with self._db_factory() as db:
+                await record_tool_end(
+                    db,
+                    run_id=run_id,
+                    status=db_status,
+                    end_ts=timestamp,
+                    latency_ms=latency_ms,
+                    result_preview=(data.get("result_preview") or None),
+                    tool_name=tool_name,
+                )
+        except Exception as exc:  # pragma: no cover - defensive logging
+            self._logger.error(
+                "Failed to finalize tool run %s for %s: %s", run_id, tool_name, exc, exc_info=True
+            )
+        finally:
+            self._last_run_id = None
+
+        data["run_id"] = run_id
+        if latency_ms is not None:
+            data["latency_ms"] = latency_ms
+        return data
 
 
 def get_user_attr(user: Any, attr: str, default: Any | None = None) -> Any | None:
@@ -38,74 +157,13 @@ async def prepare_chat_messages(history: List[dict]) -> List[LLMChatMessage]:
     return messages
 
 
-def resolve_assistant_language(language: str) -> str:
-    """Resolve assistant language from request."""
-    # Default to English if not specified
-    return language or "en"
-
-
-async def handle_tool_event(
-    db_session,
-    user_id: int,
-    session_id: int,
-    event_data: Dict[str, Any],
-    last_tool_run_id: Optional[int],
-) -> tuple[Optional[int], Dict[str, Any]]:
-    """
-    Handle a tool event (start or end), record to DB, and return updated run_id and event.
-
-    Appends tool event to data and handles persistence.
-    """
-    logger = logging.getLogger(__name__)
-    event_data = event_data.copy()  # Avoid mutating original
-    ts_raw = event_data.get("ts")
-    try:
-        parsed_ts = datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
-    except (ValueError, TypeError) as exc:
-        logger.warning("Invalid timestamp format: %s", exc)
-        parsed_ts = datetime.utcnow()
-
-    status = event_data.get("status")
-    tool_name = event_data.get("tool")
-    args = event_data.get("args", {})
-    if status == "start":
-        if not isinstance(tool_name, str) or not tool_name:
-            logger.warning("Invalid tool_name for start event: %s", tool_name)
-            return None, event_data
-        if not isinstance(args, dict):
-            logger.warning("Invalid args for start event: %s", args)
-            args = {}
-        tool_run = await record_tool_start(
-            db_session,
-            user_id=user_id,
-            session_id=session_id,
-            tool_name=tool_name,
-            args=args,
-            start_ts=parsed_ts,
-        )
-        new_run_id = tool_run.id if tool_run else None
-        return new_run_id, event_data
-    else:  # end or error
-        if last_tool_run_id is not None:
-            if not isinstance(status, str) or not status:
-                logger.warning("Invalid status for end event: %s", status)
-                status = "error"
-            latency_val = event_data.get("latency_ms")
-            latency_ms = None
-            if isinstance(latency_val, (int, float)):
-                latency_ms = int(latency_val)
-
-            tool_name_end = event_data.get("tool")
-            await record_tool_end(
-                db_session,
-                run_id=last_tool_run_id,
-                status=status,
-                end_ts=parsed_ts,
-                latency_ms=latency_ms,
-                result_preview=(event_data.get("result_preview") or None),
-                tool_name=tool_name_end,
-            )
-        return None, event_data
+def resolve_assistant_language(language: Optional[str], *, default: Optional[str] = None) -> str:
+    """Resolve assistant language from request, falling back to configured defaults."""
+    chosen = (language or "").strip().lower()
+    if chosen:
+        return chosen
+    fallback = (default or getattr(api_settings, "agent_default_language", None) or "").strip()
+    return fallback.lower() or "en"
 
 
 async def process_tracked_agent_events(
@@ -126,7 +184,7 @@ async def process_tracked_agent_events(
     """
     tool_events: List[Dict[str, Any]] = []
     logs: List[Dict[str, str]] = []
-    last_tool_run_id: Optional[int] = None
+    recorder = ToolEventRecorder(user_id=user_id, session_id=session_id)
     collected_content = ""
 
     async for event in agent_loop.run_until_completion(
@@ -140,10 +198,7 @@ async def process_tracked_agent_events(
         data = event.get("data", {}) or {}
 
         if event_type == "tool" and enable_tools:
-            async with get_async_session() as db:
-                last_tool_run_id, data = await handle_tool_event(
-                    db, user_id, session_id, data, last_tool_run_id
-                )
+            data = await recorder.record(data)
             tool_events.append(data)
             if stream:
                 yield {"event": event_type, "data": data}

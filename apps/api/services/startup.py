@@ -29,9 +29,60 @@ class StartupService:
         self.registry: MCPRegistry | None = None
         self.agent_loop: AgentLoop | None = None
 
+    def _validate_encryption_config(self) -> None:
+        """Validate that chat message encryption is properly configured."""
+        from packages.db.models import _get_message_fernet
+
+        fernet = _get_message_fernet()
+        if fernet is None:
+            logger.critical(
+                "STARTUP FAILED: Chat message encryption is mandatory but "
+                "CHAT_MESSAGE_ENCRYPTION_SECRET is not configured in .env. "
+                "Generate one with: python -c "
+                "'from cryptography.fernet import Fernet; "
+                "print(Fernet.generate_key().decode())'"
+            )
+            raise RuntimeError(
+                "Chat encryption secret not configured. "
+                "Set CHAT_MESSAGE_ENCRYPTION_SECRET in .env"
+            )
+
+        # Test encryption/decryption to ensure key is valid
+        try:
+            test_data = "encryption_test"
+            encrypted = fernet.encrypt(test_data.encode())
+            decrypted = fernet.decrypt(encrypted).decode()
+            if decrypted != test_data:
+                raise ValueError("Encryption test failed: data mismatch")
+        except Exception as e:
+            logger.critical(f"STARTUP FAILED: Encryption key validation failed: {e}")
+            raise RuntimeError(f"Invalid encryption configuration: {e}") from e
+
+    def _validate_csrf_config(self) -> None:
+        """Ensure CSRF protection has a configured secret."""
+        from apps.api.csrf import ensure_csrf_secret
+
+        try:
+            ensure_csrf_secret()
+        except RuntimeError as exc:
+            logger.critical(
+                "STARTUP FAILED: CSRF protection requires CSRF_SECRET or JWT_SECRET to be set: %s",
+                exc,
+            )
+            raise
+
     async def initialize(self, app: FastAPI) -> None:
         """Initialize all services during startup."""
         logger.info("Starting up API service...")
+
+        # CRITICAL: Validate encryption configuration before any operations
+        logger.info("Validating encryption configuration...")
+        self._validate_encryption_config()
+        logger.info("✓ Chat message encryption validated")
+
+        logger.info("Validating CSRF configuration...")
+        self._validate_csrf_config()
+        logger.info("✓ CSRF protection validated")
 
         # Ensure ingestion directories exist
         from pathlib import Path

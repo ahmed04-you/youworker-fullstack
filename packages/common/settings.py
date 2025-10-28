@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     app_env: str = "development"  # production, development, staging
     root_api_key: str = "rotated-dev-root-key"
     jwt_secret: str = "rotated-dev-jwt-secret"
+    csrf_secret: str | None = None
+    csrf_cookie_name: str = "youworker_csrf"
+    csrf_header_name: str = "X-CSRF-Token"
+    csrf_token_ttl_seconds: int = 3600
     chat_message_encryption_secret: str | None = None
     frontend_origin: str = "http://localhost:8000"
     whitelisted_ips: str = ""  # Comma-separated IPs for production access control

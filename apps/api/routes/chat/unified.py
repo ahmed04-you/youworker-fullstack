@@ -15,7 +15,6 @@ from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
-from typing import Optional
 
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
 from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
@@ -26,7 +25,7 @@ from packages.db import get_async_session
 from packages.llm import ChatMessage
 
 from .helpers import (
-    handle_tool_event,
+    ToolEventRecorder,
     prepare_chat_messages,
     resolve_assistant_language,
     get_user_id,
@@ -120,7 +119,7 @@ async def unified_chat_endpoint(
     conversation: list[ChatMessage] = await prepare_chat_messages(unified_request.messages or [])
     conversation.append(ChatMessage(role="user", content=text_content))
 
-    assistant_language = resolve_assistant_language(unified_request.assistant_language or "")
+    assistant_language = resolve_assistant_language(unified_request.assistant_language)
     request_model = unified_request.model or settings.chat_model
     user_id = get_user_id(current_user)
 
@@ -138,7 +137,7 @@ async def unified_chat_endpoint(
 
     tool_events: list[dict[str, Any]] = []
     logs: list[dict[str, str]] = []
-    last_tool_run_id: Optional[int] = None
+    tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
 
     # Streaming response
     if unified_request.stream:
@@ -148,7 +147,6 @@ async def unified_chat_endpoint(
             collected_chunks: list[str] = []
             local_final_text = ""
             local_metadata: dict[str, Any] = {"assistant_language": assistant_language}
-            last_tool_run_id_local: Optional[int] = last_tool_run_id
 
             try:
                 async for event in agent_loop.run_until_completion(
@@ -162,14 +160,7 @@ async def unified_chat_endpoint(
                     data = event.get("data", {}) or {}
 
                     if event_type == "tool":
-                        async with get_async_session() as db:
-                            last_tool_run_id_local, data = await handle_tool_event(
-                                db,
-                                user_id,
-                                chat_session_id,
-                                data,
-                                last_tool_run_id_local,
-                            )
+                        data = await tool_recorder.record(data)
                         tool_events.append(data)
                         pad = pad_pending
                         pad_pending = False
@@ -317,7 +308,7 @@ async def unified_chat_endpoint(
     # Non-streaming response
     final_text = ""
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
-    last_tool_run_id_nonstream: Optional[int] = last_tool_run_id
+    non_stream_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
@@ -330,10 +321,7 @@ async def unified_chat_endpoint(
         data = event.get("data", {}) or {}
 
         if etype == "tool":
-            async with get_async_session() as db:
-                last_tool_run_id_nonstream, data = await handle_tool_event(
-                    db, user_id, chat_session_id, data, last_tool_run_id_nonstream
-                )
+            data = await non_stream_recorder.record(data)
             tool_events.append(data)
         elif etype == "token":
             final_text += data.get("text", "")

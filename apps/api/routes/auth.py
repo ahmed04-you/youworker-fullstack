@@ -5,7 +5,7 @@ Replaces the insecure NEXT_PUBLIC_API_KEY pattern with HttpOnly cookies.
 """
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Request, status
@@ -19,6 +19,7 @@ from apps.api.auth.security import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from apps.api.config import settings
+from apps.api.csrf import CSRFToken
 from packages.db import User
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,13 @@ class MeResponse(BaseModel):
     username: str
     is_root: bool
     authenticated: bool = True
+
+
+class CSRFTokenResponse(BaseModel):
+    """Response body for CSRF token endpoint."""
+
+    csrf_token: str
+    expires_at: datetime
 
 
 def _extract_header_value(request: Request, header_name: str) -> str | None:
@@ -254,3 +262,26 @@ async def refresh_token(
         username=current_user.username,
         expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
+
+
+@router.get("/csrf-token", response_model=CSRFTokenResponse)
+async def get_csrf_token(response: Response) -> CSRFTokenResponse:
+    """
+    Issue a CSRF token for double-submit validation.
+
+    The token is signed and stored in both a cookie and JSON response.
+    Clients should include the value in the X-CSRF-Token header for state-changing requests.
+    """
+    token = CSRFToken.issue()
+
+    response.set_cookie(
+        key=settings.csrf_cookie_name,
+        value=token.value,
+        httponly=False,
+        secure=(settings.app_env == "production"),
+        samesite="strict",
+        max_age=settings.csrf_token_ttl_seconds,
+        path="/",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return CSRFTokenResponse(csrf_token=token.value, expires_at=token.expires_at)

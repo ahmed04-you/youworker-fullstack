@@ -19,7 +19,11 @@ from slowapi.errors import RateLimitExceeded
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from apps.api.config import settings
-from apps.api.middleware import IPWhitelistMiddleware, get_ip_whitelist_from_env
+from apps.api.middleware import (
+    CSRFMiddleware,
+    IPWhitelistMiddleware,
+    get_ip_whitelist_from_env,
+)
 from packages.llm import OllamaClient
 from packages.agent import MCPRegistry, AgentLoop
 from packages.vectorstore import QdrantStore
@@ -140,6 +144,14 @@ app.add_middleware(
     IPWhitelistMiddleware,
     whitelisted_ips=whitelisted_ips,
     enabled=(settings.app_env == "production"),
+)
+
+# Enforce CSRF protection on state-changing requests
+app.add_middleware(
+    CSRFMiddleware,
+    header_name=settings.csrf_header_name,
+    cookie_name=settings.csrf_cookie_name,
+    exempt_paths={"/v1/auth/csrf-token"},
 )
 
 

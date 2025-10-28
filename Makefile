@@ -2,7 +2,7 @@ COMPOSE_FILE ?= ops/compose/docker-compose.yml
 COMPOSE_BIN ?= docker compose
 COMPOSE_CMD ?= $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 
-.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup
+.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup verify-backup restore list-backups setup-backup
 
 # Default target
 help:
@@ -23,6 +23,13 @@ help:
 	@echo "  frontend-logs    - View frontend logs"
 	@echo "  ssl-setup        - Generate SSL certificates"
 	@echo "  start-ssl        - Start services with SSL setup"
+	@echo ""
+	@echo "Backup & Recovery:"
+	@echo "  backup           - Create encrypted backup (PostgreSQL + Qdrant)"
+	@echo "  verify-backup    - Verify backup integrity (BACKUP_FILE=<file>)"
+	@echo "  restore          - Restore from backups (POSTGRES_BACKUP=<file> QDRANT_BACKUP=<file>)"
+	@echo "  list-backups     - List all available backups"
+	@echo "  setup-backup     - Setup automated daily backups (cron)"
 
 # Start all services (GPU auto-detected and used if available)
 compose-up:
@@ -206,30 +213,60 @@ setup-full: setup-dirs ssl-setup compose-up
 	@echo "Access YouWorker.AI at: https://localhost:8000"
 	@echo "API documentation at: https://localhost:8001/docs"
 
-# Create database backup
+# Create encrypted database backup (PostgreSQL + Qdrant)
 backup:
-	@echo "Creating database backup..."
+	@echo "Creating encrypted database backup..."
 	@mkdir -p data/backups
-	$(COMPOSE_CMD) exec -T postgres pg_dump -U $${POSTGRES_USER:-postgres} $${POSTGRES_DB:-youworker} > data/backups/postgres_backup_$(shell date +%Y%m%d_%H%M%S).sql
-	@echo "Backup created in data/backups/"
+	@chmod +x ops/scripts/backup-database.sh
+	@./ops/scripts/backup-database.sh
+	@echo "✓ Encrypted backup created in data/backups/"
+
+# Verify backup integrity
+verify-backup:
+	@if [ -z "$(BACKUP_FILE)" ]; then \
+		echo "Usage: make verify-backup BACKUP_FILE=<path_to_backup>"; \
+		echo "Example: make verify-backup BACKUP_FILE=data/backups/postgres_backup_20250128_120000.sql.gz.enc"; \
+		exit 1; \
+	fi
+	@chmod +x ops/scripts/verify-backup.sh
+	@./ops/scripts/verify-backup.sh $(BACKUP_FILE)
 
 # Restore database from backup
 restore:
-	@if [ -z "$(BACKUP_FILE)" ]; then echo "Usage: make restore BACKUP_FILE=<path_to_backup>"; exit 1; fi
-	@echo "Restoring database from $(BACKUP_FILE)..."
-	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS youworker_temp;"
-	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "CREATE DATABASE youworker_temp;"
-	$(COMPOSE_CMD) exec -T postgres psql -U postgres youworker_temp < $(BACKUP_FILE)
-	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "DROP DATABASE IF EXISTS youworker;"
-	$(COMPOSE_CMD) exec -T postgres psql -U postgres -c "ALTER DATABASE youworker_temp RENAME TO youworker;"
-	@echo "Database restored from $(BACKUP_FILE)"
+	@if [ -z "$(POSTGRES_BACKUP)" ] && [ -z "$(QDRANT_BACKUP)" ]; then \
+		echo "Usage: make restore POSTGRES_BACKUP=<file> QDRANT_BACKUP=<file>"; \
+		echo ""; \
+		echo "List backups with: make list-backups"; \
+		echo ""; \
+		echo "Example:"; \
+		echo "  make restore POSTGRES_BACKUP=data/backups/postgres_backup_20250128_120000.sql.gz.enc \\"; \
+		echo "               QDRANT_BACKUP=data/backups/qdrant_backup_20250128_120000.tar.gz.enc"; \
+		exit 1; \
+	fi
+	@chmod +x ops/scripts/restore-backup.sh
+	@POSTGRES_ARG=""; QDRANT_ARG=""; \
+	[ -n "$(POSTGRES_BACKUP)" ] && POSTGRES_ARG="--postgres $(POSTGRES_BACKUP)"; \
+	[ -n "$(QDRANT_BACKUP)" ] && QDRANT_ARG="--qdrant $(QDRANT_BACKUP)"; \
+	./ops/scripts/restore-backup.sh $$POSTGRES_ARG $$QDRANT_ARG
+
+# List available backups
+list-backups:
+	@chmod +x ops/scripts/restore-backup.sh
+	@./ops/scripts/restore-backup.sh --list
 
 # Setup automated backups
 setup-backup:
-	@echo "Setting up automated backups..."
+	@echo "Setting up automated encrypted backups..."
 	@mkdir -p data/backups
 	@chmod +x ops/scripts/backup-database.sh
-	@echo "Adding cron job for daily backups..."
-	@crontab -l 2>/dev/null; crontab -; echo "0 2 * * * $(shell pwd)/ops/scripts/backup-database.sh >> $(shell pwd)/data/backups/backup.log 2>&1" | crontab -
-	@echo "Automated backups configured. Backups will run daily at 2:00 AM."
-	@echo "Backup directory: $(shell pwd)/data/backups"
+	@if [ -z "$$BACKUP_ENCRYPTION_KEY" ]; then \
+		echo "⚠️  WARNING: BACKUP_ENCRYPTION_KEY not set in .env"; \
+		echo "Generate one with: openssl rand -base64 32"; \
+		exit 1; \
+	fi
+	@echo "Adding cron job for daily backups at 2:00 AM..."
+	@(crontab -l 2>/dev/null || true; echo "0 2 * * * cd $(shell pwd) && ./ops/scripts/backup-database.sh >> data/backups/backup.log 2>&1") | crontab -
+	@echo "✓ Automated backups configured"
+	@echo "  Schedule: Daily at 2:00 AM"
+	@echo "  Backup directory: $(shell pwd)/data/backups"
+	@echo "  Log file: $(shell pwd)/data/backups/backup.log"

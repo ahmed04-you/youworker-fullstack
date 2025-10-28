@@ -576,7 +576,7 @@ async def unified_chat_endpoint(
     conversation = await prepare_chat_messages(request.messages or [])
     conversation.append(LLMChatMessage(role="user", content=text_content))
 
-    assistant_language = resolve_assistant_language(request.assistant_language or "it")
+    assistant_language = resolve_assistant_language(request.assistant_language)
     request_model = request.model or "gpt-oss:20b"
 
     # Create/get session

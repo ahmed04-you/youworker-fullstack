@@ -4,7 +4,6 @@ Streaming chat endpoint with Server-Sent Events.
 
 import asyncio
 import logging
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -20,11 +19,9 @@ from packages.agent import AgentLoop
 from packages.db import get_async_session
 
 from .models import ChatRequest
-from .helpers import prepare_chat_messages, resolve_assistant_language, get_user_id
+from .helpers import ToolEventRecorder, prepare_chat_messages, resolve_assistant_language, get_user_id
 from .persistence import (
     persist_last_user_message,
-    record_tool_start,
-    record_tool_end,
     persist_final_assistant_message,
     get_or_create_chat_session,
 )
@@ -70,7 +67,7 @@ async def chat_endpoint(
         async def generate():
             """Generate SSE stream."""
             pad_pending = True
-            last_tool_run_id: int | None = None
+            tool_recorder: ToolEventRecorder | None = None
 
             try:
                 async with get_async_session() as db:
@@ -83,6 +80,7 @@ async def chat_endpoint(
                     )
                     await persist_last_user_message(db, session, messages)
                     chat_session_id = session.id
+                tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
 
                 event_iterator = agent_loop.run_until_completion(
                     messages=messages,
@@ -114,43 +112,13 @@ async def chat_endpoint(
 
                     # Handle tool events
                     if event_type == "tool":
-                        data = event.get("data", {}) or {}
-                        ts_raw = data.get("ts")
-                        try:
-                            parsed_ts = (
-                                datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
-                            )
-                        except (TypeError, ValueError):
-                            logger.warning("Invalid tool timestamp '%s'", ts_raw)
-                            parsed_ts = datetime.utcnow()
-
-                        if data.get("status") == "start":
-                            async with get_async_session() as db:
-                                last_tool_run_id = await record_tool_start(
-                                    db,
-                                    user_id=user_id,
-                                    session_id=None,
-                                    tool_name=data.get("tool"),
-                                    args=data.get("args"),
-                                    start_ts=parsed_ts,
-                                )
-                        else:
-                            latency_val = data.get("latency_ms")
-                            latency_ms = None
-                            if isinstance(latency_val, (int, float)):
-                                latency_ms = int(latency_val)
-
-                            async with get_async_session() as db:
-                                await record_tool_end(
-                                    db,
-                                    run_id=last_tool_run_id,
-                                    status=data.get("status"),
-                                    end_ts=parsed_ts,
-                                    latency_ms=latency_ms,
-                                    result_preview=(data.get("result_preview") or None),
-                                    tool_name=data.get("tool"),
-                                )
-                            last_tool_run_id = None
+                        payload_data = event.get("data", {}) or {}
+                        if tool_recorder is not None:
+                            payload_data = await tool_recorder.record(payload_data)
+                        event["data"] = payload_data
+                        yield sse_format({"event": "tool", "data": payload_data}, pad=pad)
+                        await asyncio.sleep(0)
+                        continue
 
                     # Handle done event
                     elif event_type == "done":
@@ -244,26 +212,6 @@ async def chat_endpoint(
     final_text: str | None = None
     metadata: dict[str, Any] = {"assistant_language": assistant_language}
 
-    async for event in agent_loop.run_until_completion(
-        messages=messages,
-        enable_tools=chat_request.enable_tools,
-        max_iterations=settings.max_agent_iterations,
-        language=assistant_language,
-        model=request_model,
-    ):
-        if event.get("event") == "token":
-            text = event.get("data", {}).get("text", "")
-            collected_chunks.append(text)
-        elif event.get("event") == "done":
-            payload = event.get("data", {}) or {}
-            meta = payload.get("metadata") or {}
-            if isinstance(meta, dict):
-                metadata.update(meta)
-            metadata["assistant_language"] = assistant_language
-            final_text = payload.get("final_text", final_text)
-
-    response_text = final_text if final_text is not None else "".join(collected_chunks)
-
     async with get_async_session() as db:
         session = await get_or_create_chat_session(
             db,
@@ -272,6 +220,46 @@ async def chat_endpoint(
             model=request_model,
             enable_tools=chat_request.enable_tools,
         )
-        await persist_final_assistant_message(db, session.id, response_text)
+        await persist_last_user_message(db, session, messages)
+        chat_session_id = session.id
+
+    tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
+
+    async for event in agent_loop.run_until_completion(
+        messages=messages,
+        enable_tools=chat_request.enable_tools,
+        max_iterations=settings.max_agent_iterations,
+        language=assistant_language,
+        model=request_model,
+    ):
+        event_type = event.get("event")
+        data = event.get("data", {}) or {}
+
+        if event_type == "tool":
+            await tool_recorder.record(data)
+            continue
+
+        if event_type == "token":
+            text = data.get("text", "")
+            if text:
+                collected_chunks.append(text)
+            continue
+
+        if event_type == "done":
+            meta = data.get("metadata") or {}
+            if isinstance(meta, dict):
+                metadata.update(meta)
+            metadata["assistant_language"] = assistant_language
+            final_text = data.get("final_text", final_text)
+            continue
+
+        if event_type == "log":
+            # Non-streaming mode ignores logs for now but could persist if needed.
+            continue
+
+    response_text = final_text if final_text is not None else "".join(collected_chunks)
+
+    async with get_async_session() as db:
+        await persist_final_assistant_message(db, chat_session_id, response_text)
 
     return {"content": response_text, "metadata": metadata}

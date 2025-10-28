@@ -46,13 +46,13 @@ def upgrade() -> None:
     op.create_index('ix_chat_sessions_external_id', 'chat_sessions', ['external_id'])
     op.create_index('ix_chat_sessions_user_created', 'chat_sessions', ['user_id', 'created_at'])
 
-    # Chat messages table
+    # Chat messages table (content stored as encrypted binary)
     op.create_table(
         'chat_messages',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column('session_id', sa.Integer(), sa.ForeignKey('chat_sessions.id', ondelete='CASCADE'), nullable=False),
         sa.Column('role', sa.String(length=16), nullable=False),
-        sa.Column('content', sa.Text(), nullable=False),
+        sa.Column('content', sa.LargeBinary(), nullable=True),  # Encrypted with Fernet
         sa.Column('tool_call_name', sa.String(length=256), nullable=True),
         sa.Column('tool_call_id', sa.String(length=128), nullable=True),
         sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
@@ -62,6 +62,8 @@ def upgrade() -> None:
     op.create_index('ix_chat_messages_session_created', 'chat_messages', ['session_id', 'created_at'])
     op.create_index('ix_chat_messages_tokens', 'chat_messages', ['session_id', 'tokens_in', 'tokens_out'],
                    postgresql_where=sa.text('tokens_in IS NOT NULL'))
+    op.create_index('ix_chat_messages_encrypted', 'chat_messages', ['session_id', 'created_at'],
+                   postgresql_where=sa.text('content IS NOT NULL'))
 
     # MCP servers table
     op.create_table(
@@ -205,6 +207,7 @@ def downgrade() -> None:
     op.drop_index('ix_mcp_servers_healthy', table_name='mcp_servers')
     op.drop_index('ix_mcp_servers_server_id', table_name='mcp_servers')
     op.drop_table('mcp_servers')
+    op.drop_index('ix_chat_messages_encrypted', table_name='chat_messages')
     op.drop_index('ix_chat_messages_tokens', table_name='chat_messages')
     op.drop_index('ix_chat_messages_session_created', table_name='chat_messages')
     op.drop_table('chat_messages')

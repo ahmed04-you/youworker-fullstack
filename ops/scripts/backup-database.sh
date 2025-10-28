@@ -18,6 +18,8 @@ QDRANT_COLLECTION="${QDRANT_COLLECTION:-documents}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 S3_BUCKET="${S3_BUCKET:-}"
 S3_REGION="${S3_REGION:-us-east-1}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"  # REQUIRED for encrypted backups
+ENCRYPT_BACKUPS="${ENCRYPT_BACKUPS:-true}"  # Enable encryption by default
 
 # Create backup directory if it doesn't exist
 mkdir -p "$BACKUP_DIR"
@@ -30,6 +32,51 @@ log() {
 # Function to check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
+}
+
+# Function to encrypt backup file
+encrypt_backup() {
+    local input_file="$1"
+    local output_file="${input_file}.enc"
+
+    if [ "$ENCRYPT_BACKUPS" = "true" ]; then
+        if [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+            log "ERROR: BACKUP_ENCRYPTION_KEY not set but encryption enabled"
+            log "Generate key with: openssl rand -base64 32"
+            return 1
+        fi
+
+        log "Encrypting backup: $input_file"
+
+        # Encrypt using AES-256-CBC
+        if openssl enc -aes-256-cbc -salt -pbkdf2 \
+            -in "$input_file" \
+            -out "$output_file" \
+            -pass env:BACKUP_ENCRYPTION_KEY; then
+
+            # Remove unencrypted file
+            rm -f "$input_file"
+            log "Backup encrypted: $output_file"
+            echo "$output_file"
+            return 0
+        else
+            log "ERROR: Encryption failed"
+            return 1
+        fi
+    else
+        log "Encryption disabled, keeping plaintext backup"
+        echo "$input_file"
+        return 0
+    fi
+}
+
+# Function to verify encryption key is set
+verify_encryption_key() {
+    if [ "$ENCRYPT_BACKUPS" = "true" ] && [ -z "$BACKUP_ENCRYPTION_KEY" ]; then
+        log "ERROR: Encryption is enabled but BACKUP_ENCRYPTION_KEY is not set"
+        log "Set it in .env or generate with: openssl rand -base64 32"
+        exit 1
+    fi
 }
 
 # Function to create PostgreSQL backup
@@ -55,86 +102,129 @@ backup_postgres() {
     
     # Compress backup
     gzip "$BACKUP_FILE"
-    
+
     log "PostgreSQL backup completed: $COMPRESSED_FILE"
-    
+
+    # Encrypt backup
+    if ENCRYPTED_FILE=$(encrypt_backup "$COMPRESSED_FILE"); then
+        FINAL_FILE="$ENCRYPTED_FILE"
+    else
+        log "ERROR: Encryption failed for PostgreSQL backup"
+        return 1
+    fi
+
     # Upload to S3 if configured
     if [ -n "$S3_BUCKET" ] && command_exists aws; then
         log "Uploading PostgreSQL backup to S3..."
-        aws s3 cp "$COMPRESSED_FILE" "s3://$S3_BUCKET/postgres-backups/"
+        aws s3 cp "$FINAL_FILE" "s3://$S3_BUCKET/postgres-backups/"
         log "PostgreSQL backup uploaded to S3"
     fi
-    
-    echo "$COMPRESSED_FILE"
+
+    echo "$FINAL_FILE"
 }
 
 # Function to create Qdrant backup
 backup_qdrant() {
     log "Starting Qdrant backup..."
-    
+
     TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
     BACKUP_DIR_QDRANT="$BACKUP_DIR/qdrant_$TIMESTAMP"
     COMPRESSED_FILE="$BACKUP_DIR/qdrant_backup_$TIMESTAMP.tar.gz"
-    
+
     # Create backup directory
     mkdir -p "$BACKUP_DIR_QDRANT"
-    
-    # Export all collections
+
+    # Export all collections using Qdrant snapshot API
     if command_exists curl && command_exists jq; then
         # Get list of collections
-        COLLECTIONS=$(curl -s "http://$QDRANT_HOST:$QDRANT_PORT/collections" | jq -r '.result.collections[].name')
-        
-        # Export each collection
-        for COLLECTION in $COLLECTIONS; do
-            log "Exporting Qdrant collection: $COLLECTION"
-            curl -s -X POST "http://$QDRANT_HOST:$QDRANT_PORT/collections/$COLLECTION/snapshots" \
-                -H "Content-Type: application/json" \
-                -d '{}' | jq -r '.result.name' > "$BACKUP_DIR_QDRANT/${COLLECTION}_snapshot.info"
-            
-            # Download snapshot (this would need to be implemented based on Qdrant's API)
-            # For now, we'll export the collection data as JSON
-            curl -s -X POST "http://$QDRANT_HOST:$QDRANT_PORT/collections/$COLLECTION/points/scroll" \
-                -H "Content-Type: application/json" \
-                -d '{"limit": 1000, "with_payload": true, "with_vector": true}' \
-                > "$BACKUP_DIR_QDRANT/${COLLECTION}_points.json"
-        done
+        log "Fetching Qdrant collections list..."
+        COLLECTIONS=$(curl -s "http://$QDRANT_HOST:$QDRANT_PORT/collections" | jq -r '.result.collections[].name' 2>/dev/null)
+
+        if [ -n "$COLLECTIONS" ]; then
+            # Export each collection
+            for COLLECTION in $COLLECTIONS; do
+                log "Creating snapshot for Qdrant collection: $COLLECTION"
+
+                # Create snapshot via API
+                SNAPSHOT_NAME=$(curl -s -X POST "http://$QDRANT_HOST:$QDRANT_PORT/collections/$COLLECTION/snapshots" \
+                    -H "Content-Type: application/json" \
+                    -d '{}' | jq -r '.result.name' 2>/dev/null)
+
+                if [ -n "$SNAPSHOT_NAME" ] && [ "$SNAPSHOT_NAME" != "null" ]; then
+                    log "Snapshot created: $SNAPSHOT_NAME"
+
+                    # Wait for snapshot to complete
+                    sleep 2
+
+                    # Download snapshot
+                    log "Downloading snapshot for collection: $COLLECTION"
+                    curl -s -o "$BACKUP_DIR_QDRANT/${COLLECTION}_${SNAPSHOT_NAME}" \
+                        "http://$QDRANT_HOST:$QDRANT_PORT/collections/$COLLECTION/snapshots/$SNAPSHOT_NAME"
+
+                    # Verify download succeeded
+                    if [ -f "$BACKUP_DIR_QDRANT/${COLLECTION}_${SNAPSHOT_NAME}" ]; then
+                        log "Snapshot downloaded successfully: ${COLLECTION}_${SNAPSHOT_NAME}"
+                    else
+                        log "ERROR: Failed to download snapshot for $COLLECTION"
+                    fi
+                else
+                    log "ERROR: Failed to create snapshot for collection: $COLLECTION"
+                fi
+            done
+        else
+            log "WARNING: No Qdrant collections found or unable to fetch list"
+        fi
     else
-        log "Warning: curl or jq not found, skipping Qdrant collection export"
+        log "ERROR: curl or jq not found, cannot backup Qdrant"
+        return 1
     fi
-    
-    # Copy Qdrant storage data
-    if [ -d "/data/qdrant" ]; then
-        log "Copying Qdrant storage data..."
-        cp -r /data/qdrant "$BACKUP_DIR_QDRANT/storage"
-    fi
-    
+
     # Compress backup
-    tar -czf "$COMPRESSED_FILE" -C "$BACKUP_DIR" "qdrant_$TIMESTAMP"
-    
-    # Remove temporary directory
-    rm -rf "$BACKUP_DIR_QDRANT"
-    
-    log "Qdrant backup completed: $COMPRESSED_FILE"
-    
-    # Upload to S3 if configured
-    if [ -n "$S3_BUCKET" ] && command_exists aws; then
-        log "Uploading Qdrant backup to S3..."
-        aws s3 cp "$COMPRESSED_FILE" "s3://$S3_BUCKET/qdrant-backups/"
-        log "Qdrant backup uploaded to S3"
+    if [ -n "$(ls -A "$BACKUP_DIR_QDRANT" 2>/dev/null)" ]; then
+        log "Compressing Qdrant backup..."
+        tar -czf "$COMPRESSED_FILE" -C "$BACKUP_DIR" "qdrant_$TIMESTAMP"
+
+        # Remove temporary directory
+        rm -rf "$BACKUP_DIR_QDRANT"
+
+        log "Qdrant backup completed: $COMPRESSED_FILE"
+
+        # Encrypt backup
+        if ENCRYPTED_FILE=$(encrypt_backup "$COMPRESSED_FILE"); then
+            FINAL_FILE="$ENCRYPTED_FILE"
+        else
+            log "ERROR: Encryption failed for Qdrant backup"
+            return 1
+        fi
+
+        # Upload to S3 if configured
+        if [ -n "$S3_BUCKET" ] && command_exists aws; then
+            log "Uploading Qdrant backup to S3..."
+            aws s3 cp "$FINAL_FILE" "s3://$S3_BUCKET/qdrant-backups/"
+            log "Qdrant backup uploaded to S3"
+        fi
+
+        echo "$FINAL_FILE"
+    else
+        log "ERROR: No Qdrant snapshots created"
+        rm -rf "$BACKUP_DIR_QDRANT"
+        return 1
     fi
-    
-    echo "$COMPRESSED_FILE"
 }
 
 # Function to clean up old backups
 cleanup_old_backups() {
     log "Cleaning up backups older than $RETENTION_DAYS days..."
-    
-    # Clean up PostgreSQL backups
-    find "$BACKUP_DIR" -name "postgres_backup_*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete
-    
-    # Clean up Qdrant backups
-    find "$BACKUP_DIR" -name "qdrant_backup_*.tar.gz" -type f -mtime +$RETENTION_DAYS -delete
+
+    # Clean up PostgreSQL backups (both encrypted and unencrypted)
+    find "$BACKUP_DIR" -name "postgres_backup_*.sql.gz" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null || true
+    find "$BACKUP_DIR" -name "postgres_backup_*.sql.gz.enc" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null || true
+
+    # Clean up Qdrant backups (both encrypted and unencrypted)
+    find "$BACKUP_DIR" -name "qdrant_backup_*.tar.gz" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null || true
+    find "$BACKUP_DIR" -name "qdrant_backup_*.tar.gz.enc" -type f -mtime +$RETENTION_DAYS -delete 2>/dev/null || true
+
+    log "Local backup cleanup completed"
     
     # Clean up S3 backups if configured
     if [ -n "$S3_BUCKET" ] && command_exists aws; then
@@ -238,7 +328,10 @@ send_notification() {
 # Main backup function
 main() {
     log "Starting YouWorker.AI database backup..."
-    
+
+    # Verify encryption configuration
+    verify_encryption_key
+
     # Track backup success
     SUCCESS=true
     BACKUP_FILES=()

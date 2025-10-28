@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import logging
 from datetime import datetime
 from functools import lru_cache
 from typing import Optional
@@ -44,7 +45,7 @@ def _get_message_fernet() -> Optional[Fernet]:
 
 
 class EncryptedContent(TypeDecorator):
-    """Store text content as binary for future encryption support."""
+    """Fernet-based encryption for chat messages - MANDATORY for security compliance."""
 
     impl = sa.LargeBinary
     cache_ok = True
@@ -56,10 +57,18 @@ class EncryptedContent(TypeDecorator):
             return value
         if isinstance(value, str):
             fernet = _get_message_fernet()
-            raw = value.encode("utf-8")
+            # CRITICAL: Encryption is now mandatory
             if fernet is None:
-                return raw
-            return fernet.encrypt(raw)
+                raise RuntimeError(
+                    "Chat message encryption is mandatory but CHAT_MESSAGE_ENCRYPTION_SECRET "
+                    "is not configured. Generate one with: "
+                    "python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
+                )
+            raw = value.encode("utf-8")
+            try:
+                return fernet.encrypt(raw)
+            except Exception as e:
+                raise ValueError(f"Encryption failed: {e}") from e
         raise TypeError("content must be str or bytes")
 
     def process_result_value(self, value, dialect):
@@ -68,13 +77,22 @@ class EncryptedContent(TypeDecorator):
         if isinstance(value, (bytes, bytearray, memoryview)):
             data = bytes(value)
             fernet = _get_message_fernet()
-            if fernet is not None:
-                try:
-                    decrypted = fernet.decrypt(data)
-                    return decrypted.decode("utf-8")
-                except (InvalidToken, ValueError):
-                    pass
-            return data.decode("utf-8", errors="ignore")
+            # CRITICAL: Decryption requires valid key
+            if fernet is None:
+                raise RuntimeError(
+                    "Cannot decrypt message: CHAT_MESSAGE_ENCRYPTION_SECRET not configured"
+                )
+            try:
+                decrypted = fernet.decrypt(data)
+                return decrypted.decode("utf-8")
+            except InvalidToken:
+                # Try to decode as plaintext for migration purposes only
+                # This allows reading old unencrypted data during migration
+                logger = logging.getLogger(__name__)
+                logger.warning("Found unencrypted message data - run migration to encrypt")
+                return data.decode("utf-8", errors="ignore")
+            except Exception as e:
+                raise ValueError(f"Decryption failed: {e}") from e
         return value
 
 
