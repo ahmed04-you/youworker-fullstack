@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { memo } from "react";
 import {
   Sparkles,
   Cpu,
@@ -18,6 +19,9 @@ import type { ChatLogEntry, ChatToolEvent } from "@/lib/types";
 
 import type { HealthStatus, SpeechTranscriptMeta } from "../types";
 
+/**
+ * Props for InsightsPanel and InsightsContent components
+ */
 interface InsightsProps {
   toolTimeline: ChatToolEvent[];
   logEntries: ChatLogEntry[];
@@ -201,20 +205,115 @@ function InsightsContent({
   );
 }
 
-export function InsightsPanel(props: InsightsProps) {
+/**
+ * Insights panel component displaying real-time chat diagnostics
+ *
+ * Shows comprehensive information about the active chat session including
+ * tool execution timeline, reasoning traces, voice transcripts, and system
+ * health status. Designed for desktop display (hidden on mobile, use
+ * MobileInsightsDrawer instead). Optimized with React.memo for performance.
+ *
+ * @component
+ * @param {InsightsProps} props - Component props
+ * @param {ChatToolEvent[]} props.toolTimeline - Timeline of tool executions
+ * @param {ChatLogEntry[]} props.logEntries - Reasoning and diagnostic logs
+ * @param {string | null} props.transcript - Latest voice transcript
+ * @param {SpeechTranscriptMeta} props.sttMeta - Speech-to-text metadata
+ * @param {HealthStatus | null} props.health - System health status
+ * @param {boolean} props.healthLoading - Whether health data is loading
+ * @param {function} props.onRefreshHealth - Handler to refresh health data
+ *
+ * @example
+ * ```tsx
+ * <InsightsPanel
+ *   toolTimeline={toolEvents}
+ *   logEntries={logs}
+ *   transcript={lastTranscript}
+ *   sttMeta={{ confidence: 0.95, language: 'en' }}
+ *   health={healthStatus}
+ *   healthLoading={false}
+ *   onRefreshHealth={refreshHealth}
+ * />
+ * ```
+ *
+ * Features:
+ * - Tool timeline showing recent tool executions with status badges
+ * - Reasoning trace displaying AI thought process and warnings
+ * - Voice capture section with transcript and metadata
+ * - System health status with model availability
+ * - Refresh button for health data
+ * - Link to full analytics dashboard
+ * - Auto-displays last 6 tool events and 8 log entries
+ * - Status-based color coding (success, error, in-progress)
+ * - Desktop only (hidden on mobile via xl:flex)
+ *
+ * @see {@link MobileInsightsDrawer} for mobile equivalent
+ */
+export const InsightsPanel = memo(function InsightsPanel(props: InsightsProps) {
   return (
     <aside className="hidden w-[320px] xl:flex xl:flex-col">
       <InsightsContent {...props} />
     </aside>
   );
-}
+});
+InsightsPanel.displayName = "InsightsPanel";
 
+/**
+ * Props for the MobileInsightsDrawer component
+ */
 interface MobileInsightsDrawerProps extends InsightsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 
-export function MobileInsightsDrawer({ open, onOpenChange, ...props }: MobileInsightsDrawerProps) {
+/**
+ * Mobile drawer for insights panel
+ *
+ * Bottom sheet drawer variant of InsightsPanel optimized for mobile devices.
+ * Displays the same diagnostic information (tools, logs, transcripts, health)
+ * in a mobile-friendly drawer format.
+ *
+ * @component
+ * @param {MobileInsightsDrawerProps} props - Component props
+ * @param {boolean} props.open - Whether drawer is open
+ * @param {function} props.onOpenChange - Handler for drawer open state
+ * @param {ChatToolEvent[]} props.toolTimeline - Timeline of tool executions
+ * @param {ChatLogEntry[]} props.logEntries - Reasoning and diagnostic logs
+ * @param {string | null} props.transcript - Latest voice transcript
+ * @param {SpeechTranscriptMeta} props.sttMeta - Speech-to-text metadata
+ * @param {HealthStatus | null} props.health - System health status
+ * @param {boolean} props.healthLoading - Whether health data is loading
+ * @param {function} props.onRefreshHealth - Handler to refresh health data
+ *
+ * @example
+ * ```tsx
+ * <MobileInsightsDrawer
+ *   open={drawerOpen}
+ *   onOpenChange={setDrawerOpen}
+ *   toolTimeline={toolEvents}
+ *   logEntries={logs}
+ *   transcript={lastTranscript}
+ *   sttMeta={{ confidence: 0.95, language: 'en' }}
+ *   health={healthStatus}
+ *   healthLoading={false}
+ *   onRefreshHealth={refreshHealth}
+ * />
+ * ```
+ *
+ * Features:
+ * - Bottom sheet presentation (70% viewport height)
+ * - Rounded top corners for modern mobile UI
+ * - Scrollable content area
+ * - Identical content to desktop InsightsPanel
+ * - Swipe-to-dismiss gesture support
+ *
+ * @see {@link InsightsPanel} for desktop equivalent
+ */
+export const MobileInsightsDrawer = memo(function MobileInsightsDrawer({
+  open,
+  onOpenChange,
+  ...props
+}: MobileInsightsDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
@@ -228,4 +327,5 @@ export function MobileInsightsDrawer({ open, onOpenChange, ...props }: MobileIns
       </SheetContent>
     </Sheet>
   );
-}
+});
+MobileInsightsDrawer.displayName = "MobileInsightsDrawer";

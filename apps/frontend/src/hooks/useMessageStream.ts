@@ -24,6 +24,37 @@ interface UseMessageStreamOptions {
   messagesRef: React.MutableRefObject<ConversationMessage[]>;
 }
 
+/**
+ * Hook for managing server-sent event (SSE) streaming of AI chat responses.
+ * Handles token streaming, tool events, logs, transcripts, and audio responses.
+ *
+ * @param options - Configuration object with event handlers
+ * @param options.onUpdateMessage - Called when new tokens arrive to update message content
+ * @param options.onAddToolEvent - Called when tool execution events occur
+ * @param options.onAddLogEntry - Called when log entries are received
+ * @param options.onSetTranscript - Called when speech-to-text transcript is received
+ * @param options.onSetSttMeta - Called with STT metadata (confidence, language)
+ * @param options.onPlayAudio - Called with base64 audio for text-to-speech playback
+ * @param options.onFinish - Called when streaming completes successfully
+ * @param options.onError - Called when an error occurs during streaming
+ * @param options.messagesRef - Mutable ref to current messages array
+ *
+ * @returns Object containing:
+ *  - startStream: Function to initiate a new stream with the given payload
+ *
+ * @example
+ * ```tsx
+ * const { startStream } = useMessageStream({
+ *   onUpdateMessage: (id, content, streaming) => updateMsg(id, content, streaming),
+ *   onAddToolEvent: (event) => addToolEvent(event),
+ *   onFinish: async () => await refreshData(),
+ *   onError: (error) => showError(error.message),
+ *   messagesRef,
+ * });
+ *
+ * const controller = startStream(assistantId, { text_input: "Hello", stream: true });
+ * ```
+ */
 export function useMessageStream(options: UseMessageStreamOptions) {
   const {
     onUpdateMessage,

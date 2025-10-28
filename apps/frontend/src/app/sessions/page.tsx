@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toastError, toastSuccess } from "@/lib/toast-helpers";
 import {
   ArrowLeft,
   Loader2,
@@ -85,7 +85,7 @@ export default function SessionsPage() {
       }
     } catch (error) {
       console.error(error);
-      toast.error("Unable to load sessions.");
+      toastError("Unable to load sessions.");
     } finally {
       setSessionsLoading(false);
     }
@@ -99,7 +99,7 @@ export default function SessionsPage() {
       setSessionDetail(detail);
     } catch (error) {
       console.error(error);
-      toast.error("Unable to load session detail.");
+      toastError("Unable to load session detail.");
     } finally {
       setDetailLoading(false);
     }
@@ -109,11 +109,11 @@ export default function SessionsPage() {
   const handleRenameSession = async (sessionId: number, title: string) => {
     try {
       await apiPatch(`/v1/sessions/${sessionId}`, undefined, { query: { title } });
-      toast.success("Session renamed.");
+      toastSuccess("Session renamed.");
       await refreshSessions();
     } catch (error) {
       console.error(error);
-      toast.error("Unable to rename session.");
+      toastError("Unable to rename session.");
     }
   };
 
@@ -121,13 +121,13 @@ export default function SessionsPage() {
     if (!deleteSession || deleteSession.id <= 0) return;
     try {
       await apiDelete(`/v1/sessions/${deleteSession.id}`);
-      toast.success("Session removed.");
+      toastSuccess("Session removed.");
       setSessionDetail(null);
       setSelectedSession(null);
       await refreshSessions();
     } catch (error) {
       console.error(error);
-      toast.error("Failed to delete session.");
+      toastError("Failed to delete session.");
     }
   };
 

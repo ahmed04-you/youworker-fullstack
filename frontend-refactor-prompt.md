@@ -1,9 +1,12 @@
 # Remaining Frontend Refactor Tasks
 
 ## 📊 Summary
-This document tracks the remaining frontend refactor tasks for the YouWorker.AI application. Significant progress has been made on code quality, accessibility, and UI polish.
+This document tracks the remaining frontend refactor tasks for the YouWorker.AI application. Significant progress has been made on code quality, accessibility, UI polish, and documentation.
 
 ### Recent Completions (Latest Session)
+- ✅ Connected settings export, history purge, and account deletion actions to backend APIs
+- ✅ Implemented secure API key rotation with UI feedback
+- ✅ Added downloadable account data export flow
 - ✅ Added framer-motion transitions to all onboarding components (WelcomeDialog, QuickStartGuide, TutorialVideo)
 - ✅ Added "Resume Tour" button that appears when onboarding is incomplete
 - ✅ Added tooltips to ExportButton and ThemeToggle components
@@ -31,17 +34,16 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 - ✅ Added animated voice recording waveform to the chat composer
 - ✅ Refactored UploadDialog to use a shared useDocumentUpload hook with deduping and progress handling
 - ✅ Added Vitest coverage for useDocumentUpload and keyboard shortcut hooks
+- ✅ Implemented optimistic document upload mutation with rollback and consistent toast updates
+- ✅ Added Vitest coverage for API client helpers and shortcut utilities
+- ✅ Added shared rollback handler for chat streaming with Vitest coverage for failure handling
+- ✅ **Added comprehensive JSDoc comments to all hooks** (useAutoScroll, useDocumentSelection, useMessageStream, useFileValidation, useKeyboardShortcut, useHapticFeedback, useOptimisticUpdate, useAnalyticsData, useOnboarding, useDocumentUpload, useChatController)
+- ✅ **Added JSDoc documentation to all major components** (AnalyticsDashboard, ChatComposer, ChatHeader, SessionSidebar, InsightsPanel, MobileInsightsDrawer, DocumentCard, DocumentList, MetricCard)
+- ✅ **Reviewed and validated chat session creation flow** - confirmed optimistic handling already in place via temporary sessions
 
 ### Priority Next Steps
-1. **Backend Integration**: Connect settings page handlers to actual API endpoints (export/clear/delete)
-2. **Testing**: Add unit tests (Vitest) and E2E tests (Playwright)
-3. **Accessibility**: Conduct comprehensive color contrast audit
-4. **Performance**: Add optimistic updates with rollback for mutations
-
-## Phase 1.3: Settings Page Enhancement (Needs Backend Integration)
-- **Connect settings handlers to actual API endpoints**: The settings page UI is complete, but handlers for export/clear/delete need to be connected to real backend endpoints once they're available.
-- **API key regeneration**: Implement actual API call for regenerate key (currently shows placeholder toast).
-- **Data export/clear/delete**: Connect to backend endpoints for exporting sessions, clearing history, and deleting account.
+1. **Testing**: Add unit tests (Vitest) and E2E tests (Playwright)
+2. **Accessibility**: Conduct comprehensive color contrast audit
 
 ## Phase 2: UX Improvements (Mostly Complete)
 - **2.1 Onboarding Experience** (COMPLETE):
@@ -76,27 +78,26 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
   - ✅ Loading skeletons in analytics, documents, lists
   - ✅ Loading spinners present in upload/send buttons
   - ✅ Streaming indicator badge shows during AI responses
-  - TODO: Implement optimistic updates with rollback for mutations (create session, send message, upload document)
+  - ✅ Added optimistic rollback for chat send failures (text + voice)
 - **3.3 Code Quality & Accessibility** (MOSTLY COMPLETE):
   - ✅ TypeScript strict mode enabled
   - ✅ Performance optimizations (lazy loading, React.memo)
   - ✅ Added comprehensive ARIA labels to MessageList, buttons, and interactive elements
   - ✅ Mobile touch targets meet 44x44px minimum requirement
   - TODO: Conduct full color contrast audit with WCAG AA standards
-  - TODO: Add React.memo to more components if needed for performance
+  - ✅ Added React.memo to ChatComposer, SessionSidebar, ChatHeader, and Insights components
 
 ## Phase 4: Quick Wins (Complete)
 - **4.1 Theme Toggle**: ✅ Present in Sidebar with tooltip
 - **4.2 Better Empty States**: ✅ Improved DocumentList and MessageList empty states with ARIA labels
-- **4.3 Toast Improvements**: ✅ Using sonner. TODO: Audit all async operations for consistent usage
+- **4.3 Toast Improvements**: ✅ Standardised async notifications through `toast-helpers`
 - **4.4 Status Indicators**: ✅ Connection status in Settings, ✅ Streaming badge in chat during responses
 - **4.5 Keyboard Shortcuts Hint**: ✅ Floating hint component implemented
 
 ## Testing Requirements (Pending)
 - **Unit Tests (Vitest)**:
-  - Add tests for custom hooks (useChatController)
-  - Add tests for API client functions
-  - Add tests for utility functions (shortcuts helpers, format functions)
+  - ✅ Added coverage for useChatController rollback handling
+  - ✅ Added coverage for shared toast helper utilities
   - Aim for 70-90% code coverage
   - Test edge cases for auth, upload, analytics
 - **E2E Tests (Playwright)**:
@@ -109,21 +110,21 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 
 ## Documentation Updates (Pending)
 - **Update README.md**:
-  - Add sections for new features (documents, analytics, onboarding)
-  - Add screenshots of dashboard, settings, analytics
-  - Add keyboard shortcuts reference table
-  - Add troubleshooting section (common errors like API key issues)
-  - Document accessibility features
+  - ✅ Add sections for new features (documents, analytics, onboarding)
+  - TODO: Add screenshot image assets for dashboard, settings, analytics
+  - ✅ Add keyboard shortcuts reference table
+  - ✅ Add troubleshooting section (common errors like API key issues)
+  - ✅ Document accessibility features
 - **Add CONTRIBUTING.md**:
-  - Document code style (ESLint rules, TypeScript strict)
-  - Provide component templates and patterns
-  - Document testing setup (Vitest/Playwright)
-  - Include PR checklist (tests, docs, no conflicts)
+  - ✅ Document code style (ESLint rules, TypeScript strict)
+  - ✅ Provide component templates and patterns
+  - ✅ Document testing setup (Vitest/Playwright)
+  - ✅ Include PR checklist (tests, docs, no conflicts)
 - **API Documentation**:
-  - Add JSDoc comments to all hooks
-  - Add usage examples for hooks
-  - Document prop types for all major components
-  - Add architecture documentation
+  - ✅ Add JSDoc comments to all hooks (completed for all major hooks)
+  - ✅ Add usage examples for hooks (included in JSDoc comments)
+  - ✅ Document prop types for major components (AnalyticsDashboard, ChatComposer, ChatHeader, SessionSidebar, InsightsPanel, DocumentCard, DocumentList, MetricCard)
+  - TODO: Add architecture documentation (data flow diagrams, component hierarchy)
 
 ## 📝 Implementation Notes
 
@@ -142,21 +143,22 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 - Floating keyboard hints for discoverability
 
 ### Known Issues / Technical Debt
-- Settings page handlers need backend API endpoints (export, clear, regenerate key)
 - Automated test coverage still missing for complex flows (only basic hooks covered so far)
 - Full color contrast audit needed (WCAG AA standards)
-- Optimistic updates not yet implemented for mutations
-- Documentation needs updating (README, CONTRIBUTING, API docs)
+- Architecture documentation (data flow diagrams, component hierarchy) still outstanding
+- Rename session mutation could benefit from optimistic updates (delete already has it)
 
 ### Implementation Strategy Going Forward
 1. **Short-term** (1-2 days):
-   - Connect settings page to backend APIs when ready
-   - Implement optimistic updates for key mutations
-   - Audit toast usage across all async operations
+   - ✅ **DONE**: Add JSDoc comments to all hooks with usage examples
+   - ✅ **DONE**: Complete JSDoc documentation for major components
+   - ✅ **DONE**: Validated chat session creation flow (already has optimistic handling via temp session with id <= 0)
+   - TODO: Capture and add updated UI screenshots to the README
 2. **Medium-term** (1 week):
-   - Conduct comprehensive color contrast audit (WCAG AA)
+   - TODO: Conduct comprehensive color contrast audit (WCAG AA)
+   - TODO: Add architecture documentation (data flow, component hierarchy)
+   - TODO: Add optimistic updates to rename session mutation
 3. **Long-term** (ongoing):
-   - Write comprehensive unit tests (aim for 70%+ coverage)
-   - Add E2E tests for critical user flows
-   - Update documentation (README, CONTRIBUTING, API docs)
-   - Monitor and optimize performance with React.memo where needed
+   - TODO: Write comprehensive unit tests (aim for 70%+ coverage)
+   - TODO: Add E2E tests for critical user flows (documents, sessions, analytics, onboarding)
+   - TODO: Monitor and optimize performance with React.memo where needed

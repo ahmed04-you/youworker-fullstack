@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 
 import { apiDelete, apiGet, apiPatch, ApiError } from "@/lib/api-client";
+import { toastError, toastSuccess } from "@/lib/toast-helpers";
 import type { SessionDetail, SessionSummary } from "@/lib/types";
 
 export const sessionKeys = {
@@ -65,10 +65,10 @@ export function useDeleteSessionMutation() {
       if (context?.previousSessions) {
         queryClient.setQueryData(sessionKeys.all, context.previousSessions);
       }
-      toast.error("Failed to delete session");
+      toastError("Failed to delete session");
     },
     onSuccess: () => {
-      toast.success("Session deleted");
+      toastSuccess("Session deleted");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: sessionKeys.all });
@@ -83,14 +83,14 @@ export function useRenameSessionMutation() {
     mutationFn: ({ sessionId, title }: { sessionId: number; title: string }) =>
       renameSession(sessionId, title),
     onSuccess: () => {
-      toast.success("Session renamed");
+      toastSuccess("Session renamed");
       queryClient.invalidateQueries({ queryKey: sessionKeys.all });
     },
     onError: (error) => {
       if (error instanceof ApiError && error.status === 404) {
-        toast.error("Session not found");
+        toastError("Session not found");
       } else {
-        toast.error("Failed to rename session");
+        toastError("Failed to rename session");
       }
     },
   });

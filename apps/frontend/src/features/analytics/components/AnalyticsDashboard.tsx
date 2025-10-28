@@ -14,8 +14,8 @@ import { IngestionMetrics } from './IngestionMetrics';
 import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import { useRefreshAnalytics } from '../api/analytics-service';
 import { Skeleton } from '@/components/ui/skeleton';
-import { toast } from 'sonner';
 import { exportToCSV, exportToJSON } from '@/lib/export';
+import { toastError, toastSuccess } from '@/lib/toast-helpers';
 import { DateRange } from '../types';
 
 const PRESET_RANGES = [
@@ -28,6 +28,35 @@ const PRESET_RANGES = [
 
 type PresetRange = typeof PRESET_RANGES[number]['value'];
 
+/**
+ * Main analytics dashboard component for YouWorker.AI
+ *
+ * Displays comprehensive analytics including token usage, tool metrics,
+ * session analytics, and document ingestion statistics. Provides date range
+ * filtering via preset ranges (today, week, month, 30 days) or custom dates,
+ * and exports data to CSV or JSON formats.
+ *
+ * @component
+ * @example
+ * ```tsx
+ * <AnalyticsDashboard />
+ * ```
+ *
+ * Features:
+ * - Date range filtering with preset shortcuts
+ * - Custom date range picker
+ * - Data export to CSV/JSON formats
+ * - Real-time data refresh
+ * - Loading skeletons during data fetch
+ * - Error boundary with retry functionality
+ * - Overview cards with key metrics
+ * - Interactive charts for token usage and sessions
+ * - Tool metrics table
+ * - Document ingestion statistics
+ *
+ * @see {@link useAnalyticsData} for data fetching logic
+ * @see {@link DateRangePicker} for custom date selection
+ */
 export function AnalyticsDashboard() {
   const [pickerDateRange, setPickerDateRange] = useState<DayPickerDateRange | undefined>(undefined);
   const [preset, setPreset] = useState<PresetRange>('week');
@@ -75,7 +104,7 @@ export function AnalyticsDashboard() {
 
   const handleExport = (format: 'csv' | 'json') => {
     if (!overview) {
-      toast.error('No data to export');
+      toastError("No data to export");
       return;
     }
 
@@ -102,7 +131,7 @@ export function AnalyticsDashboard() {
       exportToJSON(exportData, `youworker-analytics-${formatDate(new Date())}`);
     }
 
-    toast.success(`Analytics exported as ${format.toUpperCase()}`);
+    toastSuccess(`Analytics exported as ${format.toUpperCase()}`);
   };
 
   if (error) {

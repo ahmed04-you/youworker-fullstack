@@ -5,14 +5,66 @@ import { Badge } from '@/components/ui/badge';
 import { FileText, Download, Trash2, Eye } from 'lucide-react';
 import { useDocumentStore } from '../store/document-store';
 import { useDeleteDocumentMutation } from '../api/document-service';
-import { toast } from 'sonner';
+import { toastInfo } from '@/lib/toast-helpers';
 
+/**
+ * Props for the DocumentCard component
+ */
 interface DocumentCardProps {
   document: Document;
   onSelect?: (doc: Document) => void;
   showActions?: boolean;
 }
 
+/**
+ * Document card component displaying document metadata and actions
+ *
+ * Renders a card showing document information including name, size, type,
+ * status, tags, and creation date. Supports inline actions for preview,
+ * download, delete, and selection. Visual indicator shows when document
+ * is selected. Optimized with React.memo for performance.
+ *
+ * @component
+ * @param {DocumentCardProps} props - Component props
+ * @param {Document} props.document - Document data to display
+ * @param {function} [props.onSelect] - Optional handler when card is clicked
+ * @param {boolean} [props.showActions=true] - Whether to show action buttons
+ *
+ * @example
+ * ```tsx
+ * <DocumentCard
+ *   document={{
+ *     id: '123',
+ *     name: 'report.pdf',
+ *     type: 'pdf',
+ *     size: 2048000,
+ *     status: 'ready',
+ *     source: 'upload',
+ *     tags: ['finance', 'q4'],
+ *     createdAt: new Date(),
+ *     chunksCount: 15
+ *   }}
+ *   onSelect={handleDocumentSelect}
+ *   showActions={true}
+ * />
+ * ```
+ *
+ * Features:
+ * - Document icon with type indicator
+ * - Name and file size display
+ * - Status badge (ready, processing, error)
+ * - Source badge (upload, url, integration)
+ * - Tag badges (first 3 shown, +N more indicator)
+ * - Creation date and chunk count
+ * - Checkbox for multi-select with visual highlight
+ * - Hover actions: preview, download, delete
+ * - Click card to select/trigger onSelect
+ * - Confirmation dialog for delete action
+ * - Ring highlight when selected
+ *
+ * @see {@link useDocumentStore} for selection state management
+ * @see {@link useDeleteDocumentMutation} for delete functionality
+ */
 export const DocumentCard = React.memo(function DocumentCard({ document, onSelect, showActions = true }: DocumentCardProps) {
   const { toggleDocumentSelection, selectedDocuments } = useDocumentStore();
   const isSelected = selectedDocuments.some((d) => d.id === document.id);
@@ -48,7 +100,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
             onClick={(e) => {
               e.stopPropagation();
               // Preview logic, e.g., open modal with DocumentPreview
-              toast.info('Preview not implemented yet');
+              toastInfo("Preview not implemented yet");
             }}
             title="Preview"
           >
@@ -60,7 +112,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
             onClick={(e) => {
               e.stopPropagation();
               // Download logic
-              toast.info('Download not implemented yet');
+              toastInfo("Download not implemented yet");
             }}
             title="Download"
           >

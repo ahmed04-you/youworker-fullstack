@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,7 @@ type MobileSessionDrawerProps = {
   deriveSessionName: (session: SessionSummary | null) => string;
 };
 
-export function MobileSessionDrawer({
+export const MobileSessionDrawer = memo(function MobileSessionDrawer({
   open = false,
   onOpenChange,
   sessions,
@@ -71,4 +72,5 @@ export function MobileSessionDrawer({
       </SheetContent>
     </Sheet>
   );
-}
+});
+MobileSessionDrawer.displayName = "MobileSessionDrawer";

@@ -22,6 +22,30 @@ const iconMap = {
   chunks: <Database className="h-4 w-4" />,
 };
 
+/**
+ * Reusable metric display card component for analytics dashboard.
+ * Displays a single metric with title, value, description, optional trend indicator, and icon.
+ *
+ * @component
+ * @param props - Component props
+ * @param props.title - Title of the metric
+ * @param props.value - Metric value (number or string)
+ * @param props.description - Brief description of the metric
+ * @param props.trend - Optional trend percentage (positive for increase, negative for decrease)
+ * @param props.icon - Optional custom icon (defaults to mapped icon based on title)
+ * @param props.variant - Card style variant (default, success, warning, destructive)
+ *
+ * @example
+ * ```tsx
+ * <MetricCard
+ *   title="Total Sessions"
+ *   value={1234}
+ *   description="All time sessions"
+ *   trend={15.5}
+ *   icon={<Users />}
+ * />
+ * ```
+ */
 export const MetricCard = React.memo(function MetricCard({
   title,
   value,

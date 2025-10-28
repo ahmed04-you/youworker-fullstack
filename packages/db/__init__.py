@@ -14,7 +14,14 @@ from .models import (
     UserCollectionAccess,
     UserDocumentAccess,
 )
-from .crud import ensure_root_user
+from .crud import (
+    ensure_root_user,
+    get_user_by_api_key,
+    regenerate_user_api_key,
+    clear_user_history,
+    delete_user_account,
+    export_user_snapshot,
+)
 
 __all__ = [
     "init_db",
@@ -33,4 +40,9 @@ __all__ = [
     "UserCollectionAccess",
     "UserDocumentAccess",
     "ensure_root_user",
+    "get_user_by_api_key",
+    "regenerate_user_api_key",
+    "clear_user_history",
+    "delete_user_account",
+    "export_user_snapshot",
 ]

@@ -5,6 +5,34 @@ interface UseAutoScrollOptions {
   threshold?: number; // pixels from bottom to consider "at bottom"
 }
 
+/**
+ * Hook for managing auto-scroll behavior in scrollable containers.
+ * Automatically scrolls to bottom when new content is added if the user is near the bottom.
+ * Tracks scroll position and provides a "new messages" indicator when user has scrolled up.
+ *
+ * @template T - HTML element type for the scrollable container
+ * @param options - Configuration options
+ * @param options.enabled - Whether auto-scroll is enabled (default: true)
+ * @param options.threshold - Distance in pixels from bottom to consider "at bottom" (default: 100)
+ *
+ * @returns Object containing:
+ *  - scrollRef: Ref to attach to the scrollable container
+ *  - isAtBottom: Whether user is currently at the bottom
+ *  - hasNewMessages: Whether new messages arrived while user was scrolled up
+ *  - scrollToBottom: Function to manually scroll to bottom
+ *
+ * @example
+ * ```tsx
+ * const { scrollRef, isAtBottom, hasNewMessages, scrollToBottom } = useAutoScroll<HTMLDivElement>();
+ *
+ * return (
+ *   <div ref={scrollRef} className="overflow-auto">
+ *     {messages.map(msg => <Message key={msg.id} {...msg} />)}
+ *     {hasNewMessages && <button onClick={() => scrollToBottom()}>New messages</button>}
+ *   </div>
+ * );
+ * ```
+ */
 export function useAutoScroll<T extends HTMLElement>({
   enabled = true,
   threshold = 100,

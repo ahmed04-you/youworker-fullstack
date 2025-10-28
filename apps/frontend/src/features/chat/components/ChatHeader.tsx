@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { MessageCircle, Radio, Cpu, Loader2, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,9 @@ import type { SessionSummary } from "@/lib/types";
 
 import { MobileSessionDrawer } from "./MobileSessionDrawer";
 
+/**
+ * Props for the ChatHeader component
+ */
 interface ChatHeaderProps {
   sessions: SessionSummary[];
   sessionsLoading: boolean;
@@ -27,7 +31,67 @@ interface ChatHeaderProps {
   onMobileDrawerChange: (open: boolean) => void;
 }
 
-export function ChatHeader({
+/**
+ * Chat header component displaying session info and system status
+ *
+ * Displays the active chat session name, model badge, streaming status,
+ * tools status, and system health refresh button. On mobile, includes
+ * a drawer toggle for session management and an insights panel trigger.
+ * Optimized with React.memo for performance.
+ *
+ * @component
+ * @param {ChatHeaderProps} props - Component props
+ * @param {SessionSummary[]} props.sessions - List of all chat sessions
+ * @param {boolean} props.sessionsLoading - Whether sessions are loading
+ * @param {SessionSummary | null} props.activeSession - Currently active session
+ * @param {function} props.onRefreshSessions - Handler to refresh sessions list
+ * @param {function} props.onNewSession - Handler to create a new session
+ * @param {function} props.onSelectSession - Handler when a session is selected
+ * @param {function} props.onRenameSession - Handler to rename a session
+ * @param {function} props.onDeleteSession - Handler to delete a session
+ * @param {function} props.onRefreshHealth - Handler to refresh system health
+ * @param {boolean} props.healthLoading - Whether health data is loading
+ * @param {boolean} props.isStreaming - Whether AI is currently streaming
+ * @param {boolean} props.enableTools - Whether tools are enabled
+ * @param {function} props.deriveSessionName - Function to derive session display name
+ * @param {function} props.onOpenInsights - Handler to open insights panel (mobile)
+ * @param {boolean} props.mobileDrawerOpen - Whether mobile session drawer is open
+ * @param {function} props.onMobileDrawerChange - Handler for mobile drawer state
+ *
+ * @example
+ * ```tsx
+ * <ChatHeader
+ *   sessions={sessions}
+ *   sessionsLoading={false}
+ *   activeSession={currentSession}
+ *   onRefreshSessions={refreshSessions}
+ *   onNewSession={createSession}
+ *   onSelectSession={selectSession}
+ *   onRenameSession={renameSession}
+ *   onDeleteSession={deleteSession}
+ *   onRefreshHealth={refreshHealth}
+ *   healthLoading={false}
+ *   isStreaming={false}
+ *   enableTools={true}
+ *   deriveSessionName={getSessionName}
+ *   onOpenInsights={openInsights}
+ *   mobileDrawerOpen={false}
+ *   onMobileDrawerChange={setDrawerOpen}
+ * />
+ * ```
+ *
+ * Features:
+ * - Session name display with model badge
+ * - Real-time streaming indicator with pulse animation
+ * - Tools status badge
+ * - System health refresh button with loading state
+ * - Mobile session drawer integration
+ * - Mobile insights panel trigger
+ * - Responsive layout adapting to screen size
+ *
+ * @see {@link MobileSessionDrawer} for mobile session management
+ */
+export const ChatHeader = memo(function ChatHeader({
   sessions,
   sessionsLoading,
   activeSession,
@@ -121,4 +185,5 @@ export function ChatHeader({
       </div>
     </div>
   );
-}
+});
+ChatHeader.displayName = "ChatHeader";

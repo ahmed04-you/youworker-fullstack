@@ -11,9 +11,11 @@ from pathlib import Path
 from fastapi import HTTPException, Header, Depends, Cookie
 from fastapi.security import HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
-from packages.db import get_async_session
+from packages.db import get_async_session, get_user_by_api_key, User
 from packages.db.crud import ensure_root_user as _ensure_root_user_impl
 
 ensure_root_user = _ensure_root_user_impl
@@ -104,22 +106,21 @@ async def get_current_user(
             else:
                 api_key = provided_api_key
                 username = "root"
-    
+
             if not api_key:
                 raise HTTPException(
                     status_code=401,
                     detail="Not authenticated",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-    
-            # Use constant-time comparison to prevent timing attacks
-            if not secrets.compare_digest(api_key, settings.root_api_key):
+
+            if not await _verify_api_key_with_session(db, api_key):
                 raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
             user = await _ensure_root_user_impl(session=db, username=username, api_key=api_key)
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid API key")
-    
+
         return user
 
 
@@ -167,16 +168,13 @@ async def get_current_user_optional(
                 # Fall back to API key authentication
 
         # If JWT failed or not provided, try API key authentication
-        if (
-            not user
-            and provided_api_key
-            and secrets.compare_digest(provided_api_key, settings.root_api_key)
-        ):
-            user = await _ensure_root_user_impl(
-                session=db, username="root", api_key=provided_api_key
-            )
-            if user:
-                return user
+        if not user and provided_api_key:
+            if await _verify_api_key_with_session(db, provided_api_key):
+                user = await _ensure_root_user_impl(
+                    session=db, username="root", api_key=provided_api_key
+                )
+                if user:
+                    return user
 
         return None
 
@@ -192,17 +190,34 @@ async def get_current_active_user(current_user=Depends(get_current_user)):
     return current_user
 
 
-def verify_api_key(api_key: str) -> bool:
+async def _verify_api_key_with_session(session: AsyncSession, api_key: str) -> bool:
     """
-    Verify an API key against the stored root key.
-
-    Uses constant-time comparison to prevent timing attacks.
+    Verify an API key using the provided database session.
     """
     if not api_key:
         return False
 
-    # Use constant-time comparison to prevent timing attacks
-    return secrets.compare_digest(api_key, settings.root_api_key)
+    user = await get_user_by_api_key(session, api_key)
+    if user:
+        return True
+
+    stored_hash_result = await session.execute(
+        select(User.api_key_hash).where(User.is_root.is_(True)).limit(1)
+    )
+    stored_hash = stored_hash_result.scalar_one_or_none()
+
+    if stored_hash:
+        return False
+
+    return bool(settings.root_api_key and secrets.compare_digest(api_key, settings.root_api_key))
+
+
+async def verify_api_key(api_key: str) -> bool:
+    """
+    Verify an API key using a dedicated database session.
+    """
+    async with get_async_session() as session:
+        return await _verify_api_key_with_session(session, api_key)
 
 
 def sanitize_input(input_str: str | None, max_length: int = 4000) -> str:

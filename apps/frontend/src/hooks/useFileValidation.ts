@@ -7,6 +7,32 @@ interface ValidationError {
   message: string;
 }
 
+/**
+ * Hook for validating file uploads using Zod schemas.
+ * Validates file size, type, and other constraints before upload.
+ *
+ * @returns Object containing:
+ *  - errors: Array of validation errors
+ *  - isValidating: Whether validation is in progress
+ *  - validateSingleFile: Validate a single file
+ *  - validateMultipleFiles: Validate multiple files
+ *  - clearErrors: Clear all validation errors
+ *
+ * @example
+ * ```tsx
+ * const { errors, isValidating, validateSingleFile, clearErrors } = useFileValidation();
+ *
+ * const handleFileSelect = async (file: File) => {
+ *   clearErrors();
+ *   const isValid = await validateSingleFile(file);
+ *   if (isValid) {
+ *     // Proceed with upload
+ *   } else {
+ *     errors.forEach(err => console.log(err.message));
+ *   }
+ * };
+ * ```
+ */
 export function useFileValidation() {
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [isValidating, setIsValidating] = useState(false);

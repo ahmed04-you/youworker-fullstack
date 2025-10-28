@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { toast } from "sonner";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { toastError, toastSuccess } from "@/lib/toast-helpers";
 import { ShieldAlert, Sparkles, DoorOpen, Cookie, Loader2, Palette, MessageCircle, Key, Database, Eye, Trash2, Download, Globe, Volume2, Mic, Zap, Globe2, EyeOff, VolumeX, Play, FastForward, Settings, User, Lock, KeyRound, Mic2, ZapOff } from "lucide-react";
 
 import { useAuth } from "@/lib/auth-context";
+import { ApiError } from "@/lib/api-client";
+import {
+  clearChatHistory,
+  deleteAccount as deleteAccountRequest,
+  downloadAccountExport,
+  rotateApiKey,
+} from "@/lib/account-client";
 import { useTranslations } from "@/components/language-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -27,6 +34,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useSettings } from '@/lib/settings-context';
 
+function resolveErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return fallback;
+}
+
 export default function SettingsPage() {
   const { isAuthenticated, username, logout, isLoading } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -35,6 +52,10 @@ export default function SettingsPage() {
   const [newShortcutAction, setNewShortcutAction] = useState('');
   const { t } = useTranslations("settings");
   const { settings, updateSetting, isConnected } = useSettings();
+  const [isExporting, setIsExporting] = useState(false);
+  const [isClearingHistory, setIsClearingHistory] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [isRotatingKey, setIsRotatingKey] = useState(false);
 
   const statusBadge = isLoading
     ? { label: t("hero.status.loading"), variant: "outline" as const }
@@ -50,9 +71,9 @@ export default function SettingsPage() {
     setIsLoggingOut(true);
     try {
       await logout();
-      toast.success(t("authentication.card.logoutSuccess"));
+      toastSuccess(t("authentication.card.logoutSuccess"));
     } catch (error) {
-      toast.error(t("authentication.card.logoutError"));
+      toastError(t("authentication.card.logoutError"));
     } finally {
       setIsLoggingOut(false);
     }
@@ -110,26 +131,95 @@ export default function SettingsPage() {
     updateSetting('screenReader', checked);
   };
 
-  const handleExportData = () => {
-    toast.success('Data exported successfully');
-  };
+  const performExport = useCallback(
+    async (successMessage: string) => {
+      setIsExporting(true);
+      try {
+        const { blob, filename } = await downloadAccountExport();
+        if (typeof window !== "undefined") {
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = filename;
+          anchor.rel = "noopener";
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          URL.revokeObjectURL(url);
+        }
+        toastSuccess(successMessage);
+      } catch (error) {
+        console.error(error);
+        toastError(resolveErrorMessage(error, "Unable to export data"));
+      } finally {
+        setIsExporting(false);
+      }
+    },
+    []
+  );
 
-  const handleClearHistory = () => {
-    if (confirm('Clear all conversation history? This cannot be undone.')) {
-      // Implement clear history logic
-      toast.success('History cleared');
+  const handleExportData = useCallback(() => {
+    void performExport("Account data export downloaded");
+  }, [performExport]);
+
+  const handleDownloadData = useCallback(() => {
+    void performExport("Personal data download started");
+  }, [performExport]);
+
+  const handleClearHistory = async () => {
+    if (!confirm("Clear all conversation history? This cannot be undone.")) {
+      return;
+    }
+    setIsClearingHistory(true);
+    try {
+      const summary = await clearChatHistory();
+      const formatCount = (count: number, unit: string) =>
+        `${count} ${unit}${count === 1 ? "" : "s"}`;
+      toastSuccess(
+        `Cleared ${formatCount(summary.sessions_deleted, "session")} and ${formatCount(summary.messages_deleted, "message")}`
+      );
+    } catch (error) {
+      console.error(error);
+      toastError(resolveErrorMessage(error, "Unable to clear conversation history"));
+    } finally {
+      setIsClearingHistory(false);
     }
   };
 
-  const handleDownloadData = () => {
-    // Implement download personal data
-    toast.success('Personal data download started');
+  const handleDeleteAccount = async () => {
+    if (!confirm("Delete your account? This action cannot be undone.")) {
+      return;
+    }
+    setIsDeletingAccount(true);
+    try {
+      await deleteAccountRequest();
+      toastSuccess("Your account has been deleted. Logging out…");
+      await logout().catch(() => {
+        /* ignore logout errors after deletion */
+      });
+    } catch (error) {
+      console.error(error);
+      toastError(resolveErrorMessage(error, "Unable to delete account"));
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
-  const handleDeleteAccount = () => {
-    if (confirm('Delete your account? This action cannot be undone.')) {
-      // Implement delete account
-      toast.success('Account deletion requested');
+  const handleRegenerateApiKey = async () => {
+    if (!confirm("Regenerate API key? This will invalidate the current key.")) {
+      return;
+    }
+    setIsRotatingKey(true);
+    try {
+      const newKey = await rotateApiKey();
+      handleApiKeyChange(newKey);
+      setShowApiKey(true);
+      toastSuccess("New API key generated");
+    } catch (error) {
+      console.error(error);
+      toastError(resolveErrorMessage(error, "Unable to regenerate API key"));
+    } finally {
+      setIsRotatingKey(false);
     }
   };
 
@@ -144,17 +234,17 @@ export default function SettingsPage() {
     const trimmedAction = newShortcutAction.trim();
 
     if (!normalizedKey) {
-      toast.error("Shortcut cannot be empty");
+      toastError("Shortcut cannot be empty");
       return;
     }
 
     if (!trimmedAction) {
-      toast.error("Please choose an action for the shortcut");
+      toastError("Please choose an action for the shortcut");
       return;
     }
 
     if (normalizedShortcuts[normalizedKey]) {
-      toast.error("That shortcut is already assigned");
+      toastError("That shortcut is already assigned");
       return;
     }
 
@@ -164,7 +254,7 @@ export default function SettingsPage() {
     });
     setNewShortcutKey("");
     setNewShortcutAction("");
-    toast.success("Shortcut added");
+    toastSuccess("Shortcut added");
   };
 
   const handleShortcutActionUpdate = (key: string, action: string) => {
@@ -172,7 +262,7 @@ export default function SettingsPage() {
     const trimmedAction = action.trim();
 
     if (!trimmedAction) {
-      toast.error("Shortcut description cannot be empty");
+      toastError("Shortcut description cannot be empty");
       return;
     }
 
@@ -184,7 +274,7 @@ export default function SettingsPage() {
       ...normalizedShortcuts,
       [normalizedKey]: trimmedAction,
     });
-    toast.success("Shortcut updated");
+    toastSuccess("Shortcut updated");
   };
 
   const handleShortcutKeyUpdate = (currentKey: string, nextKey: string) => {
@@ -192,7 +282,7 @@ export default function SettingsPage() {
     const normalizedNextKey = nextKey.trim().toLowerCase();
 
     if (!normalizedNextKey) {
-      toast.error("Shortcut cannot be empty");
+      toastError("Shortcut cannot be empty");
       return;
     }
 
@@ -201,20 +291,20 @@ export default function SettingsPage() {
     }
 
     if (normalizedShortcuts[normalizedNextKey]) {
-      toast.error("That shortcut is already in use");
+      toastError("That shortcut is already in use");
       return;
     }
 
     const updatedShortcuts = { ...normalizedShortcuts };
     const action = updatedShortcuts[normalizedCurrentKey];
     if (!action) {
-      toast.error("Unable to update shortcut");
+      toastError("Unable to update shortcut");
       return;
     }
     delete updatedShortcuts[normalizedCurrentKey];
     updatedShortcuts[normalizedNextKey] = action;
     updateSetting("shortcuts", updatedShortcuts);
-    toast.success("Shortcut updated");
+    toastSuccess("Shortcut updated");
   };
 
   const handleRemoveShortcut = (key: string) => {
@@ -225,7 +315,7 @@ export default function SettingsPage() {
     const updatedShortcuts = { ...normalizedShortcuts };
     delete updatedShortcuts[normalizedKey];
     updateSetting("shortcuts", updatedShortcuts);
-    toast.success("Shortcut removed");
+    toastSuccess("Shortcut removed");
   };
 
   const connectionIndicator = (
@@ -560,18 +650,25 @@ export default function SettingsPage() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => {
-                if (confirm('Regenerate API key? This will invalidate the current key.')) {
-                  // Implement regenerate
-                  toast.success('New API key generated');
-                }
-              }}>
-                Regenerate Key
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRegenerateApiKey}
+                disabled={isRotatingKey}
+              >
+                {isRotatingKey ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Rotating…
+                  </>
+                ) : (
+                  "Regenerate Key"
+                )}
               </Button>
-              <Button variant="destructive" size="sm" onClick={() => {
+              <Button variant="destructive" size="sm" disabled={isRotatingKey} onClick={() => {
                 if (confirm('Remove API key?')) {
                   handleApiKeyChange(null);
-                  toast.success('API key removed');
+                  toastSuccess("API key removed");
                 }
               }}>
                 Remove Key
@@ -654,22 +751,78 @@ export default function SettingsPage() {
             <CardDescription>Manage your personal data and privacy</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" onClick={handleExportData} className="w-full">
-              <Download className="mr-2 h-4 w-4" />
-              Export All Sessions
+            <Button
+              variant="outline"
+              onClick={handleExportData}
+              className="w-full"
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Preparing export…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Export All Sessions
+                </>
+              )}
             </Button>
-            <Button variant="outline" onClick={handleClearHistory} className="w-full">
-              <Trash2 className="mr-2 h-4 w-4" />
-              Clear Conversation History
+            <Button
+              variant="outline"
+              onClick={handleClearHistory}
+              className="w-full"
+              disabled={isClearingHistory}
+            >
+              {isClearingHistory ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Clearing history…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Clear Conversation History
+                </>
+              )}
             </Button>
-            <Button variant="outline" onClick={handleDownloadData} className="w-full">
-              <Download className="mr-2 h-4 w-4" />
-              Download Personal Data
+            <Button
+              variant="outline"
+              onClick={handleDownloadData}
+              className="w-full"
+              disabled={isExporting}
+            >
+              {isExporting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Preparing export…
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Personal Data
+                </>
+              )}
             </Button>
             <Separator />
-            <Button variant="destructive" onClick={handleDeleteAccount} className="w-full">
-              <User className="mr-2 h-4 w-4" />
-              Delete Account
+            <Button
+              variant="destructive"
+              onClick={handleDeleteAccount}
+              className="w-full"
+              disabled={isDeletingAccount}
+            >
+              {isDeletingAccount ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Deleting account…
+                </>
+              ) : (
+                <>
+                  <User className="mr-2 h-4 w-4" />
+                  Delete Account
+                </>
+              )}
             </Button>
           </CardContent>
         </Card>

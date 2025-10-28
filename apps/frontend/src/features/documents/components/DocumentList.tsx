@@ -9,12 +9,58 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Upload, Trash2, FileText } from 'lucide-react';
 import { useDocumentStore } from '../store/document-store';
-import { toast } from 'sonner';
+import { toastSuccess } from '@/lib/toast-helpers';
 
+/**
+ * Props for the DocumentList component
+ */
 interface DocumentListProps {
   onDocumentSelect?: (doc: Document) => void;
 }
 
+/**
+ * Document list component with filtering, pagination, and batch operations
+ *
+ * Main documents management interface displaying a grid of document cards
+ * with support for filtering, pagination, multi-select, batch delete, and
+ * upload. Shows loading skeletons during data fetch and helpful empty states.
+ *
+ * @component
+ * @param {DocumentListProps} props - Component props
+ * @param {function} [props.onDocumentSelect] - Optional handler when a document is selected
+ *
+ * @example
+ * ```tsx
+ * <DocumentList
+ *   onDocumentSelect={(doc) => console.log('Selected:', doc)}
+ * />
+ * ```
+ *
+ * Features:
+ * - Responsive grid layout (1-3 columns based on screen size)
+ * - Document filtering by type, status, source, tags
+ * - Pagination controls with page numbers
+ * - Multi-select documents with checkbox
+ * - Batch delete selected documents
+ * - Upload dialog for adding new documents
+ * - Loading skeleton states during data fetch
+ * - Error state with retry button
+ * - Empty state with helpful message and upload CTA
+ * - Selection counter badge
+ * - Auto-refresh after upload completes
+ *
+ * State Management:
+ * - Page state for pagination
+ * - Upload dialog open/close state
+ * - Filters managed via useDocumentStore
+ * - Selection state managed via useDocumentStore
+ *
+ * @see {@link DocumentCard} for individual document display
+ * @see {@link DocumentFilters} for filtering UI
+ * @see {@link UploadDialog} for document upload
+ * @see {@link useDocuments} for data fetching
+ * @see {@link useDocumentStore} for global document state
+ */
 export function DocumentList({ onDocumentSelect }: DocumentListProps) {
   const [page, setPage] = useState(1);
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -30,7 +76,7 @@ export function DocumentList({ onDocumentSelect }: DocumentListProps) {
     if (confirm(`Delete ${selectedDocuments.length} document(s)?`)) {
       selectedDocuments.forEach((doc) => deleteMutation.mutate(doc.id));
       clearSelection();
-      toast.success(`${selectedDocuments.length} documents deleted`);
+      toastSuccess(`${selectedDocuments.length} documents deleted`);
     }
   };
 

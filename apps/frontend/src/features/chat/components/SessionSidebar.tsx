@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { memo, useState } from "react";
 import {
   Loader2,
   RefreshCw,
@@ -35,6 +35,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { SessionSummary } from "@/lib/types";
 
+/**
+ * Props for the SessionSidebar component
+ */
 interface SessionSidebarProps {
   sessions: SessionSummary[];
   sessionsLoading: boolean;
@@ -47,7 +50,56 @@ interface SessionSidebarProps {
   deriveSessionName: (session: SessionSummary | null) => string;
 }
 
-export function SessionSidebar({
+/**
+ * Session sidebar for managing chat conversations
+ *
+ * Displays a list of chat sessions with options to create, select, rename,
+ * and delete sessions. Shows session metadata including last updated time,
+ * model used, and tools status. Includes a Knowledge Hub link to documents.
+ * Optimized with React.memo for performance. Hidden on mobile (drawer used instead).
+ *
+ * @component
+ * @param {SessionSidebarProps} props - Component props
+ * @param {SessionSummary[]} props.sessions - List of all chat sessions
+ * @param {boolean} props.sessionsLoading - Whether sessions are loading
+ * @param {SessionSummary | null} props.activeSession - Currently active session
+ * @param {function} props.onRefresh - Handler to refresh sessions list
+ * @param {function} props.onNewSession - Handler to create a new session
+ * @param {function} props.onSelectSession - Handler when a session is selected
+ * @param {function} props.onRenameSession - Handler to rename a session
+ * @param {function} props.onDeleteSession - Handler to delete a session
+ * @param {function} props.deriveSessionName - Function to derive session display name
+ *
+ * @example
+ * ```tsx
+ * <SessionSidebar
+ *   sessions={sessions}
+ *   sessionsLoading={false}
+ *   activeSession={currentSession}
+ *   onRefresh={refreshSessions}
+ *   onNewSession={createSession}
+ *   onSelectSession={selectSession}
+ *   onRenameSession={renameSession}
+ *   onDeleteSession={deleteSession}
+ *   deriveSessionName={getSessionName}
+ * />
+ * ```
+ *
+ * Features:
+ * - Scrollable session list with active state highlighting
+ * - "New Conversation" button prominently displayed
+ * - Refresh button with loading spinner
+ * - Session cards showing name, timestamp, model, and tools status
+ * - Inline rename and delete actions per session
+ * - Confirmation dialogs for rename and delete operations
+ * - Loading skeleton states during data fetch
+ * - Empty state with helpful message
+ * - Knowledge Hub info card with link to documents
+ * - Desktop only (hidden on mobile via lg:flex)
+ *
+ * @see {@link MobileSessionDrawer} for mobile equivalent
+ */
+export const SessionSidebar = memo(function SessionSidebar({
   sessions,
   sessionsLoading,
   activeSession,
@@ -253,4 +305,5 @@ export function SessionSidebar({
       </AlertDialog>
     </aside>
   );
-}
+});
+SessionSidebar.displayName = "SessionSidebar";

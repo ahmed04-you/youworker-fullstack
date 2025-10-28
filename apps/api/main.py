@@ -35,6 +35,7 @@ from apps.api.routes.chat import router as chat_router
 from apps.api.routes.websocket import router as websocket_router
 from apps.api.routes.analytics import router as analytics_router
 from apps.api.routes.auth import router as auth_router
+from apps.api.routes.account import router as account_router
 from apps.api.routes import ingestion, crud, health
 
 from .services.startup import StartupService
@@ -198,6 +199,7 @@ app.include_router(chat_router)
 app.include_router(ingestion.router)
 app.include_router(crud.router)
 app.include_router(analytics_router)
+app.include_router(account_router)
 
 
 if __name__ == "__main__":

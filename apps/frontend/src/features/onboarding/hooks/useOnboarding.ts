@@ -33,6 +33,38 @@ const DEFAULT_STEPS = [
   'analytics',
 ];
 
+/**
+ * Zustand store for managing onboarding flow state.
+ * Persists state to localStorage and provides navigation between onboarding steps.
+ *
+ * @returns Onboarding state and actions:
+ *  - currentStep: Current step index (0-based)
+ *  - isComplete: Whether onboarding has been completed
+ *  - steps: Array of step identifiers
+ *  - isOpen: Whether onboarding modal is open
+ *  - progress: Completion percentage (0-100)
+ *  - setStep: Set current step (clamped to valid range)
+ *  - nextStep: Advance to next step
+ *  - prevStep: Go back to previous step
+ *  - completeOnboarding: Mark onboarding as complete
+ *  - openOnboarding: Open onboarding modal
+ *  - closeOnboarding: Close onboarding modal
+ *  - resetOnboarding: Reset to initial state
+ *  - getStepContent: Get content for a specific step
+ *
+ * @example
+ * ```tsx
+ * const { currentStep, isComplete, nextStep, completeOnboarding } = useOnboarding();
+ *
+ * const handleNext = () => {
+ *   if (currentStep === TOTAL_STEPS - 1) {
+ *     completeOnboarding();
+ *   } else {
+ *     nextStep();
+ *   }
+ * };
+ * ```
+ */
 export const useOnboarding = create<OnboardingState>((set, get) => ({
   // Initial state
   currentStep: 0,

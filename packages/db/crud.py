@@ -3,9 +3,11 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime
 from typing import Iterable
+import secrets
 
-from sqlalchemy import select
+from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .models import (
     User,
@@ -18,6 +20,7 @@ from .models import (
     Document,
     DocumentCollection,
     UserCollectionAccess,
+    UserDocumentAccess,
 )
 
 
@@ -45,6 +48,173 @@ async def ensure_root_user(session, *, username: str, api_key: str) -> User:
     session.add(user)
     await session.flush()
     return user
+
+
+async def get_user_by_api_key(session: AsyncSession, api_key: str) -> User | None:
+    """Return the user matching the provided API key hash, if any."""
+    if not api_key:
+        return None
+    hashed = _hash_api_key(api_key)
+    result = await session.execute(select(User).where(User.api_key_hash == hashed))
+    return result.scalar_one_or_none()
+
+
+async def regenerate_user_api_key(session: AsyncSession, user_id: int) -> str:
+    """Generate and persist a new API key for the given user."""
+    user = await session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+    new_key = secrets.token_urlsafe(32)
+    user.api_key_hash = _hash_api_key(new_key)
+    await session.flush()
+    return new_key
+
+
+async def clear_user_history(session: AsyncSession, user_id: int) -> dict[str, int]:
+    """
+    Delete all chat sessions (and cascaded messages) for a user.
+
+    Returns a summary containing counts for deleted sessions and messages.
+    """
+    session_ids_result = await session.execute(
+        select(ChatSession.id).where(ChatSession.user_id == user_id)
+    )
+    session_ids = session_ids_result.scalars().all()
+
+    if not session_ids:
+        return {"sessions_deleted": 0, "messages_deleted": 0}
+
+    message_count_result = await session.execute(
+        select(func.count(ChatMessage.id)).where(ChatMessage.session_id.in_(session_ids))
+    )
+    messages_deleted = message_count_result.scalar_one() or 0
+
+    delete_result = await session.execute(
+        delete(ChatSession).where(ChatSession.id.in_(session_ids))
+    )
+    sessions_deleted = delete_result.rowcount or 0
+    await session.flush()
+
+    return {
+        "sessions_deleted": sessions_deleted,
+        "messages_deleted": int(messages_deleted),
+    }
+
+
+async def delete_user_account(session: AsyncSession, user_id: int) -> bool:
+    """Permanently delete a user and cascade to all related entities."""
+    delete_result = await session.execute(delete(User).where(User.id == user_id))
+    await session.flush()
+    return bool(delete_result.rowcount)
+
+
+async def export_user_snapshot(session: AsyncSession, user_id: int) -> dict:
+    """Collect a snapshot of the user's data for export."""
+    user = await session.get(User, user_id)
+    if not user:
+        raise ValueError("User not found")
+
+    sessions_result = await session.execute(
+        select(ChatSession)
+        .options(selectinload(ChatSession.messages))
+        .where(ChatSession.user_id == user_id)
+        .order_by(ChatSession.created_at.asc())
+    )
+    sessions = sessions_result.scalars().unique().all()
+
+    documents = await get_user_documents(session, user_id=user_id, limit=10_000, offset=0)
+    ingestion_runs = await get_user_ingestion_runs(session, user_id=user_id, limit=10_000)
+    tool_runs = await get_user_tool_runs(session, user_id=user_id, limit=10_000)
+
+    sessions_payload = []
+    for chat_session in sessions:
+        messages = sorted(
+            chat_session.messages,
+            key=lambda message: message.created_at or datetime.utcnow(),
+        )
+        sessions_payload.append(
+            {
+                "id": chat_session.id,
+                "external_id": chat_session.external_id,
+                "title": chat_session.title,
+                "model": chat_session.model,
+                "enable_tools": chat_session.enable_tools,
+                "created_at": chat_session.created_at,
+                "updated_at": chat_session.updated_at,
+                "message_count": len(messages),
+                "messages": [
+                    {
+                        "id": message.id,
+                        "role": message.role,
+                        "content": message.content,
+                        "tool_call_id": message.tool_call_id,
+                        "tool_call_name": message.tool_call_name,
+                        "created_at": message.created_at,
+                        "tokens_in": message.tokens_in,
+                        "tokens_out": message.tokens_out,
+                    }
+                    for message in messages
+                ],
+            }
+        )
+
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "created_at": user.created_at,
+            "is_root": user.is_root,
+        },
+        "exported_at": datetime.utcnow(),
+        "sessions": sessions_payload,
+        "documents": [
+            {
+                "id": document.id,
+                "uri": document.uri,
+                "path": document.path,
+                "mime": document.mime,
+                "bytes_size": document.bytes_size,
+                "source": document.source,
+                "tags": document.tags,
+                "collection": document.collection,
+                "path_hash": document.path_hash,
+                "created_at": document.created_at,
+                "last_ingested_at": document.last_ingested_at,
+            }
+            for document in documents
+        ],
+        "ingestion_runs": [
+            {
+                "id": run.id,
+                "target": run.target,
+                "from_web": run.from_web,
+                "recursive": run.recursive,
+                "tags": run.tags,
+                "collection": run.collection,
+                "totals_files": run.totals_files,
+                "totals_chunks": run.totals_chunks,
+                "errors": run.errors,
+                "started_at": run.started_at,
+                "finished_at": run.finished_at,
+                "status": run.status,
+            }
+            for run in ingestion_runs
+        ],
+        "tool_runs": [
+            {
+                "id": tool_run.id,
+                "tool_name": tool_run.tool_name,
+                "status": tool_run.status,
+                "start_ts": tool_run.start_ts,
+                "end_ts": tool_run.end_ts,
+                "latency_ms": tool_run.latency_ms,
+                "args": tool_run.args,
+                "error_message": tool_run.error_message,
+                "result_preview": tool_run.result_preview,
+            }
+            for tool_run in tool_runs
+        ],
+    }
 
 
 async def upsert_mcp_servers(
@@ -382,13 +552,29 @@ async def get_user_documents(
     """Get documents, optionally filtered by collection."""
     query = select(Document).order_by(Document.last_ingested_at.desc())
 
+    if user_id is not None:
+        access_exists = await session.execute(
+            select(UserDocumentAccess.id)
+            .where(UserDocumentAccess.user_id == user_id)
+            .limit(1)
+        )
+        if access_exists.scalar_one_or_none() is not None:
+            query = (
+                query.join(
+                    UserDocumentAccess,
+                    UserDocumentAccess.document_id == Document.id,
+                )
+                .where(UserDocumentAccess.user_id == user_id)
+                .distinct()
+            )
+
     if collection:
         query = query.where(Document.collection == collection)
 
     query = query.limit(limit).offset(offset)
 
     q = await session.execute(query)
-    return list(q.scalars().all())
+    return list(q.unique().scalars().all())
 
 
 async def get_user_ingestion_runs(

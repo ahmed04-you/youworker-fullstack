@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth-context";
 import { postEventStream } from "@/lib/api-client";
 import {
+  ChatLogEntry,
   ChatToolEvent,
   SessionMessage,
   SessionSummary,
@@ -17,8 +17,9 @@ import {
   normalizeLogEntries,
   normalizeToolEvents,
 } from "@/lib/utils/normalize";
+import { toastError, toastInfo, toastWarning } from "@/lib/toast-helpers";
 
-import type { ChatMessage } from "../types";
+import type { ChatMessage, SpeechTranscriptMeta } from "../types";
 import { useChatStore } from "../store/chat-store";
 import type { ChatStore } from "../store/chat-store";
 import {
@@ -104,6 +105,142 @@ type ChatControllerSlice = Pick<
   deriveSessionName: ChatStore["deriveSessionName"];
 };
 
+interface OptimisticStreamState {
+  messages: ChatMessage[];
+  toolTimeline: ChatToolEvent[];
+  logEntries: ChatLogEntry[];
+  transcript: string | null;
+  sttMeta: SpeechTranscriptMeta;
+  inputValue?: string;
+}
+
+interface OptimisticStreamHandlers {
+  setMessages: (messages: ChatMessage[]) => void;
+  setToolTimeline: (events: ChatToolEvent[]) => void;
+  setLogEntries: (entries: ChatLogEntry[]) => void;
+  setTranscript: (transcript: string | null, meta?: SpeechTranscriptMeta) => void;
+  setInput?: (value: string) => void;
+  stopStreaming: () => void;
+  reportError: (message: string) => void;
+  logError: (error: unknown) => void;
+}
+
+/**
+ * Creates a reusable error handler for stream failures with automatic rollback.
+ * Used to restore optimistic UI updates when streaming fails.
+ *
+ * @param state - Snapshot of state before optimistic update
+ * @param handlers - Object with rollback and error reporting functions
+ * @returns Handler function that rolls back state and reports errors
+ */
+export function createStreamFailureHandler(
+  state: OptimisticStreamState,
+  handlers: OptimisticStreamHandlers
+) {
+  let stateRestored = false;
+  let errorReported = false;
+
+  return (message: string, error?: unknown) => {
+    if (!stateRestored) {
+      handlers.setMessages(state.messages);
+      handlers.setToolTimeline(state.toolTimeline);
+      handlers.setLogEntries(state.logEntries);
+      handlers.setTranscript(state.transcript, state.sttMeta);
+      if (handlers.setInput) {
+        handlers.setInput(state.inputValue ?? "");
+      }
+      stateRestored = true;
+    }
+
+    if (!errorReported) {
+      if (error) {
+        handlers.logError(error);
+      }
+      handlers.reportError(message);
+      errorReported = true;
+    }
+
+    handlers.stopStreaming();
+  };
+}
+
+/**
+ * Main controller hook for managing chat functionality.
+ * Handles sessions, messages, streaming, voice recording, and health checks.
+ *
+ * Features:
+ * - Session management (create, select, delete, rename)
+ * - Text and voice message sending with streaming responses
+ * - Real-time token streaming from AI responses
+ * - Tool execution and logging
+ * - Speech-to-text transcription
+ * - Text-to-speech audio playback
+ * - Optimistic UI updates with automatic rollback on error
+ * - Voice recording with PCM encoding
+ *
+ * @returns Object containing:
+ *  State:
+ *  - sessions: List of chat sessions
+ *  - sessionsLoading: Whether sessions are loading
+ *  - activeSession: Currently selected session
+ *  - sessionIdentifier: External ID of active session
+ *  - messages: Array of chat messages in current session
+ *  - input: Current text input value
+ *  - isStreaming: Whether AI is currently streaming a response
+ *  - streamController: Controller for canceling active stream
+ *  - toolTimeline: Array of tool execution events
+ *  - logEntries: Array of log entries from AI
+ *  - transcript: Speech-to-text transcript
+ *  - sttMeta: STT metadata (confidence, language)
+ *  - isRecording: Whether voice recording is active
+ *  - enableTools: Whether tools/MCP is enabled
+ *  - expectAudio: Whether to expect audio response
+ *  - assistantLanguage: Language for assistant responses
+ *  - selectedModel: Currently selected AI model
+ *  - health: Health status of backend services
+ *  - healthLoading: Whether health check is loading
+ *
+ *  Actions:
+ *  - setInput: Update text input value
+ *  - setEnableTools: Toggle tools/MCP
+ *  - setExpectAudio: Toggle audio responses
+ *  - setAssistantLanguage: Set response language
+ *  - setSelectedModel: Select AI model
+ *  - refreshSessions: Refetch sessions list
+ *  - fetchHealth: Refetch health status
+ *  - loadSessionMessages: Load messages for a session
+ *  - handleSelectSession: Switch to a different session
+ *  - handleDeleteSession: Delete a session
+ *  - renameSession: Rename a session
+ *  - stopStreaming: Cancel active stream
+ *  - handleSendText: Send a text message
+ *  - startRecording: Start voice recording
+ *  - stopRecording: Stop voice recording
+ *  - startNewSession: Create and switch to new session
+ *  - deriveSessionName: Generate session name from messages
+ *
+ * @example
+ * ```tsx
+ * const {
+ *   messages,
+ *   input,
+ *   isStreaming,
+ *   setInput,
+ *   handleSendText,
+ *   startRecording,
+ *   stopRecording,
+ * } = useChatController();
+ *
+ * return (
+ *   <>
+ *     <MessageList messages={messages} />
+ *     <input value={input} onChange={(e) => setInput(e.target.value)} />
+ *     <button onClick={handleSendText} disabled={isStreaming}>Send</button>
+ *     <button onMouseDown={startRecording} onMouseUp={stopRecording}>Voice</button>
+ *   </>
+ * );
+ * ```
+ */
 export function useChatController() {
   const router = useRouter();
   const { isAuthenticated, isLoading: authLoading } = useAuth();
@@ -272,7 +409,7 @@ export function useChatController() {
         setTranscript(null);
       } catch (error) {
         console.error(error);
-        toast.error("Unable to load session history.");
+        toastError("Unable to load session history.");
       }
     },
     [
@@ -330,7 +467,7 @@ export function useChatController() {
   const handleSelectSession = useCallback(
     async (session: SessionSummary) => {
       if (useChatStore.getState().isStreaming) {
-        toast.warning("Please wait for the current response to finish.");
+        toastWarning("Please wait for the current response to finish.");
         return;
       }
       setActiveSession(session);
@@ -392,14 +529,42 @@ export function useChatController() {
   }, [setIsStreaming, setStreamController, refreshSessions]);
 
   const handleSendText = useCallback(async () => {
-    if (useChatStore.getState().isStreaming) {
-      toast.info("Hold on, still responding.");
+    const currentState = useChatStore.getState();
+    if (currentState.isStreaming) {
+      toastInfo("Hold on, still responding.");
       return;
     }
-    const trimmed = useChatStore.getState().input.trim();
+    const trimmed = currentState.input.trim();
     if (!trimmed) {
       return;
     }
+
+    const rollbackState = {
+      messages: currentState.messages.map((message) => ({ ...message })),
+      toolTimeline: currentState.toolTimeline.map((event) => ({ ...event })),
+      logEntries: currentState.logEntries.map((entry) => ({ ...entry })),
+      transcript: currentState.transcript,
+      sttMeta: { ...currentState.sttMeta },
+      inputValue: currentState.input,
+    };
+    const handleStreamFailure = createStreamFailureHandler(rollbackState, {
+      setMessages,
+      setToolTimeline,
+      setLogEntries,
+      setTranscript,
+      setInput,
+      stopStreaming,
+      reportError: (message) => {
+        toastError(message);
+      },
+      logError: (error) => {
+        if (error instanceof Error) {
+          console.error("Streaming error", error);
+        } else if (error) {
+          console.error("Streaming error", error);
+        }
+      },
+    });
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
@@ -491,19 +656,33 @@ export function useChatController() {
             playAudio(data.audio_b64);
             await finishStreaming();
           } else if (event.event === "error") {
-            toast.error("Streaming error");
+            const eventMessage =
+              typeof event.data === "string" && event.data
+                ? event.data
+                : "Streaming error";
+            handleStreamFailure(eventMessage);
           }
         },
         onError: (error) => {
-          console.error("Streaming error", error);
-          toast.error(error.message || "Streaming failed.");
-          stopStreaming();
+          handleStreamFailure(error.message || "Streaming failed.", error);
         },
       }
     );
 
     setStreamController(controller);
-  }, [addMessage, setInput, clearStreamData, setIsStreaming, setStreamController, finishStreaming, stopStreaming]);
+  }, [
+    addMessage,
+    setMessages,
+    setToolTimeline,
+    setLogEntries,
+    setTranscript,
+    setInput,
+    clearStreamData,
+    setIsStreaming,
+    setStreamController,
+    finishStreaming,
+    stopStreaming,
+  ]);
 
   const stopRecording = useCallback(() => {
     const context = audioContextRef.current;
@@ -533,7 +712,7 @@ export function useChatController() {
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
-      toast.error("Audio recording is not supported on this device.");
+      toastError("Audio recording is not supported on this device.");
       return;
     }
     try {
@@ -567,6 +746,35 @@ export function useChatController() {
       });
 
       const audioB64 = encodePcmChunks(pcmData);
+
+      const stateBeforeSend = useChatStore.getState();
+      const voiceRollbackState = {
+        messages: stateBeforeSend.messages.map((message) => ({ ...message })),
+        toolTimeline: stateBeforeSend.toolTimeline.map((event) => ({ ...event })),
+        logEntries: stateBeforeSend.logEntries.map((entry) => ({ ...entry })),
+        transcript: stateBeforeSend.transcript,
+        sttMeta: { ...stateBeforeSend.sttMeta },
+      };
+      const handleVoiceStreamFailure = createStreamFailureHandler(
+        voiceRollbackState,
+        {
+          setMessages,
+          setToolTimeline,
+          setLogEntries,
+          setTranscript,
+          stopStreaming,
+          reportError: (message) => {
+            toastError(message);
+          },
+          logError: (error) => {
+            if (error instanceof Error) {
+              console.error("Streaming error", error);
+            } else if (error) {
+              console.error("Streaming error", error);
+            }
+          },
+        }
+      );
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
@@ -657,13 +865,15 @@ export function useChatController() {
               playAudio(data.audio_b64);
               await finishStreaming();
             } else if (event.event === "error") {
-              toast.error("Streaming error");
+              const eventMessage =
+                typeof event.data === "string" && event.data
+                  ? event.data
+                  : "Streaming error";
+              handleVoiceStreamFailure(eventMessage);
             }
           },
           onError: (error) => {
-            console.error("Streaming error", error);
-            toast.error(error.message || "Streaming failed.");
-            stopStreaming();
+            handleVoiceStreamFailure(error.message || "Streaming failed.", error);
           },
         }
       );
@@ -671,12 +881,24 @@ export function useChatController() {
       setStreamController(controller);
     } catch (error) {
       console.error("Voice recording failed", error);
-      toast.error("Unable to access microphone.");
+      toastError("Unable to access microphone.");
       stopRecording();
     } finally {
       recordingStopResolverRef.current = null;
     }
-  }, [addMessage, clearStreamData, finishStreaming, setIsStreaming, setStreamController, stopRecording, stopStreaming]);
+  }, [
+    addMessage,
+    setMessages,
+    setToolTimeline,
+    setLogEntries,
+    setTranscript,
+    clearStreamData,
+    finishStreaming,
+    setIsStreaming,
+    setStreamController,
+    stopRecording,
+    stopStreaming,
+  ]);
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {

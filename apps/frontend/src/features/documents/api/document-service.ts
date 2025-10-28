@@ -1,8 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import type { QueryKey } from "@tanstack/react-query";
 
 import { apiDelete, apiGet, apiPost } from "@/lib/api-client";
+import {
+  toastError,
+  toastLoading,
+  toastLoadingError,
+  toastLoadingSuccess,
+  toastSuccess,
+} from "@/lib/toast-helpers";
 import type { Document, IngestionRun } from "../types";
+
+type DocumentsQuerySnapshot = {
+  previousQueries: Array<[QueryKey, Document[] | undefined]>;
+  toastId?: string | number;
+  optimisticIds?: string[];
+};
 
 export const documentKeys = {
   all: ["documents"] as const,
@@ -77,27 +90,42 @@ export function useDocuments(page = 1, limit = 20, filters?: Record<string, any>
 export function useDeleteDocumentMutation() {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<void, unknown, string, DocumentsQuerySnapshot>({
     mutationFn: deleteDocument,
     onMutate: async (documentId) => {
-      await queryClient.cancelQueries({ queryKey: documentKeys.all });
+      await queryClient.cancelQueries({ queryKey: documentKeys.lists() });
 
-      const previousDocuments = queryClient.getQueryData<Document[]>(documentKeys.lists());
+      const previousQueries = queryClient.getQueriesData<Document[]>({
+        queryKey: documentKeys.lists(),
+      });
 
-      queryClient.setQueryData<Document[]>(documentKeys.lists(), (old) =>
-        old?.filter((document) => document.id !== documentId) ?? []
-      );
+      previousQueries.forEach(([key, previous]) => {
+        queryClient.setQueryData<Document[] | undefined>(
+          key,
+          (previous ?? []).filter((document) => document.id !== documentId)
+        );
+      });
 
-      return { previousDocuments };
+      const toastId = toastLoading("Deleting document…");
+
+      return { previousQueries, toastId };
     },
     onError: (_error, _variables, context) => {
-      if (context?.previousDocuments) {
-        queryClient.setQueryData(documentKeys.lists(), context.previousDocuments);
+      context?.previousQueries?.forEach(([key, previous]) => {
+        queryClient.setQueryData(key, previous);
+      });
+      if (context?.toastId !== undefined) {
+        toastLoadingError(context.toastId, "Failed to delete document");
+      } else {
+        toastError("Failed to delete document");
       }
-      toast.error("Failed to delete document");
     },
-    onSuccess: () => {
-      toast.success("Document deleted");
+    onSuccess: (_data, _variables, context) => {
+      if (context?.toastId !== undefined) {
+        toastLoadingSuccess(context.toastId, "Document deleted");
+      } else {
+        toastSuccess("Document deleted");
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: documentKeys.all });
@@ -108,19 +136,81 @@ export function useDeleteDocumentMutation() {
 export function useUploadDocumentsMutation(options?: { onSuccess?: () => void }) {
   const queryClient = useQueryClient();
 
-  return useMutation({
+  return useMutation<Document[], unknown, File[], DocumentsQuerySnapshot>({
     mutationFn: uploadDocuments,
-    onSuccess: (data, variables, context) => {
-      // Optimistically add new documents
-      queryClient.setQueryData(documentKeys.lists(), (old: Document[] | undefined) => [
-        ...(old || []),
-        ...data,
-      ]);
-      toast.success(`${data.length} document(s) uploaded successfully`);
-      options?.onSuccess?.();
+    onMutate: async (files) => {
+      await queryClient.cancelQueries({ queryKey: documentKeys.lists() });
+
+      const previousQueries = queryClient.getQueriesData<Document[]>({
+        queryKey: documentKeys.lists(),
+      });
+
+      const now = new Date();
+      const optimisticDocuments = files.map((file) => ({
+        id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `temp-${Math.random().toString(16).slice(2)}`,
+        name: file.name,
+        size: file.size,
+        type: file.type || "application/octet-stream",
+        tags: [],
+        createdAt: now,
+        updatedAt: now,
+        source: "upload" as const,
+        status: "pending" as const,
+        chunksCount: 0,
+        metadata: { optimistic: true },
+      }));
+
+      previousQueries.forEach(([key, existing]) => {
+        queryClient.setQueryData<Document[] | undefined>(key, [
+          ...(existing ?? []),
+          ...optimisticDocuments,
+        ]);
+      });
+
+      const toastId = toastLoading("Uploading documents…");
+
+      return {
+        previousQueries,
+        optimisticIds: optimisticDocuments.map((doc) => doc.id),
+        toastId,
+      };
     },
-    onError: (error) => {
-      toast.error("Failed to upload documents");
+    onError: (_error, _variables, context) => {
+      context?.previousQueries?.forEach(([key, previous]) => {
+        queryClient.setQueryData(key, previous);
+      });
+      if (context?.toastId !== undefined) {
+        toastLoadingError(context.toastId, "Failed to upload documents");
+      } else {
+        toastError("Failed to upload documents");
+      }
+    },
+    onSuccess: (data, _variables, context) => {
+      const applyResult = (documents: Document[] | undefined) => {
+        const withoutOptimistic = (documents ?? []).filter(
+          (doc) => !context?.optimisticIds?.includes(doc.id)
+        );
+        return [...withoutOptimistic, ...data];
+      };
+
+      if (context?.previousQueries) {
+        context.previousQueries.forEach(([key]) => {
+          queryClient.setQueryData<Document[] | undefined>(key, (existing) =>
+            applyResult(existing)
+          );
+        });
+      }
+
+      const message = `${data.length} document(s) uploaded successfully`;
+      if (context?.toastId !== undefined) {
+        toastLoadingSuccess(context.toastId, message);
+      } else {
+        toastSuccess(message);
+      }
+      options?.onSuccess?.();
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: documentKeys.all });
@@ -138,10 +228,10 @@ export function useIngestFromUrlMutation() {
         ...(old || []),
         data,
       ]);
-      toast.success("Document ingested from URL");
+      toastSuccess("Document ingested from URL");
     },
     onError: () => {
-      toast.error("Failed to ingest from URL");
+      toastError("Failed to ingest from URL");
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: documentKeys.all });
@@ -163,11 +253,11 @@ export function useDeleteIngestionRunMutation() {
   return useMutation({
     mutationFn: deleteIngestionRun,
     onSuccess: () => {
-      toast.success("Ingestion run deleted");
+      toastSuccess("Ingestion run deleted");
       queryClient.invalidateQueries({ queryKey: ingestionKeys.all });
     },
     onError: () => {
-      toast.error("Failed to delete ingestion run");
+      toastError("Failed to delete ingestion run");
     },
   });
 }

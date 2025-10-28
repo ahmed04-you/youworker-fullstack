@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,9 @@ import {
 
 import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 
+/**
+ * Props for the ChatComposer component
+ */
 interface ChatComposerProps {
   input: string;
   onInputChange: (value: string) => void;
@@ -48,7 +51,74 @@ interface ChatComposerProps {
   voiceSupported?: boolean;
 }
 
-export function ChatComposer({
+/**
+ * Chat composer component with voice recording and model selection
+ *
+ * A comprehensive input interface for the chat experience featuring text input,
+ * voice recording, model selection, language configuration, and tool toggles.
+ * Optimized with React.memo for performance and includes haptic feedback on
+ * mobile devices.
+ *
+ * @component
+ * @param {ChatComposerProps} props - Component props
+ * @param {string} props.input - Current input text value
+ * @param {function} props.onInputChange - Handler for input text changes
+ * @param {function} props.onSendText - Handler for sending text messages
+ * @param {boolean} props.isStreaming - Whether AI is currently streaming a response
+ * @param {boolean} props.isRecording - Whether voice recording is active
+ * @param {function} props.onStartRecording - Handler to start voice recording
+ * @param {function} props.onStopRecording - Handler to stop voice recording
+ * @param {function} props.onStopStreaming - Handler to stop AI response streaming
+ * @param {string} props.assistantLanguage - Selected assistant response language
+ * @param {function} props.onAssistantLanguageChange - Handler for language selection
+ * @param {string} props.selectedModel - Currently selected AI model
+ * @param {function} props.onSelectedModelChange - Handler for model selection
+ * @param {boolean} props.enableTools - Whether tools are enabled
+ * @param {function} props.onToggleTools - Handler to toggle tools on/off
+ * @param {boolean} props.expectAudio - Whether to expect audio responses
+ * @param {function} props.onToggleAudio - Handler to toggle audio responses
+ * @param {boolean} [props.voiceSupported=true] - Whether voice input is supported on device
+ *
+ * @example
+ * ```tsx
+ * <ChatComposer
+ *   input={input}
+ *   onInputChange={setInput}
+ *   onSendText={handleSend}
+ *   isStreaming={false}
+ *   isRecording={false}
+ *   onStartRecording={startRecording}
+ *   onStopRecording={stopRecording}
+ *   onStopStreaming={stopStreaming}
+ *   assistantLanguage="en"
+ *   onAssistantLanguageChange={setLanguage}
+ *   selectedModel="gpt-oss:20b"
+ *   onSelectedModelChange={setModel}
+ *   enableTools={true}
+ *   onToggleTools={toggleTools}
+ *   expectAudio={false}
+ *   onToggleAudio={toggleAudio}
+ *   voiceSupported={true}
+ * />
+ * ```
+ *
+ * Features:
+ * - Multi-line textarea with Enter to send (Shift+Enter for new line)
+ * - Voice recording with animated waveform visualization
+ * - Model selection dropdown with preset and custom models
+ * - Language selection for assistant responses
+ * - Tools toggle button with active state indicator
+ * - Audio response toggle
+ * - Loading state during streaming
+ * - Mobile-friendly with haptic feedback
+ * - Auto-scroll to input on mobile focus
+ * - Keyboard shortcuts (Cmd+Enter to send, Cmd+Shift+V for voice)
+ * - Tooltips for all interactive elements
+ *
+ * @see {@link useHapticFeedback} for mobile haptic feedback
+ * @see {@link VoiceWaveform} for recording visualization
+ */
+export const ChatComposer = memo(function ChatComposer({
   input,
   onInputChange,
   onSendText,
@@ -279,7 +349,8 @@ export function ChatComposer({
       </div>
     </div>
   );
-}
+});
+ChatComposer.displayName = "ChatComposer";
 
 const WAVEFORM_BARS = Array.from({ length: 8 }, (_, index) => ({
   id: `wave-${index}`,

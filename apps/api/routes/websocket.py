@@ -97,7 +97,7 @@ async def websocket_chat_endpoint(
         # Validate API key (ties to root user)
         from apps.api.auth.security import verify_api_key
 
-        if not verify_api_key(api_key):
+        if not await verify_api_key(api_key):
             raise ValueError("Invalid API key")
 
         # Tie to root user (single user for now)

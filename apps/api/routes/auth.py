@@ -104,7 +104,7 @@ async def login(
     api_key = login_request.api_key.strip()
 
     # Verify API key
-    if not verify_api_key(api_key):
+    if not await verify_api_key(api_key):
         logger.warning("Failed login attempt with invalid API key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -161,7 +161,7 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
             detail="Authentik API key header missing",
         )
 
-    if not verify_api_key(header_value):
+    if not await verify_api_key(header_value):
         logger.warning("Authentik auto-login received invalid API key")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 

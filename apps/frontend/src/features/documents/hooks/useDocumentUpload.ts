@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import { toast } from "sonner";
 
 import { useFileValidation } from "@/hooks/useFileValidation";
+import { toastError } from "@/lib/toast-helpers";
 
 import { useUploadDocumentsMutation } from "../api/document-service";
 
@@ -18,6 +18,41 @@ interface DropEventLike {
 
 const makeFileKey = (file: File) => `${file.name}-${file.size}-${file.lastModified}`;
 
+/**
+ * Hook for managing document file uploads with drag-and-drop support.
+ * Handles file validation, deduplication, progress tracking, and upload state.
+ *
+ * @param options - Configuration options
+ * @param options.onUploadComplete - Callback invoked after successful upload
+ *
+ * @returns Object containing:
+ *  - files: Array of selected files
+ *  - dragging: Whether user is currently dragging files over drop zone
+ *  - uploadProgress: Map of file keys to progress percentages (0-100)
+ *  - isUploading: Whether upload is in progress
+ *  - handleFileSelect: Handle file selection from input or programmatically
+ *  - handleDrop: Handle drag-and-drop file drop event
+ *  - handleDragOver: Handle drag over event (required for drop to work)
+ *  - handleDragLeave: Handle drag leave event
+ *  - removeFile: Remove a file from the selection
+ *  - upload: Trigger the upload of all selected files
+ *  - reset: Clear all files and progress
+ *  - getProgress: Get upload progress for a specific file
+ *
+ * @example
+ * ```tsx
+ * const { files, dragging, handleFileSelect, handleDrop, handleDragOver, upload } = useDocumentUpload({
+ *   onUploadComplete: () => refetchDocuments(),
+ * });
+ *
+ * return (
+ *   <div onDrop={handleDrop} onDragOver={handleDragOver} className={dragging ? 'border-blue-500' : ''}>
+ *     <input type="file" multiple onChange={(e) => handleFileSelect(e.target.files)} />
+ *     <button onClick={upload}>Upload {files.length} files</button>
+ *   </div>
+ * );
+ * ```
+ */
 export function useDocumentUpload(options: UseDocumentUploadOptions = {}) {
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -79,7 +114,7 @@ export function useDocumentUpload(options: UseDocumentUploadOptions = {}) {
 
       if (rejected.length) {
         rejected.forEach((file) => {
-          toast.error(`Invalid file: ${file.name}`);
+          toastError(`Invalid file: ${file.name}`);
         });
       }
 
@@ -137,7 +172,7 @@ export function useDocumentUpload(options: UseDocumentUploadOptions = {}) {
 
   const upload = useCallback(async () => {
     if (!files.length) {
-      toast.error("No files selected");
+      toastError("No files selected");
       return;
     }
 
@@ -154,7 +189,7 @@ export function useDocumentUpload(options: UseDocumentUploadOptions = {}) {
     try {
       await uploadMutation.mutateAsync(files);
     } catch (error) {
-      toast.error("Upload failed");
+      toastError("Upload failed");
       setUploadProgress((prev) => {
         const next = { ...prev };
         keys.forEach((key) => {

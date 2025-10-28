@@ -14,7 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { toast } from "sonner";
+import { toastError, toastSuccess } from "@/lib/toast-helpers";
 
 interface ExportButtonProps {
   data: any;
@@ -37,9 +37,9 @@ export function ExportButton({
       const jsonString = JSON.stringify(data, null, 2);
       const blob = new Blob([jsonString], { type: "application/json" });
       downloadFile(blob, `${filename}.json`);
-      toast.success("Exported as JSON");
+      toastSuccess("Exported as JSON");
     } catch (error) {
-      toast.error("Failed to export as JSON");
+      toastError("Failed to export as JSON");
       console.error(error);
     } finally {
       setIsExporting(false);
@@ -52,9 +52,9 @@ export function ExportButton({
       const csv = convertToCSV(data);
       const blob = new Blob([csv], { type: "text/csv" });
       downloadFile(blob, `${filename}.csv`);
-      toast.success("Exported as CSV");
+      toastSuccess("Exported as CSV");
     } catch (error) {
-      toast.error("Failed to export as CSV");
+      toastError("Failed to export as CSV");
       console.error(error);
     } finally {
       setIsExporting(false);
@@ -67,9 +67,9 @@ export function ExportButton({
       const text = convertToText(data);
       const blob = new Blob([text], { type: "text/plain" });
       downloadFile(blob, `${filename}.txt`);
-      toast.success("Exported as TXT");
+      toastSuccess("Exported as TXT");
     } catch (error) {
-      toast.error("Failed to export as TXT");
+      toastError("Failed to export as TXT");
       console.error(error);
     } finally {
       setIsExporting(false);

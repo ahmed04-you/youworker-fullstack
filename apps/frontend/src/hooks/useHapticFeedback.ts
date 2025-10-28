@@ -8,7 +8,26 @@ interface UseHapticFeedbackOptions {
 }
 
 /**
- * Provides a safe way to trigger haptic feedback on supported touch devices.
+ * Hook for triggering haptic/vibration feedback on supported touch devices.
+ * Automatically checks for browser support, touch device, and user preferences (prefers-reduced-motion).
+ *
+ * @param options - Configuration options
+ * @param options.pattern - Vibration pattern in milliseconds (single number or array) (default: 10)
+ * @param options.enabled - Whether haptic feedback is enabled (default: true)
+ *
+ * @returns Function to trigger haptic feedback with optional custom pattern.
+ *          Returns false if not supported or failed, true if successful.
+ *
+ * @example
+ * ```tsx
+ * const triggerHaptic = useHapticFeedback({ pattern: 50 });
+ *
+ * const handleButtonClick = () => {
+ *   triggerHaptic(); // Uses default pattern
+ *   // or
+ *   triggerHaptic([10, 50, 10]); // Uses custom pattern
+ * };
+ * ```
  */
 export function useHapticFeedback(options: UseHapticFeedbackOptions = {}) {
   const { pattern = 10, enabled = true } = options;

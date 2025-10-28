@@ -10,7 +10,6 @@ type UploadOptions = {
 const mocks = vi.hoisted(() => ({
   validateSingleFileMock: vi.fn<(file: File) => Promise<boolean>>(),
   toastErrorMock: vi.fn(),
-  toastSuccessMock: vi.fn(),
   mutateAsyncMock: vi.fn<(files: File[]) => Promise<unknown>>(),
   state: {
     uploadOptions: null as UploadOptions | null,
@@ -18,11 +17,8 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("sonner", () => ({
-  toast: {
-    error: mocks.toastErrorMock,
-    success: mocks.toastSuccessMock,
-  },
+vi.mock("@/lib/toast-helpers", () => ({
+  toastError: mocks.toastErrorMock,
 }));
 
 vi.mock("@/hooks/useFileValidation", () => ({
@@ -44,7 +40,6 @@ vi.mock("../api/document-service", () => ({
 const {
   validateSingleFileMock,
   toastErrorMock,
-  toastSuccessMock,
   mutateAsyncMock,
   state,
 } = mocks;
@@ -54,7 +49,6 @@ describe("useDocumentUpload", () => {
     validateSingleFileMock.mockReset();
     mutateAsyncMock.mockReset();
     toastErrorMock.mockReset();
-    toastSuccessMock.mockReset();
     state.uploadOptions = null;
     state.isPending = false;
     vi.useRealTimers();
