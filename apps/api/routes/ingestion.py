@@ -20,6 +20,16 @@ from apps.api.auth.security import sanitize_input
 from apps.api.routes.deps import get_ingestion_pipeline, get_current_user_with_collection_access
 from packages.db import get_async_session
 
+
+def _get_user_id(user) -> int:
+    if isinstance(user, dict):
+        value = user.get("id")
+    else:
+        value = getattr(user, "id", None)
+    if value is None:
+        raise ValueError("Authenticated user missing id")
+    return int(value)
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1")
@@ -110,7 +120,7 @@ async def ingest_endpoint(
             async with get_async_session() as db:
                 await record_ingestion_run(
                     db,
-                    user_id=current_user["id"],
+                    user_id=_get_user_id(current_user),
                     target=ingest_request.path_or_url,
                     from_web=ingest_request.from_web,
                     recursive=ingest_request.recursive,
@@ -289,7 +299,7 @@ async def ingest_upload_endpoint(
             async with get_async_session() as db:
                 await record_ingestion_run(
                     db,
-                    user_id=current_user["id"],
+                    user_id=_get_user_id(current_user),
                     target=str(run_dir),
                     from_web=False,
                     recursive=False,

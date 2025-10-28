@@ -20,7 +20,7 @@ from packages.agent import AgentLoop
 from packages.db import get_async_session
 
 from .models import ChatRequest
-from .helpers import prepare_chat_messages, resolve_assistant_language
+from .helpers import prepare_chat_messages, resolve_assistant_language, get_user_id
 from .persistence import (
     persist_last_user_message,
     record_tool_start,
@@ -53,9 +53,10 @@ async def chat_endpoint(
     - Only final answers are streamed to the client
     - Thinking traces are captured but NOT streamed
     """
-    messages = prepare_chat_messages(chat_request.messages)
+    messages = await prepare_chat_messages(chat_request.messages)
     assistant_language = resolve_assistant_language(chat_request.assistant_language)
     request_model = chat_request.model or settings.chat_model
+    user_id = get_user_id(current_user)
 
     logger.info(
         "Chat request: %s messages, tools=%s, language=%s",
@@ -75,7 +76,7 @@ async def chat_endpoint(
                 async with get_async_session() as db:
                     session = await get_or_create_chat_session(
                         db,
-                        user_id=current_user["id"],
+                        user_id=user_id,
                         external_id=chat_request.session_id,
                         model=request_model,
                         enable_tools=chat_request.enable_tools,
@@ -127,7 +128,7 @@ async def chat_endpoint(
                             async with get_async_session() as db:
                                 last_tool_run_id = await record_tool_start(
                                     db,
-                                    user_id=current_user["id"],
+                                    user_id=user_id,
                                     session_id=None,
                                     tool_name=data.get("tool"),
                                     args=data.get("args"),
@@ -266,7 +267,7 @@ async def chat_endpoint(
     async with get_async_session() as db:
         session = await get_or_create_chat_session(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             external_id=chat_request.session_id,
             model=request_model,
             enable_tools=chat_request.enable_tools,

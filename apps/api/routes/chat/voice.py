@@ -20,7 +20,12 @@ from packages.agent import AgentLoop
 from packages.db import get_async_session
 from packages.llm import ChatMessage
 
-from .helpers import handle_tool_event, prepare_chat_messages, resolve_assistant_language
+from .helpers import (
+    handle_tool_event,
+    prepare_chat_messages,
+    resolve_assistant_language,
+    get_user_id,
+)
 
 from .models import VoiceTurnRequest, VoiceTurnResponse
 from .persistence import (
@@ -75,13 +80,14 @@ async def voice_turn_endpoint(
 
     assistant_language = resolve_assistant_language(voice_request.assistant_language or "")
     request_model = voice_request.model or settings.chat_model
+    user_id = get_user_id(current_user)
 
     # Persist user turn
     chat_session_id: int | None = None
     async with get_async_session() as db:
         chat_session = await get_or_create_chat_session(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             external_id=voice_request.session_id,
             model=request_model,
             enable_tools=voice_request.enable_tools,
@@ -110,8 +116,8 @@ async def voice_turn_endpoint(
             if etype == "tool":
                 async with get_async_session() as db:
                     last_tool_run_id_voice, data = await handle_tool_event(
-                        db, current_user["id"], chat_session_id, data, last_tool_run_id_voice
-                    )
+                        db, user_id, chat_session_id, data, last_tool_run_id_voice
+                )
                 tool_events.append(data)
             elif etype == "token":
                 final_text += data.get("text", "")

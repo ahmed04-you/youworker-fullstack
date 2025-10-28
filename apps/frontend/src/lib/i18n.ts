@@ -1,6 +1,8 @@
 export type Language = "en" | "it";
 
-type TranslationTree = Record<string, string | TranslationTree>;
+interface TranslationTree {
+  [key: string]: string | TranslationTree;
+}
 
 export const translations: Record<Language, TranslationTree> = {
   en: {

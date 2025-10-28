@@ -1,0 +1,159 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - generic [ref=e5]:
+        - heading "YouWorker.AI" [level=2] [ref=e7]
+        - generic [ref=e8]:
+          - img [ref=e9]
+          - generic [ref=e12]: guest
+      - navigation "Main navigation" [ref=e13]:
+        - link "Chat" [ref=e14] [cursor=pointer]:
+          - /url: /
+          - img [ref=e15]
+          - text: Chat
+        - link "Documents" [ref=e18] [cursor=pointer]:
+          - /url: /documents
+          - img [ref=e19]
+          - text: Documents
+        - link "Sessions" [ref=e22] [cursor=pointer]:
+          - /url: /sessions
+          - img [ref=e23]
+          - text: Sessions
+        - link "Analytics" [ref=e26] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e27]
+          - text: Analytics
+        - link "Settings" [ref=e29] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e30]
+          - text: Settings
+      - button "Logout" [ref=e34] [cursor=pointer]:
+        - img
+        - text: Logout
+    - main [ref=e35]:
+      - generic [ref=e36]:
+        - complementary [ref=e37]:
+          - generic [ref=e38]:
+            - generic [ref=e39]:
+              - paragraph [ref=e40]: Workspace
+              - heading "Conversations" [level=2] [ref=e41]
+            - button [ref=e42] [cursor=pointer]:
+              - img
+          - button "New Conversation" [ref=e43] [cursor=pointer]:
+            - img
+            - text: New Conversation
+          - generic [ref=e45]: No sessions yet. Start chatting to create your first conversation.
+          - generic [ref=e46]:
+            - paragraph [ref=e47]:
+              - img [ref=e48]
+              - text: Knowledge Hub
+            - paragraph [ref=e50]:
+              - text: Curate documents and tools that fuel the agent's reasoning.
+              - link "Visit documents →" [ref=e51] [cursor=pointer]:
+                - /url: /documents
+        - main [ref=e52]:
+          - generic [ref=e54]:
+            - generic [ref=e56]:
+              - paragraph [ref=e57]: Active session
+              - heading "New Conversation gpt-oss" [level=1] [ref=e58]:
+                - img [ref=e59]
+                - text: New Conversation
+                - generic [ref=e61]: gpt-oss
+            - generic [ref=e62]:
+              - generic [ref=e63]:
+                - img [ref=e64]
+                - text: Idle
+              - generic [ref=e70]:
+                - img [ref=e71]
+                - text: Tools enabled
+              - button "Refresh system health" [ref=e74] [cursor=pointer]:
+                - img
+                - text: Refresh system health
+          - generic [ref=e75]:
+            - generic [ref=e76]:
+              - generic [ref=e78]:
+                - img [ref=e80]
+                - heading "Welcome to YouWorker.AI" [level=2] [ref=e92]
+                - paragraph [ref=e93]: Start a conversation with crimson-fueled intelligence. Ask questions, request research, orchestrate tool workflows, or ingest knowledge on the fly.
+                - generic [ref=e94]:
+                  - button "Explore analytics" [ref=e95] [cursor=pointer]:
+                    - img
+                    - text: Explore analytics
+                  - button "Start fresh" [ref=e96] [cursor=pointer]:
+                    - img
+                    - text: Start fresh
+              - generic [ref=e98]:
+                - generic [ref=e99]:
+                  - generic [ref=e100]:
+                    - generic [ref=e101]: Assistant language
+                    - textbox [ref=e102]: en
+                  - generic [ref=e103]:
+                    - generic [ref=e104]: Model
+                    - textbox [ref=e105]: gpt-oss:20b
+                  - button "Tools active Active" [ref=e106] [cursor=pointer]:
+                    - img
+                    - text: Tools active
+                    - generic [ref=e107]: Active
+                  - button "Voice-off" [ref=e108] [cursor=pointer]:
+                    - img
+                    - text: Voice-off
+                - textbox "Message input" [ref=e109]:
+                  - /placeholder: Ask anything… Request a plan, run a tool, or brainstorm in crimson style.
+                - generic [ref=e110]:
+                  - generic [ref=e111]:
+                    - button [active] [ref=e112] [cursor=pointer]:
+                      - img
+                    - generic [ref=e113]: Hold to speak.
+                  - generic [ref=e114]:
+                    - button "Send" [disabled]:
+                      - img
+                      - text: Send
+            - complementary [ref=e115]:
+              - generic [ref=e116]:
+                - generic [ref=e118]:
+                  - img [ref=e119]
+                  - text: Tool timeline
+                - generic [ref=e122]:
+                  - paragraph [ref=e123]: Tools spring into action while you chat. You'll see them here in real time.
+                  - link "View analytics" [ref=e124] [cursor=pointer]:
+                    - /url: /analytics
+                    - text: View analytics
+                    - img [ref=e125]
+              - generic [ref=e127]:
+                - generic [ref=e129]:
+                  - img [ref=e130]
+                  - text: Reasoning trace
+                - paragraph [ref=e134]: We'll surface the thought process, warnings, and tool diagnostics here.
+              - generic [ref=e135]:
+                - generic [ref=e137]:
+                  - img [ref=e138]
+                  - text: Voice capture
+                - paragraph [ref=e143]: When you speak to YouWorker we transcribe locally and surface the transcript here.
+              - generic [ref=e144]:
+                - generic [ref=e146]:
+                  - img [ref=e147]
+                  - text: System health
+                - paragraph [ref=e150]: Health data will appear once the agent connects to the backend.
+  - region "Notifications alt+T"
+  - generic [ref=e151]:
+    - img [ref=e153]
+    - button "Open Tanstack query devtools" [ref=e201] [cursor=pointer]:
+      - img [ref=e202]
+  - generic [ref=e254] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e255]:
+      - img [ref=e256]
+    - generic [ref=e259]:
+      - button "Open issues overlay" [ref=e260]:
+        - generic [ref=e261]:
+          - generic [ref=e262]: "3"
+          - generic [ref=e263]: "4"
+        - generic [ref=e264]:
+          - text: Issue
+          - generic [ref=e265]: s
+      - button "Collapse issues badge" [ref=e266]:
+        - img [ref=e267]
+  - alert [ref=e269]
+```

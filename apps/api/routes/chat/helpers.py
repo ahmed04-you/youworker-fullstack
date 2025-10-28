@@ -12,6 +12,23 @@ from packages.llm import ChatMessage as LLMChatMessage
 from .persistence import record_tool_start, record_tool_end
 
 
+def get_user_attr(user: Any, attr: str, default: Any | None = None) -> Any | None:
+    """Safely extract an attribute from a user object or mapping."""
+
+    if isinstance(user, dict):
+        return user.get(attr, default)
+    return getattr(user, attr, default)
+
+
+def get_user_id(user: Any) -> int:
+    """Return the authenticated user's ID, raising if unavailable."""
+
+    value = get_user_attr(user, "id")
+    if value is None:
+        raise ValueError("Authenticated user does not expose an id attribute")
+    return int(value)
+
+
 async def prepare_chat_messages(history: List[dict]) -> List[LLMChatMessage]:
     """Prepare chat messages for agent loop."""
     messages = []

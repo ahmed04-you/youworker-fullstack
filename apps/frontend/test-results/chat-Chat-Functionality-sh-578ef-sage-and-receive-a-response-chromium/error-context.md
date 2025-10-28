@@ -1,0 +1,146 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e4]:
+      - heading "YouWorker.AI" [level=2] [ref=e7]
+      - navigation "Main navigation" [ref=e8]:
+        - link "Chat" [ref=e9] [cursor=pointer]:
+          - /url: /
+          - img [ref=e10]
+          - text: Chat
+        - link "Documents" [ref=e13] [cursor=pointer]:
+          - /url: /documents
+          - img [ref=e14]
+          - text: Documents
+        - link "Sessions" [ref=e17] [cursor=pointer]:
+          - /url: /sessions
+          - img [ref=e18]
+          - text: Sessions
+        - link "Analytics" [ref=e21] [cursor=pointer]:
+          - /url: /analytics
+          - img [ref=e22]
+          - text: Analytics
+        - link "Settings" [ref=e24] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e25]
+          - text: Settings
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - complementary [ref=e30]:
+          - generic [ref=e31]:
+            - generic [ref=e32]:
+              - paragraph [ref=e33]: Workspace
+              - heading "Conversations" [level=2] [ref=e34]
+            - button [ref=e35] [cursor=pointer]:
+              - img
+          - button "New Conversation" [ref=e36] [cursor=pointer]:
+            - img
+            - text: New Conversation
+          - generic [ref=e38]: No sessions yet. Start chatting to create your first conversation.
+          - generic [ref=e39]:
+            - paragraph [ref=e40]:
+              - img [ref=e41]
+              - text: Knowledge Hub
+            - paragraph [ref=e43]:
+              - text: Curate documents and tools that fuel the agent's reasoning.
+              - link "Visit documents →" [ref=e44] [cursor=pointer]:
+                - /url: /documents
+        - main [ref=e45]:
+          - generic [ref=e47]:
+            - generic [ref=e49]:
+              - paragraph [ref=e50]: Active session
+              - heading "New Conversation gpt-oss" [level=1] [ref=e51]:
+                - img [ref=e52]
+                - text: New Conversation
+                - generic [ref=e54]: gpt-oss
+            - generic [ref=e55]:
+              - generic [ref=e56]:
+                - img [ref=e57]
+                - text: Streaming answer
+              - generic [ref=e63]:
+                - img [ref=e64]
+                - text: Tools enabled
+              - button "Refresh system health" [ref=e67] [cursor=pointer]:
+                - img
+                - text: Refresh system health
+          - generic [ref=e68]:
+            - generic [ref=e69]:
+              - generic [ref=e70]:
+                - generic [ref=e71]:
+                  - generic [ref=e72]:
+                    - generic [ref=e73]: You
+                    - generic [ref=e74]: 08:32 AM
+                  - paragraph [ref=e75]: Hello, how are you?
+                - generic [ref=e76]:
+                  - generic [ref=e77]:
+                    - generic [ref=e78]: assistant
+                    - generic [ref=e79]: 08:32 AM
+                  - paragraph
+                  - generic [ref=e80]:
+                    - img [ref=e81]
+                    - text: Streaming insight…
+                  - generic [ref=e83]: assistant
+              - generic [ref=e85]:
+                - generic [ref=e86]:
+                  - generic [ref=e87]:
+                    - generic [ref=e88]: Assistant language
+                    - textbox [ref=e89]: en
+                  - generic [ref=e90]:
+                    - generic [ref=e91]: Model
+                    - textbox [ref=e92]: gpt-oss:20b
+                  - button "Tools active Active" [ref=e93] [cursor=pointer]:
+                    - img
+                    - text: Tools active
+                    - generic [ref=e94]: Active
+                  - button "Voice-off" [ref=e95] [cursor=pointer]:
+                    - img
+                    - text: Voice-off
+                - textbox "Message input" [ref=e96]:
+                  - /placeholder: Ask anything… Request a plan, run a tool, or brainstorm in crimson style.
+                - generic [ref=e97]:
+                  - generic [ref=e98]:
+                    - button [disabled]:
+                      - img
+                    - generic [ref=e99]: Hold to speak.
+                  - generic [ref=e100]:
+                    - button "Stop response" [ref=e101] [cursor=pointer]:
+                      - img
+                      - text: Stop response
+                    - button "Streaming…" [disabled]:
+                      - img
+                      - text: Streaming…
+            - complementary [ref=e102]:
+              - generic [ref=e103]:
+                - generic [ref=e105]:
+                  - img [ref=e106]
+                  - text: Tool timeline
+                - generic [ref=e109]:
+                  - paragraph [ref=e110]: Tools spring into action while you chat. You'll see them here in real time.
+                  - link "View analytics" [ref=e111] [cursor=pointer]:
+                    - /url: /analytics
+                    - text: View analytics
+                    - img [ref=e112]
+              - generic [ref=e114]:
+                - generic [ref=e116]:
+                  - img [ref=e117]
+                  - text: Reasoning trace
+                - paragraph [ref=e121]: We'll surface the thought process, warnings, and tool diagnostics here.
+              - generic [ref=e122]:
+                - generic [ref=e124]:
+                  - img [ref=e125]
+                  - text: Voice capture
+                - paragraph [ref=e130]: When you speak to YouWorker we transcribe locally and surface the transcript here.
+              - generic [ref=e131]:
+                - generic [ref=e133]:
+                  - img [ref=e134]
+                  - text: System health
+                - paragraph [ref=e137]: Health data will appear once the agent connects to the backend.
+  - region "Notifications alt+T"
+  - generic [ref=e138]:
+    - img [ref=e140]
+    - button "Open Tanstack query devtools" [ref=e188] [cursor=pointer]:
+      - img [ref=e189]
+  - alert [ref=e237]
+```

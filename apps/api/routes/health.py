@@ -35,9 +35,6 @@ async def health_check(
     """
     from apps.api.config import settings
 
-    if current_user is None:
-        return {"status": "healthy"}
-
     mcp_status = {"healthy": [], "unhealthy": [], "total": 0}
 
     if registry:

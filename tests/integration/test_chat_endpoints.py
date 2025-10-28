@@ -9,6 +9,7 @@ import pytest
 import requests
 
 RUN_API_TESTS = os.getenv("RUN_API_TESTS") == "1"
+API_KEY = os.getenv("TEST_ROOT_API_KEY", "rotated-dev-root-key")
 
 pytestmark = pytest.mark.skipif(
     not RUN_API_TESTS,
@@ -41,7 +42,7 @@ def test_text_mode_sse_connection(api_base_url: str) -> None:
         },
         headers={
             "Accept": "text/event-stream",
-            "X-API-Key": "rotated-dev-root-key",
+            "X-API-Key": API_KEY,
         },
         stream=True,
         timeout=30,
@@ -72,7 +73,7 @@ def test_voice_turn_rejects_invalid_audio(api_base_url: str) -> None:
             "sample_rate": 16000,
             "expect_audio": False,
         },
-        headers={"X-API-Key": "rotated-dev-root-key"},
+        headers={"X-API-Key": API_KEY},
     )
 
     assert response.status_code == 400
@@ -94,7 +95,7 @@ def test_voice_turn_returns_service_unavailable_without_stt(api_base_url: str) -
             "sample_rate": 16000,
             "expect_audio": False,
         },
-        headers={"X-API-Key": "rotated-dev-root-key"},
+        headers={"X-API-Key": API_KEY},
     )
 
     # When faster-whisper is not installed we expect 503. If it is installed the
@@ -113,7 +114,7 @@ def test_cors_preflight_headers(api_base_url: str) -> None:
             "Origin": "http://localhost:8000",
             "Access-Control-Request-Method": "POST",
             "Access-Control-Request-Headers": "X-API-Key,Content-Type",
-            "X-API-Key": "dev-root-key",
+            "X-API-Key": API_KEY,
         },
     )
 

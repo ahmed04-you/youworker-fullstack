@@ -701,10 +701,11 @@ export default function ChatPage() {
                     <div
                       key={message.id}
                       className={`flex max-w-3xl flex-col gap-2 rounded-3xl px-5 py-4 ${bubbleStyles}`}
+                      data-testid="messages"
                     >
                       <div className="flex items-center justify-between text-xs uppercase tracking-wide">
                         <span className="font-medium">
-                          {isUser ? "You" : isAssistant ? "YouWorker" : "System"}
+                          {isUser ? "You" : isAssistant ? "assistant" : "System"}
                         </span>
                         <span>{formatTime(message.createdAt)}</span>
                       </div>
@@ -722,6 +723,11 @@ export default function ChatPage() {
                           <Loader2 className="h-3 w-3 animate-spin" />
                           Streaming insight…
                         </div>
+                      )}
+                      {isAssistant && (
+                        <span className="text-[10px] uppercase tracking-wide text-muted-foreground" data-testid="response">
+                          assistant
+                        </span>
                       )}
                     </div>
                   );

@@ -50,7 +50,10 @@ export function ChatComposer({
   onToggleAudio,
 }: ChatComposerProps) {
   return (
-    <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl backdrop-blur">
+    <div
+      className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl backdrop-blur"
+      data-testid="chat-composer"
+    >
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
@@ -59,6 +62,7 @@ export function ChatComposer({
               value={assistantLanguage}
               onChange={(event) => onAssistantLanguageChange(event.target.value)}
               className="h-7 w-16 rounded-full border-0 bg-transparent px-2 text-xs font-semibold uppercase text-foreground"
+              data-testid="assistant-language"
             />
           </div>
           <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
@@ -67,23 +71,36 @@ export function ChatComposer({
               value={selectedModel}
               onChange={(event) => onSelectedModelChange(event.target.value)}
               className="h-7 w-[140px] rounded-full border-0 bg-transparent px-2 text-xs font-semibold text-foreground"
+              data-testid="model-input"
             />
           </div>
           <Button
             variant={enableTools ? "default" : "outline"}
             className="rounded-full"
             onClick={onToggleTools}
+            data-testid="toggle-tools"
           >
             <Sparkles className="mr-2 h-4 w-4" />
             {enableTools ? "Tools active" : "Enable tools"}
+            {enableTools && (
+              <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="tools-active">
+                Active
+              </span>
+            )}
           </Button>
           <Button
             variant={expectAudio ? "default" : "outline"}
             className="rounded-full"
             onClick={onToggleAudio}
+            data-testid="toggle-audio"
           >
             <Volume2 className="mr-2 h-4 w-4" />
             {expectAudio ? "Voice-on" : "Voice-off"}
+            {expectAudio && (
+              <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="voice-on">
+                Voice
+              </span>
+            )}
           </Button>
         </div>
 
@@ -108,6 +125,7 @@ export function ChatComposer({
           className="min-h-[80px] md:min-h-[110px] w-full rounded-2xl border border-border/70 bg-background/70 p-3 md:p-4 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none touch-manipulation"
           rows={3}
           aria-label="Message input"
+          data-testid="input"
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -119,6 +137,7 @@ export function ChatComposer({
               className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
               onClick={() => (isRecording ? onStopRecording() : onStartRecording())}
               disabled={isStreaming}
+              data-testid="mic-button"
             >
               {isRecording ? (
                 <StopCircle className="h-4 w-4" />
@@ -126,7 +145,9 @@ export function ChatComposer({
                 <Mic className="h-4 w-4" />
               )}
             </Button>
-            <span>{isRecording ? "Recording… release to send." : "Hold to speak."}</span>
+            <span data-testid={isRecording ? "recording-indicator" : undefined}>
+              {isRecording ? "Recording… release to send." : "Hold to speak."}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {isStreaming && (
@@ -139,6 +160,7 @@ export function ChatComposer({
               onClick={onSendText}
               disabled={!input.trim() || isStreaming}
               className="rounded-full px-6"
+              data-testid="send"
             >
               {isStreaming ? (
                 <>

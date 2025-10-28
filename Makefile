@@ -14,6 +14,7 @@ help:
 	@echo "  build            - Build all Docker images"
 	@echo "  clean            - Remove containers, volumes, and images"
 	@echo "  test             - Run tests"
+	@echo "  setup-tests      - Install all dependencies required for tests"
 	@echo "  lint             - Run linters"
 	@echo "  format           - Format code with black"
 	@echo "  pull-models      - Pull Ollama models"
@@ -90,7 +91,10 @@ pull-models:
 
 # Run tests
 test:
-	pytest tests/ -v --cov=packages --cov=apps
+	./scripts/run-tests.sh
+
+setup-tests:
+	./scripts/setup-tests.sh
 
 # Lint code
 lint:
@@ -137,10 +141,12 @@ setup-env:
 		echo "OLLAMA_BASE_URL=http://localhost:11434" > .env; \
 		echo "CHAT_MODEL=gpt-oss:20b" >> .env; \
 		echo "EMBED_MODEL=embeddinggemma:300m" >> .env; \
+		echo "FRONTEND_ORIGIN=http://localhost:8000,https://95.110.228.79:8000" >> .env; \
 			echo "QDRANT_URL=http://localhost:6333" >> .env; \
 			echo "DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/youworker" >> .env; \
-			echo "ROOT_API_KEY=dev-root-key" >> .env; \
+			echo "ROOT_API_KEY=rotated-dev-root-key" >> .env; \
 			echo "JWT_SECRET=dev-jwt-secret" >> .env; \
+			echo "NEXT_PUBLIC_API_KEY=rotated-dev-root-key" >> .env; \
 			echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005" >> .env; \
 		echo "MCP_REFRESH_INTERVAL=90" >> .env; \
 		echo "LOG_LEVEL=INFO" >> .env; \

@@ -7,6 +7,7 @@ import pytest
 
 
 RUN_E2E_TESTS = os.getenv("RUN_E2E_TESTS") == "1"
+API_KEY = os.getenv("TEST_ROOT_API_KEY", "rotated-dev-root-key")
 
 pytestmark = pytest.mark.skipif(
     not RUN_E2E_TESTS,
@@ -20,7 +21,7 @@ API_BASE_URL = "http://localhost:8001"
 @pytest.fixture
 async def api_client():
     """Create async HTTP client."""
-    async with httpx.AsyncClient(timeout=300.0, headers={"X-API-Key": "rotated-dev-root-key"}) as client:
+    async with httpx.AsyncClient(timeout=300.0, headers={"X-API-Key": API_KEY}) as client:
         yield client
 
 
@@ -138,7 +139,7 @@ async def test_agent_single_tool_enforcement():
         response = await client.post(
             f"{API_BASE_URL}/v1/chat",
             json=request_data,
-            headers={"X-API-Key": "rotated-dev-root-key"},
+        headers={"X-API-Key": API_KEY},
         )
         assert response.status_code == 200
 

@@ -7,6 +7,7 @@ import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
+import { LanguageProvider } from "@/components/language-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -25,14 +26,16 @@ export default function RootLayout({
       <body className={inter.className}>
         <QueryProvider>
           <ThemeProvider>
-            <AuthProvider>
-              <LoginDialog />
-              <div className="flex h-screen bg-background">
-                <Sidebar />
-                <main className="flex-1 overflow-auto md:pl-0">{children}</main>
-              </div>
-              <Toaster />
-            </AuthProvider>
+            <LanguageProvider>
+              <AuthProvider>
+                <LoginDialog />
+                <div className="flex h-screen bg-background">
+                  <Sidebar />
+                  <main className="flex-1 overflow-auto md:pl-0">{children}</main>
+                </div>
+                <Toaster />
+              </AuthProvider>
+            </LanguageProvider>
           </ThemeProvider>
         </QueryProvider>
       </body>

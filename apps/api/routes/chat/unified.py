@@ -25,7 +25,12 @@ from packages.agent import AgentLoop
 from packages.db import get_async_session
 from packages.llm import ChatMessage
 
-from .helpers import handle_tool_event, prepare_chat_messages, resolve_assistant_language
+from .helpers import (
+    handle_tool_event,
+    prepare_chat_messages,
+    resolve_assistant_language,
+    get_user_id,
+)
 
 
 from .models import UnifiedChatRequest, UnifiedChatResponse
@@ -117,12 +122,13 @@ async def unified_chat_endpoint(
 
     assistant_language = resolve_assistant_language(unified_request.assistant_language or "")
     request_model = unified_request.model or settings.chat_model
+    user_id = get_user_id(current_user)
 
     # Create/get session
     async with get_async_session() as db:
         chat_session = await get_or_create_chat_session(
             db,
-            user_id=current_user["id"],
+            user_id=user_id,
             external_id=unified_request.session_id or "default",
             model=request_model,
             enable_tools=unified_request.enable_tools,
@@ -159,7 +165,7 @@ async def unified_chat_endpoint(
                         async with get_async_session() as db:
                             last_tool_run_id_local, data = await handle_tool_event(
                                 db,
-                                current_user["id"],
+                                user_id,
                                 chat_session_id,
                                 data,
                                 last_tool_run_id_local,
@@ -326,7 +332,7 @@ async def unified_chat_endpoint(
         if etype == "tool":
             async with get_async_session() as db:
                 last_tool_run_id_nonstream, data = await handle_tool_event(
-                    db, current_user["id"], chat_session_id, data, last_tool_run_id_nonstream
+                    db, user_id, chat_session_id, data, last_tool_run_id_nonstream
                 )
             tool_events.append(data)
         elif etype == "token":

@@ -28,6 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const activateGuestSession = () => {
+    clearRefreshTimeout();
+    setIsAuthenticated(true);
+    setUsername("guest");
+  };
+
   const scheduleRefresh = (expiresIn?: number | null) => {
     clearRefreshTimeout();
     const ttlSeconds = (expiresIn ?? 1800) - 60;
@@ -121,8 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsLoading(true);
         const auto = await attemptAutoLogin();
         if (!cancelled && !auto) {
-          setIsAuthenticated(false);
-          setUsername(null);
+          activateGuestSession();
         }
         if (!cancelled) {
           setIsLoading(false);

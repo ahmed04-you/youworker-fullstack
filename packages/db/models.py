@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 from datetime import datetime
+from functools import lru_cache
 from typing import Optional
 
 import sqlalchemy as sa
+from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -21,6 +25,22 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.types import TypeDecorator
 
 from .session import Base
+from packages.common import get_settings
+
+
+@lru_cache(maxsize=1)
+def _get_message_fernet() -> Optional[Fernet]:
+    settings = get_settings()
+    secret_source = (
+        settings.chat_message_encryption_secret
+        or settings.jwt_secret
+        or settings.root_api_key
+    )
+    if not secret_source:
+        return None
+    key_material = hashlib.sha256(secret_source.encode("utf-8")).digest()
+    key = base64.urlsafe_b64encode(key_material)
+    return Fernet(key)
 
 
 class EncryptedContent(TypeDecorator):
@@ -35,14 +55,26 @@ class EncryptedContent(TypeDecorator):
         if isinstance(value, bytes):
             return value
         if isinstance(value, str):
-            return value.encode("utf-8")
+            fernet = _get_message_fernet()
+            raw = value.encode("utf-8")
+            if fernet is None:
+                return raw
+            return fernet.encrypt(raw)
         raise TypeError("content must be str or bytes")
 
     def process_result_value(self, value, dialect):
         if value is None:
             return None
         if isinstance(value, (bytes, bytearray, memoryview)):
-            return bytes(value).decode("utf-8")
+            data = bytes(value)
+            fernet = _get_message_fernet()
+            if fernet is not None:
+                try:
+                    decrypted = fernet.decrypt(data)
+                    return decrypted.decode("utf-8")
+                except (InvalidToken, ValueError):
+                    pass
+            return data.decode("utf-8", errors="ignore")
         return value
 
 

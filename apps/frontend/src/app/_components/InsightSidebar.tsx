@@ -153,7 +153,10 @@ export function InsightSidebar({
         <CardContent>
           {transcript ? (
             <div className="space-y-2 text-sm">
-              <p className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground">
+              <p
+                className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground"
+                data-testid="transcript"
+              >
                 {transcript}
               </p>
               <p className="text-xs text-muted-foreground">

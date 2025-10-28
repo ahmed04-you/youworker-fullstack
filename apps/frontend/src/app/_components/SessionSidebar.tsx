@@ -63,6 +63,7 @@ export function SessionSidebar({
         variant="secondary"
         className="mb-4 w-full gap-2 rounded-2xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
         onClick={onNewSession}
+        data-testid="new-session"
       >
         <Plus className="h-4 w-4" />
         New Conversation

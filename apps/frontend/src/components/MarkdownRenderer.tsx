@@ -25,30 +25,32 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
 
+  const markdownClasses = cn(
+    "prose prose-sm max-w-none",
+    isDark ? "prose-invert" : "",
+    "prose-headings:font-semibold prose-headings:tracking-tight",
+    "prose-p:leading-relaxed prose-p:my-2",
+    "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
+    "prose-pre:p-0 prose-pre:m-0 prose-pre:bg-transparent",
+    "prose-code:before:content-none prose-code:after:content-none",
+    "prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded",
+    "prose-code:text-foreground prose-code:font-mono prose-code:text-xs",
+    "prose-strong:font-semibold prose-strong:text-foreground",
+    "prose-ul:my-2 prose-ol:my-2",
+    "prose-li:my-1",
+    "prose-blockquote:border-l-primary prose-blockquote:bg-muted/50",
+    "prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:my-4",
+    "prose-table:border-collapse prose-table:w-full",
+    "prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2",
+    "prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
+    className
+  );
+
   return (
-    <ReactMarkdown
-      className={cn(
-        "prose prose-sm max-w-none",
-        isDark ? "prose-invert" : "",
-        "prose-headings:font-semibold prose-headings:tracking-tight",
-        "prose-p:leading-relaxed prose-p:my-2",
-        "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
-        "prose-pre:p-0 prose-pre:m-0 prose-pre:bg-transparent",
-        "prose-code:before:content-none prose-code:after:content-none",
-        "prose-code:bg-muted prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded",
-        "prose-code:text-foreground prose-code:font-mono prose-code:text-xs",
-        "prose-strong:font-semibold prose-strong:text-foreground",
-        "prose-ul:my-2 prose-ol:my-2",
-        "prose-li:my-1",
-        "prose-blockquote:border-l-primary prose-blockquote:bg-muted/50",
-        "prose-blockquote:py-2 prose-blockquote:px-4 prose-blockquote:my-4",
-        "prose-table:border-collapse prose-table:w-full",
-        "prose-th:border prose-th:border-border prose-th:bg-muted prose-th:px-3 prose-th:py-2",
-        "prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
-        className
-      )}
-      remarkPlugins={[remarkGfm]}
-      components={{
+    <div className={markdownClasses}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
         code({ node, inline, className, children, ...props }: any) {
           const match = /language-(\w+)/.exec(className || "");
           const language = match ? match[1] : "";
@@ -109,9 +111,10 @@ export function MarkdownRenderer({ content, className }: MarkdownRendererProps) 
             />
           );
         },
-      }}
-    >
-      {content}
-    </ReactMarkdown>
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
   );
 }
