@@ -3,13 +3,17 @@
  */
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { parseKeyboardEvent } from '@/lib/shortcuts';
 
 interface KeyboardShortcutOptions {
   ctrl?: boolean;
   meta?: boolean;
   shift?: boolean;
   alt?: boolean;
+  enabled?: boolean;
+  preventDefault?: boolean;
+  ignoreInputs?: boolean;
 }
 
 /**
@@ -17,7 +21,7 @@ interface KeyboardShortcutOptions {
  *
  * @param key - The key to listen for (e.g., 'k', 'Enter', 'Escape')
  * @param callback - Function to call when shortcut is triggered
- * @param options - Modifier keys (ctrl, meta, shift, alt)
+ * @param options - Modifier keys (ctrl, meta, shift, alt) and behavior options
  *
  * @example
  * useKeyboardShortcut('k', () => setOpen(true), { ctrl: true });
@@ -28,10 +32,23 @@ export function useKeyboardShortcut(
   callback: () => void,
   options: KeyboardShortcutOptions = {}
 ) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      const { ctrl = false, meta = false, shift = false, alt = false } = options;
+  const callbackRef = useRef(callback);
+  callbackRef.current = callback;
 
+  useEffect(() => {
+    const {
+      ctrl = false,
+      meta = false,
+      shift = false,
+      alt = false,
+      enabled = true,
+      preventDefault = true,
+      ignoreInputs = true,
+    } = options;
+
+    if (!enabled) return;
+
+    const handler = (e: KeyboardEvent) => {
       // Check if the modifiers match
       const ctrlMatch = ctrl ? e.ctrlKey || e.metaKey : true;
       const metaMatch = meta ? e.metaKey : true;
@@ -47,26 +64,106 @@ export function useKeyboardShortcut(
         altMatch
       ) {
         // Don't trigger if typing in an input/textarea
-        const target = e.target as HTMLElement;
-        if (
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA' ||
-          target.isContentEditable
-        ) {
-          // Allow shortcuts with ctrl/meta even in inputs
-          if (!ctrl && !meta) {
-            return;
+        if (ignoreInputs) {
+          const target = e.target as HTMLElement;
+          if (
+            target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.isContentEditable
+          ) {
+            // Allow shortcuts with ctrl/meta even in inputs
+            if (!ctrl && !meta) {
+              return;
+            }
           }
         }
 
-        e.preventDefault();
-        callback();
+        if (preventDefault) {
+          e.preventDefault();
+        }
+        callbackRef.current();
       }
     };
 
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [key, callback, options]);
+  }, [key, options]);
+}
+
+/**
+ * Hook for handling multiple keyboard shortcuts at once
+ * Uses the shortcuts.ts format (e.g., "cmd+k", "esc", "cmd+shift+v")
+ *
+ * @param shortcuts - Record of shortcut keys mapped to their handlers
+ * @param options - Configuration options
+ *
+ * @example
+ * ```tsx
+ * useKeyboardShortcuts({
+ *   'cmd+k': () => setCommandPaletteOpen(true),
+ *   'cmd+n': () => createNewSession(),
+ *   'esc': () => closeModal(),
+ * });
+ * ```
+ */
+export function useKeyboardShortcuts(
+  shortcuts: Record<string, (event: KeyboardEvent) => void>,
+  options: Omit<KeyboardShortcutOptions, 'ctrl' | 'meta' | 'shift' | 'alt'> = {}
+) {
+  const {
+    enabled = true,
+    preventDefault = true,
+    ignoreInputs = true,
+  } = options;
+
+  const shortcutsRef = useRef(shortcuts);
+  shortcutsRef.current = shortcuts;
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (ignoreInputs) {
+        const target = event.target as HTMLElement;
+        const tagName = target.tagName.toLowerCase();
+        const isEditable = target.isContentEditable;
+
+        if (
+          tagName === 'input' ||
+          tagName === 'textarea' ||
+          tagName === 'select' ||
+          isEditable
+        ) {
+          const eventKey = parseKeyboardEvent(event);
+          const handler = shortcutsRef.current[eventKey];
+
+          if (handler && (eventKey === 'esc' || eventKey.includes('cmd'))) {
+            if (preventDefault) {
+              event.preventDefault();
+            }
+            handler(event);
+          }
+          return;
+        }
+      }
+
+      const eventKey = parseKeyboardEvent(event);
+      const handler = shortcutsRef.current[eventKey];
+
+      if (handler) {
+        if (preventDefault) {
+          event.preventDefault();
+        }
+        handler(event);
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [enabled, preventDefault, ignoreInputs]);
 }
 
 /**

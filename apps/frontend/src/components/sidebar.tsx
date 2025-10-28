@@ -92,13 +92,20 @@ export function Sidebar() {
       <div className="hidden md:block w-64 border-r bg-background">
         <div className="flex flex-col h-full">
           <div className="p-4 border-b space-y-2">
-            <div className="flex items-center">
+            <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold">{t("title")}</h2>
+              <ThemeToggle />
             </div>
             {isAuthenticated && username && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <User className="h-3 w-3" />
-                <span>{username}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <User className="h-3 w-3" />
+                  <span>{username}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <span>Connected</span>
+                </div>
               </div>
             )}
           </div>

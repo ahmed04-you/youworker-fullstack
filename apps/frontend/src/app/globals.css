@@ -76,6 +76,40 @@
   }
 }
 
+/* Mobile touch targets: Ensure minimum 44x44px touch targets */
+@layer utilities {
+  @media (max-width: 768px) {
+    /* Apply minimum touch target size to all buttons and interactive elements */
+    button,
+    a[role="button"],
+    [role="button"],
+    input[type="button"],
+    input[type="submit"],
+    input[type="reset"] {
+      min-height: 44px;
+      min-width: 44px;
+    }
+
+    /* Icon-only buttons should have padding to reach 44px */
+    button[class*="size-icon"],
+    button[class*="icon"] {
+      @apply min-h-11 min-w-11;
+    }
+
+    /* Small buttons on mobile should still meet touch target requirements */
+    button[class*="size-sm"]:not([class*="size-icon"]) {
+      @apply min-h-11 px-4;
+    }
+
+    /* Ensure links and clickable elements are large enough */
+    a:not([class*="text-"]) {
+      @apply min-h-11;
+      display: inline-flex;
+      align-items: center;
+    }
+  }
+}
+
 /* Reduce motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
   * {

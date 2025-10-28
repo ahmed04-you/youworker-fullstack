@@ -9,6 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { toast } from "sonner";
 
 interface ExportButtonProps {
@@ -84,18 +89,25 @@ export function ExportButton({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isExporting}
-          className={className}
-          aria-label="Export data"
-        >
-          <Download className="mr-2 h-4 w-4" />
-          {isExporting ? "Exporting..." : "Export"}
-        </Button>
-      </DropdownMenuTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isExporting}
+              className={className}
+              aria-label="Export data"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {isExporting ? "Exporting..." : "Export"}
+            </Button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Export data in JSON, CSV, or TXT format</p>
+        </TooltipContent>
+      </Tooltip>
       <DropdownMenuContent align="end">
         {formats.includes("json") && (
           <DropdownMenuItem onClick={exportAsJson} disabled={isExporting}>

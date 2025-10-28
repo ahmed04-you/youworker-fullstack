@@ -5,6 +5,11 @@ import { Moon, Sun, Laptop } from "lucide-react";
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useTranslations } from "@/components/language-provider";
 
 export function ThemeToggle() {
@@ -52,15 +57,22 @@ export function ThemeToggle() {
       : t("light");
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      className="inline-flex items-center gap-2 rounded-full text-xs text-muted-foreground hover:text-primary"
-      onClick={cycleTheme}
-      aria-label={t("aria")}
-    >
-      {icon}
-      <span>{label}</span>
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="inline-flex items-center gap-2 rounded-full text-xs text-muted-foreground hover:text-primary"
+          onClick={cycleTheme}
+          aria-label={t("aria")}
+        >
+          {icon}
+          <span>{label}</span>
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Toggle theme (System / Light / Dark)</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

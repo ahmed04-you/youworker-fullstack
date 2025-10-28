@@ -11,10 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Model {
   value: string;
   label: string;
+  description?: string;
 }
 
 interface ModelSelectorProps {
@@ -32,18 +38,41 @@ export function ModelSelector({
   placeholder = "Select model...",
   className,
 }: ModelSelectorProps) {
+  const selectedModel = models.find((m) => m.value === value);
+  const tooltipText = selectedModel?.description || "Select the AI model for your conversation";
+
   return (
-    <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className={cn("w-[200px]", className)}>
-        <SelectValue placeholder={placeholder} />
-      </SelectTrigger>
-      <SelectContent>
-        {models.map((model) => (
-          <SelectItem key={model.value} value={model.value}>
-            {model.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <div>
+          <Select value={value} onValueChange={onValueChange}>
+            <SelectTrigger className={cn("w-[200px]", className)}>
+              <SelectValue placeholder={placeholder} />
+            </SelectTrigger>
+            <SelectContent>
+              {models.map((model) => (
+                <Tooltip key={model.value}>
+                  <TooltipTrigger asChild>
+                    <div>
+                      <SelectItem value={model.value}>
+                        {model.label}
+                      </SelectItem>
+                    </div>
+                  </TooltipTrigger>
+                  {model.description && (
+                    <TooltipContent side="right">
+                      <p className="max-w-xs text-xs">{model.description}</p>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p className="max-w-xs text-xs">{tooltipText}</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }

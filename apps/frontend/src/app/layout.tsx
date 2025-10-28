@@ -8,6 +8,12 @@ import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
 import { QueryProvider } from "@/components/providers/QueryProvider";
 import { LanguageProvider } from "@/components/language-provider";
+import { SettingsProvider } from "@/lib/settings-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { OnboardingManager } from "@/components/OnboardingManager";
+import { KeyboardShortcutsHint } from "@/components/KeyboardShortcutsHint";
+import { GlobalModals } from "@/components/GlobalModals";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,20 +30,35 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <QueryProvider>
-          <ThemeProvider>
-            <LanguageProvider>
-              <AuthProvider>
-                <LoginDialog />
-                <div className="flex h-screen bg-background">
-                  <Sidebar />
-                  <main className="flex-1 overflow-auto md:pl-0">{children}</main>
-                </div>
-                <Toaster />
-              </AuthProvider>
-            </LanguageProvider>
-          </ThemeProvider>
-        </QueryProvider>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Skip to main content
+        </a>
+        <ErrorBoundary>
+          <QueryProvider>
+            <ThemeProvider>
+              <SettingsProvider>
+                <LanguageProvider>
+                  <TooltipProvider delayDuration={300}>
+                    <AuthProvider>
+                      <LoginDialog />
+                      <OnboardingManager />
+                      <KeyboardShortcutsHint />
+                      <GlobalModals />
+                      <div className="flex h-screen bg-background">
+                        <Sidebar />
+                        <main id="main-content" className="flex-1 overflow-auto md:pl-0">{children}</main>
+                      </div>
+                      <Toaster />
+                    </AuthProvider>
+                  </TooltipProvider>
+                </LanguageProvider>
+              </SettingsProvider>
+            </ThemeProvider>
+          </QueryProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

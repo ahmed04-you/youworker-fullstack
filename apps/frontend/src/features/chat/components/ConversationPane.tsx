@@ -1,9 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 
 import type { ChatMessage, ChatMessageView } from "../types";
@@ -82,17 +83,33 @@ export function ConversationPane({
   );
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col relative">
+      {/* Streaming indicator badge */}
+      {isStreaming && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
+          <Badge
+            variant="default"
+            className="animate-pulse shadow-lg"
+            aria-live="polite"
+            aria-label="AI is responding"
+          >
+            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+            AI Responding...
+          </Badge>
+        </div>
+      )}
+
       <MessageList
         ref={messageListRef}
         messages={messageViews}
         onStartNewSession={onStartNewSession}
+        onSamplePromptClick={onInputChange}
       />
 
       {hasNewMessages && (
         <Button
           onClick={() => scrollToBottom()}
-          className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full shadow-lg"
+          className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full shadow-lg z-10"
           size="sm"
         >
           <ArrowDown className="mr-2 h-4 w-4" />
@@ -100,25 +117,31 @@ export function ConversationPane({
         </Button>
       )}
 
-      <ChatComposer
-        input={input}
-        isStreaming={isStreaming}
-        isRecording={isRecording}
-        assistantLanguage={assistantLanguage}
-        selectedModel={selectedModel}
-        enableTools={enableTools}
-        expectAudio={expectAudio}
-        onInputChange={onInputChange}
-        onSendText={onSendText}
-        onStartRecording={onStartRecording}
-        onStopRecording={onStopRecording}
-        onStopStreaming={onStopStreaming}
-        onToggleTools={onToggleTools}
-        onToggleAudio={onToggleAudio}
-        onAssistantLanguageChange={onAssistantLanguageChange}
-        onSelectedModelChange={onSelectedModelChange}
-        voiceSupported={voiceSupported}
-      />
+      {/* Sticky compose bar on mobile, relative on desktop */}
+      <div className="md:relative md:mt-6 fixed bottom-0 left-0 right-0 md:left-auto md:right-auto md:bottom-auto bg-background md:bg-transparent p-4 md:p-0 border-t md:border-t-0 z-20">
+        <ChatComposer
+          input={input}
+          isStreaming={isStreaming}
+          isRecording={isRecording}
+          assistantLanguage={assistantLanguage}
+          selectedModel={selectedModel}
+          enableTools={enableTools}
+          expectAudio={expectAudio}
+          onInputChange={onInputChange}
+          onSendText={onSendText}
+          onStartRecording={onStartRecording}
+          onStopRecording={onStopRecording}
+          onStopStreaming={onStopStreaming}
+          onToggleTools={onToggleTools}
+          onToggleAudio={onToggleAudio}
+          onAssistantLanguageChange={onAssistantLanguageChange}
+          onSelectedModelChange={onSelectedModelChange}
+          voiceSupported={voiceSupported}
+        />
+      </div>
+
+      {/* Spacer for mobile to prevent content from being hidden behind sticky composer */}
+      <div className="md:hidden h-[200px]" aria-hidden="true" />
     </div>
   );
 }

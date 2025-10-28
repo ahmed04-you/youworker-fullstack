@@ -19,6 +19,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [username, setUsername] = useState<string | null>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearRefreshTimeout = () => {
@@ -119,8 +120,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // First useEffect: Mark component as mounted (runs after hydration)
   useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // Second useEffect: Run auth bootstrap only after component is mounted
+  useEffect(() => {
+    if (!isMounted) {
+      return;
+    }
+
     let cancelled = false;
+
     const bootstrap = async () => {
       const initialAuth = await checkAuth();
       if (!initialAuth && !cancelled) {
@@ -140,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true;
       clearRefreshTimeout();
     };
-  }, []);
+  }, [isMounted]);
 
   return (
     <AuthContext.Provider

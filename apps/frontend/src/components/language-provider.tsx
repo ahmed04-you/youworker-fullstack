@@ -50,16 +50,23 @@ function applyParams(template: string, params?: TranslationParams): string {
 
 export function LanguageProvider({ children }: { children: React.ReactNode }) {
   const [language, setLanguageState] = useState<Language>("en");
+  const [isMounted, setIsMounted] = useState(false);
 
+  // First useEffect: Mark as mounted (runs after hydration)
   useEffect(() => {
-    if (typeof window === "undefined") {
+    setIsMounted(true);
+  }, []);
+
+  // Second useEffect: Load language from storage only after mounting
+  useEffect(() => {
+    if (!isMounted || typeof window === "undefined") {
       return;
     }
     const stored = window.localStorage.getItem(STORAGE_KEY) as Language | null;
     if (stored && stored in translations) {
       setLanguageState(stored);
     }
-  }, []);
+  }, [isMounted]);
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -76,8 +83,10 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<LanguageContextValue>(() => {
     const translate = (key: string, params?: TranslationParams) => {
+      // During SSR and initial hydration, always use English to prevent mismatches
+      const effectiveLanguage = isMounted ? language : "en";
       const fallback = translations.en;
-      const current = translations[language];
+      const current = translations[effectiveLanguage];
 
       const fromCurrent = getNestedTranslation(current, key);
       const fromFallback = getNestedTranslation(fallback, key);
@@ -93,11 +102,11 @@ export function LanguageProvider({ children }: { children: React.ReactNode }) {
     };
 
     return {
-      language,
+      language: isMounted ? language : "en",
       setLanguage,
       translate,
     };
-  }, [language, setLanguage]);
+  }, [language, setLanguage, isMounted]);
 
   return (
     <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>

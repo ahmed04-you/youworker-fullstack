@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   AppShell,
   ChatHeader,
@@ -101,26 +102,28 @@ export default function ChatPage() {
           />
         }
         conversation={
-          <ConversationPane
-            messages={messages}
-            isStreaming={isStreaming}
-            isRecording={isRecording}
-            input={input}
-            assistantLanguage={assistantLanguage}
-            selectedModel={selectedModel}
-            enableTools={enableTools}
-            expectAudio={expectAudio}
-            onInputChange={setInput}
-            onSendText={handleSendText}
-            onStartRecording={startRecording}
-            onStopRecording={stopRecording}
-            onStopStreaming={stopStreaming}
-            onToggleTools={() => setEnableTools(!enableTools)}
-            onToggleAudio={() => setExpectAudio(!expectAudio)}
-            onAssistantLanguageChange={setAssistantLanguage}
-            onSelectedModelChange={setSelectedModel}
-            onStartNewSession={startNewSession}
-          />
+          <ErrorBoundary>
+            <ConversationPane
+              messages={messages}
+              isStreaming={isStreaming}
+              isRecording={isRecording}
+              input={input}
+              assistantLanguage={assistantLanguage}
+              selectedModel={selectedModel}
+              enableTools={enableTools}
+              expectAudio={expectAudio}
+              onInputChange={setInput}
+              onSendText={handleSendText}
+              onStartRecording={startRecording}
+              onStopRecording={stopRecording}
+              onStopStreaming={stopStreaming}
+              onToggleTools={() => setEnableTools(!enableTools)}
+              onToggleAudio={() => setExpectAudio(!expectAudio)}
+              onAssistantLanguageChange={setAssistantLanguage}
+              onSelectedModelChange={setSelectedModel}
+              onStartNewSession={startNewSession}
+            />
+          </ErrorBoundary>
         }
         insights={
           <InsightsPanel

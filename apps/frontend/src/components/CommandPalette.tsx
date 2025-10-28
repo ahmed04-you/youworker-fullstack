@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { useSessionsQuery } from '@/features/chat/api/session-service';
-import { useDocumentsQuery } from '@/features/documents/api/document-service';
+import { useDocuments } from '@/features/documents/api/document-service';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -45,16 +45,15 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const [search, setSearch] = useState('');
 
   const { data: sessions } = useSessionsQuery();
-  const { data: documents } = useDocumentsQuery();
+  const { data: documentsData } = useDocuments();
 
   // Filter results based on search
   const filteredSessions = sessions?.filter((s) =>
     s.title?.toLowerCase().includes(search.toLowerCase())
   ).slice(0, 5) || [];
 
-  const filteredDocuments = documents?.filter((d) =>
-    d.uri?.toLowerCase().includes(search.toLowerCase()) ||
-    d.path?.toLowerCase().includes(search.toLowerCase())
+  const filteredDocuments = documentsData?.documents?.filter((d) =>
+    d.name?.toLowerCase().includes(search.toLowerCase())
   ).slice(0, 5) || [];
 
   // Reset search when dialog closes
@@ -158,7 +157,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
                   >
                     <FileText className="h-4 w-4" />
                     <span className="flex-1 truncate">
-                      {doc.uri || doc.path || `Document #${doc.id}`}
+                      {doc.name || `Document #${doc.id}`}
                     </span>
                   </Command.Item>
                 ))}

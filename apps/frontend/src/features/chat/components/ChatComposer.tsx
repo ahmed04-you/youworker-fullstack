@@ -11,6 +11,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Send,
   Loader2,
   LogOut,
@@ -106,34 +111,48 @@ export function ChatComposer({
             </SelectContent>
           </Select>
 
-          <Button
-            variant={enableTools ? "default" : "outline"}
-            className="rounded-full"
-            onClick={onToggleTools}
-            data-testid="toggle-tools"
-          >
-            <Sparkles className="mr-2 h-4 w-4" />
-            {enableTools ? "Tools active" : "Enable tools"}
-            {enableTools && (
-              <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="tools-active">
-                Active
-              </span>
-            )}
-          </Button>
-          <Button
-            variant={expectAudio ? "default" : "outline"}
-            className="rounded-full"
-            onClick={onToggleAudio}
-            data-testid="toggle-audio"
-          >
-            <Volume2 className="mr-2 h-4 w-4" />
-            {expectAudio ? "Voice-on" : "Voice-off"}
-            {expectAudio && (
-              <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="voice-on">
-                Voice
-              </span>
-            )}
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={enableTools ? "default" : "outline"}
+                className="rounded-full"
+                onClick={onToggleTools}
+                data-testid="toggle-tools"
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                {enableTools ? "Tools active" : "Enable tools"}
+                {enableTools && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="tools-active">
+                    Active
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{enableTools ? "Disable tools" : "Enable tools like web search, code execution"}</p>
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={expectAudio ? "default" : "outline"}
+                className="rounded-full"
+                onClick={onToggleAudio}
+                data-testid="toggle-audio"
+              >
+                <Volume2 className="mr-2 h-4 w-4" />
+                {expectAudio ? "Voice-on" : "Voice-off"}
+                {expectAudio && (
+                  <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="voice-on">
+                    Voice
+                  </span>
+                )}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{expectAudio ? "Disable voice responses" : "Enable voice responses from assistant"}</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         <textarea
@@ -161,17 +180,24 @@ export function ChatComposer({
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
-              onClick={() => (isRecording ? onStopRecording() : onStartRecording())}
-              disabled={isStreaming || !voiceSupported}
-              data-testid="mic-button"
-            >
-              {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
+                  onClick={() => (isRecording ? onStopRecording() : onStartRecording())}
+                  disabled={isStreaming || !voiceSupported}
+                  data-testid="mic-button"
+                >
+                  {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isRecording ? "Stop recording (Cmd+Shift+V)" : "Start voice recording (Cmd+Shift+V)"}</p>
+              </TooltipContent>
+            </Tooltip>
             <span data-testid={isRecording ? "recording-indicator" : undefined}>
               {!voiceSupported
                 ? "Voice input not supported on this device."
@@ -187,24 +213,31 @@ export function ChatComposer({
                 Stop response
               </Button>
             )}
-            <Button
-              onClick={onSendText}
-              disabled={!input.trim() || isStreaming}
-              className="rounded-full px-6"
-              data-testid="send"
-            >
-              {isStreaming ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 motion-safe:animate-spin" />
-                  Streaming…
-                </>
-              ) : (
-                <>
-                  <Send className="mr-2 h-4 w-4" />
-                  Send
-                </>
-              )}
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={onSendText}
+                  disabled={!input.trim() || isStreaming}
+                  className="rounded-full px-6"
+                  data-testid="send"
+                >
+                  {isStreaming ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 motion-safe:animate-spin" />
+                      Streaming…
+                    </>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Send
+                    </>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{isStreaming ? "Response streaming..." : "Send message (Cmd+Enter)"}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>

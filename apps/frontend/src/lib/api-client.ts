@@ -8,21 +8,92 @@ let csrfTokenExpiresAt: number | null = null;
 let csrfTokenPromise: Promise<string> | null = null;
 
 function getApiBaseUrl(): string {
-  if (typeof window === "undefined") {
-    return INTERNAL_API_BASE_URL || PUBLIC_API_BASE_URL || "http://api:8001";
+  const isServer = typeof window === "undefined";
+  const serverUrl = INTERNAL_API_BASE_URL || PUBLIC_API_BASE_URL || "http://api:8001";
+  const clientUrl = PUBLIC_API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+
+  if (isServer) {
+    return serverUrl;
   }
-  return PUBLIC_API_BASE_URL || window.location.origin;
+  return clientUrl;
+}
+
+export enum ErrorType {
+  NETWORK = 'network',
+  API = 'api',
+  VALIDATION = 'validation',
+  AUTH = 'auth',
+  NOT_FOUND = 'not_found',
+  SERVER = 'server',
+  RATE_LIMIT = 'rate_limit',
+  TIMEOUT = 'timeout',
+  UNKNOWN = 'unknown',
 }
 
 export class ApiError extends Error {
   readonly status: number;
   readonly details: unknown;
+  readonly type: ErrorType;
 
-  constructor(message: string, status: number, details?: unknown) {
+  constructor(message: string, status: number, details?: unknown, type?: ErrorType) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.details = details;
+    this.type = type || ApiError.inferErrorType(status);
+  }
+
+  static inferErrorType(status: number): ErrorType {
+    if (status === 0) return ErrorType.NETWORK;
+    if (status === 401 || status === 403) return ErrorType.AUTH;
+    if (status === 404) return ErrorType.NOT_FOUND;
+    if (status === 408) return ErrorType.TIMEOUT;
+    if (status === 429) return ErrorType.RATE_LIMIT;
+    if (status === 422 || status === 400) return ErrorType.VALIDATION;
+    if (status >= 500) return ErrorType.SERVER;
+    if (status >= 400) return ErrorType.API;
+    return ErrorType.UNKNOWN;
+  }
+
+  static getUserFriendlyMessage(error: ApiError): string {
+    // Try to extract a message from the error details if available
+    const detailMessage =
+      error.details && typeof error.details === 'object' && 'detail' in error.details
+        ? (error.details as { detail: string }).detail
+        : null;
+
+    switch (error.type) {
+      case ErrorType.AUTH:
+        if (error.status === 401) {
+          return 'Please log in to continue. Your session may have expired.';
+        }
+        return 'You do not have permission to perform this action.';
+      case ErrorType.VALIDATION:
+        if (detailMessage) {
+          return `Invalid input: ${detailMessage}`;
+        }
+        return 'Please check your input and try again.';
+      case ErrorType.NOT_FOUND:
+        return 'The requested resource could not be found. It may have been moved or deleted.';
+      case ErrorType.RATE_LIMIT:
+        return 'Too many requests. Please wait a moment and try again.';
+      case ErrorType.TIMEOUT:
+        return 'Request timed out. Please check your connection and try again.';
+      case ErrorType.SERVER:
+        if (error.status === 503) {
+          return 'Service temporarily unavailable. Please try again in a few moments.';
+        }
+        return 'A server error occurred. Our team has been notified. Please try again later.';
+      case ErrorType.NETWORK:
+        return 'Unable to connect to the server. Please check your internet connection and try again.';
+      case ErrorType.API:
+        if (detailMessage) {
+          return detailMessage;
+        }
+        return 'An error occurred while processing your request. Please try again.';
+      default:
+        return detailMessage || error.message || 'An unexpected error occurred. Please try again.';
+    }
   }
 }
 
@@ -80,11 +151,17 @@ async function handleResponse<T>(response: Response): Promise<T> {
     } catch {
       /* ignore parse error */
     }
-    throw new ApiError(
+
+    // Create error with appropriate message based on status
+    const error = new ApiError(
       `API request failed with status ${response.status}`,
       response.status,
       detail
     );
+
+    // Use the user-friendly message for better error reporting
+    error.message = ApiError.getUserFriendlyMessage(error);
+    throw error;
   }
   if (response.status === 204) {
     return null as T;
@@ -180,7 +257,6 @@ export async function apiFetch<T = unknown>(
 
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
-    ...(process.env.NEXT_PUBLIC_API_KEY ? { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY } : {}),
     ...normalizedHeaders,
   };
 
@@ -189,12 +265,23 @@ export async function apiFetch<T = unknown>(
     requestHeaders[CSRF_HEADER_NAME] = token;
   }
 
-  const response = await fetch(url, {
-    ...init,
-    method,
-    headers: requestHeaders,
-    credentials,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...init,
+      method,
+      headers: requestHeaders,
+      credentials,
+    });
+  } catch (error) {
+    // Network errors (connection failed, timeout, etc.)
+    throw new ApiError(
+      'Network error: Unable to connect to the server',
+      0,
+      error,
+      ErrorType.NETWORK
+    );
+  }
 
   if (!response.ok && response.status === 403 && !SAFE_METHODS.has(method)) {
     invalidateCsrfToken();

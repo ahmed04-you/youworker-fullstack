@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
   DialogContent,
@@ -94,7 +95,24 @@ export function SessionSidebar({
       </Button>
 
       <div className="flex-1 space-y-3 overflow-auto pr-2">
-        {sessions.length === 0 ? (
+        {sessionsLoading ? (
+          <>
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="rounded-2xl border border-border/60 bg-background/60 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1">
+                    <Skeleton className="h-4 w-3/4 mb-2" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                  <Skeleton className="h-5 w-12 rounded-full" />
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </>
+        ) : sessions.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground">
             No sessions yet. Start chatting to create your first conversation.
           </div>
