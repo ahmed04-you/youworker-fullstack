@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { MessageCircle, Radio, Cpu, Loader2, Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +23,8 @@ interface ChatHeaderProps {
   enableTools: boolean;
   deriveSessionName: (session: SessionSummary | null) => string;
   onOpenInsights: () => void;
+  mobileDrawerOpen: boolean;
+  onMobileDrawerChange: (open: boolean) => void;
 }
 
 export function ChatHeader({
@@ -41,14 +42,14 @@ export function ChatHeader({
   enableTools,
   deriveSessionName,
   onOpenInsights,
+  mobileDrawerOpen,
+  onMobileDrawerChange,
 }: ChatHeaderProps) {
-  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
-
   return (
     <div className="flex flex-wrap items-center justify-between gap-4">
       <MobileSessionDrawer
         open={mobileDrawerOpen}
-        onOpenChange={setMobileDrawerOpen}
+        onOpenChange={onMobileDrawerChange}
         sessions={sessions}
         sessionsLoading={sessionsLoading}
         activeSession={activeSession}
@@ -64,7 +65,7 @@ export function ChatHeader({
           variant="ghost"
           size="icon"
           className="lg:hidden"
-          onClick={() => setMobileDrawerOpen(true)}
+          onClick={() => onMobileDrawerChange(true)}
           aria-label="Open sessions drawer"
         >
           <MessageCircle className="h-5 w-5" />

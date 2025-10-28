@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ShieldAlert, Sparkles, DoorOpen, Cookie, Loader2, Palette, MessageCircle, Key, Database, Eye, Trash2, Download, Globe, Volume2, Mic, Zap, Globe2, EyeOff, VolumeX, Play, FastForward, Settings, User, Lock, KeyRound, Mic2, ZapOff } from "lucide-react";
 
@@ -133,19 +133,99 @@ export default function SettingsPage() {
     }
   };
 
+  const normalizedShortcuts = useMemo(() => {
+    return Object.fromEntries(
+      Object.entries(settings.shortcuts).map(([key, action]) => [key.toLowerCase(), action])
+    );
+  }, [settings.shortcuts]);
+
   const handleAddShortcut = () => {
-    if (newShortcutKey && newShortcutAction) {
-      const newShortcuts = { ...settings.shortcuts, [newShortcutKey]: newShortcutAction };
-      updateSetting('shortcuts', newShortcuts);
-      setNewShortcutKey('');
-      setNewShortcutAction('');
-      toast.success('Shortcut added');
+    const normalizedKey = newShortcutKey.trim().toLowerCase();
+    const trimmedAction = newShortcutAction.trim();
+
+    if (!normalizedKey) {
+      toast.error("Shortcut cannot be empty");
+      return;
     }
+
+    if (!trimmedAction) {
+      toast.error("Please choose an action for the shortcut");
+      return;
+    }
+
+    if (normalizedShortcuts[normalizedKey]) {
+      toast.error("That shortcut is already assigned");
+      return;
+    }
+
+    updateSetting("shortcuts", {
+      ...normalizedShortcuts,
+      [normalizedKey]: trimmedAction,
+    });
+    setNewShortcutKey("");
+    setNewShortcutAction("");
+    toast.success("Shortcut added");
   };
 
-  const handleShortcutChange = (key: string, action: string) => {
-    const newShortcuts = { ...settings.shortcuts, [key]: action };
-    updateSetting('shortcuts', newShortcuts);
+  const handleShortcutActionUpdate = (key: string, action: string) => {
+    const normalizedKey = key.toLowerCase();
+    const trimmedAction = action.trim();
+
+    if (!trimmedAction) {
+      toast.error("Shortcut description cannot be empty");
+      return;
+    }
+
+    if (normalizedShortcuts[normalizedKey] === trimmedAction) {
+      return;
+    }
+
+    updateSetting("shortcuts", {
+      ...normalizedShortcuts,
+      [normalizedKey]: trimmedAction,
+    });
+    toast.success("Shortcut updated");
+  };
+
+  const handleShortcutKeyUpdate = (currentKey: string, nextKey: string) => {
+    const normalizedCurrentKey = currentKey.toLowerCase();
+    const normalizedNextKey = nextKey.trim().toLowerCase();
+
+    if (!normalizedNextKey) {
+      toast.error("Shortcut cannot be empty");
+      return;
+    }
+
+    if (normalizedCurrentKey === normalizedNextKey) {
+      return;
+    }
+
+    if (normalizedShortcuts[normalizedNextKey]) {
+      toast.error("That shortcut is already in use");
+      return;
+    }
+
+    const updatedShortcuts = { ...normalizedShortcuts };
+    const action = updatedShortcuts[normalizedCurrentKey];
+    if (!action) {
+      toast.error("Unable to update shortcut");
+      return;
+    }
+    delete updatedShortcuts[normalizedCurrentKey];
+    updatedShortcuts[normalizedNextKey] = action;
+    updateSetting("shortcuts", updatedShortcuts);
+    toast.success("Shortcut updated");
+  };
+
+  const handleRemoveShortcut = (key: string) => {
+    const normalizedKey = key.toLowerCase();
+    if (!normalizedShortcuts[normalizedKey]) {
+      return;
+    }
+    const updatedShortcuts = { ...normalizedShortcuts };
+    delete updatedShortcuts[normalizedKey];
+    updateSetting("shortcuts", updatedShortcuts);
+    toast.success("Shortcut removed");
   };
 
   const connectionIndicator = (
@@ -538,20 +618,25 @@ export default function SettingsPage() {
                 </Button>
               </div>
             </div>
-            <div className="rounded-md border overflow-auto max-h-40">
+            <div className="rounded-md border overflow-auto max-h-60">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Shortcut</TableHead>
                     <TableHead>Action</TableHead>
+                    <TableHead className="w-12 text-right"> </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {Object.entries(settings.shortcuts).map(([key, action]) => (
-                    <TableRow key={key}>
-                      <TableCell><kbd className="px-1 bg-muted rounded">{key}</kbd></TableCell>
-                      <TableCell>{action}</TableCell>
-                    </TableRow>
+                    <ShortcutRow
+                      key={key}
+                      shortcutKey={key}
+                      action={action}
+                      onRename={handleShortcutKeyUpdate}
+                      onUpdateAction={handleShortcutActionUpdate}
+                      onRemove={handleRemoveShortcut}
+                    />
                   ))}
                 </TableBody>
               </Table>
@@ -633,5 +718,87 @@ export default function SettingsPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+interface ShortcutRowProps {
+  shortcutKey: string;
+  action: string;
+  onRename: (currentKey: string, nextKey: string) => void;
+  onUpdateAction: (key: string, action: string) => void;
+  onRemove: (key: string) => void;
+}
+
+function ShortcutRow({
+  shortcutKey,
+  action,
+  onRename,
+  onUpdateAction,
+  onRemove,
+}: ShortcutRowProps) {
+  const [keyDraft, setKeyDraft] = useState(shortcutKey);
+  const [actionDraft, setActionDraft] = useState(action);
+
+  useEffect(() => {
+    setKeyDraft(shortcutKey);
+  }, [shortcutKey]);
+
+  useEffect(() => {
+    setActionDraft(action);
+  }, [action]);
+
+  const commitRename = () => {
+    if (keyDraft.trim() !== shortcutKey) {
+      onRename(shortcutKey, keyDraft);
+    }
+  };
+
+  const commitAction = () => {
+    if (actionDraft.trim() !== action) {
+      onUpdateAction(shortcutKey, actionDraft);
+    }
+  };
+
+  return (
+    <TableRow>
+      <TableCell className="align-middle">
+        <Input
+          value={keyDraft}
+          onChange={(event) => setKeyDraft(event.target.value)}
+          onBlur={commitRename}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          aria-label={`Shortcut key for ${action}`}
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell className="align-middle">
+        <Input
+          value={actionDraft}
+          onChange={(event) => setActionDraft(event.target.value)}
+          onBlur={commitAction}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          aria-label={`Shortcut action for ${shortcutKey}`}
+          className="h-8"
+        />
+      </TableCell>
+      <TableCell className="text-right">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => onRemove(shortcutKey)}
+          aria-label={`Remove shortcut ${shortcutKey}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }

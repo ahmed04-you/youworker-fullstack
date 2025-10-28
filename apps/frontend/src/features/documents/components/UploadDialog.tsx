@@ -1,14 +1,11 @@
-import React, { useCallback, useState } from 'react';
+import React from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Upload, X, File, Loader2 } from 'lucide-react';
-import { useUploadDocumentsMutation } from '../api/document-service';
-import { useFileValidation } from '@/hooks/useFileValidation';
-import { toast } from 'sonner';
 import { UploadDialogProps } from '../types';
+import { useDocumentUpload } from '../hooks/useDocumentUpload';
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const ALLOWED_TYPES = [
   'application/pdf',
   'text/plain',
@@ -21,82 +18,18 @@ const ALLOWED_TYPES = [
 ];
 
 export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDialogProps) {
-  const [files, setFiles] = useState<File[]>([]);
-  const [dragging, setDragging] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
-  const { validateSingleFile } = useFileValidation();
-  const uploadMutation = useUploadDocumentsMutation({ onSuccess: onUploadComplete });
-
-  const handleFileSelect = useCallback(async (selectedFiles: File[]) => {
-    const validFiles: File[] = [];
-    const invalidFiles: File[] = [];
-
-    for (const file of selectedFiles) {
-      const isValid = await validateSingleFile(file);
-      if (isValid) {
-        validFiles.push(file);
-      } else {
-        invalidFiles.push(file);
-      }
-    }
-
-    if (invalidFiles.length > 0) {
-      invalidFiles.forEach((file: File) => {
-        toast.error(`Invalid file: ${file.name}. Size: ${(file.size / 1024 / 1024).toFixed(1)}MB, Type: ${file.type}`);
-      });
-    }
-    setFiles((prev) => [...prev, ...validFiles]);
-  }, [validateSingleFile]);
-
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-    const droppedFiles = Array.from(e.dataTransfer.files).filter((file) => file.type !== '');
-    handleFileSelect(droppedFiles);
-  }, [handleFileSelect]);
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragging(false);
-  }, []);
-
-  const handleRemoveFile = (fileToRemove: File) => {
-    setFiles((prev) => prev.filter((f) => f !== fileToRemove));
-  };
-
-  const handleUpload = () => {
-    if (files.length === 0) {
-      toast.error('No files selected');
-      return;
-    }
-
-    // Simulate progress for each file
-    files.forEach((file) => {
-      setUploadProgress((prev) => ({ ...prev, [file.name]: 0 }));
-    });
-
-    uploadMutation.mutate(files, {
-      onSuccess: (data) => {
-        // Update progress to 100% on success
-        files.forEach((file) => {
-          setUploadProgress((prev) => ({ ...prev, [file.name]: 100 }));
-        });
-        setTimeout(() => {
-          setUploadProgress({});
-          setFiles([]);
-        }, 500);
-      },
-      onError: (error) => {
-        toast.error('Upload failed');
-        console.error('Upload error:', error);
-      },
-    });
-  };
+  const {
+    files,
+    dragging,
+    isUploading,
+    getProgress,
+    handleFileSelect,
+    handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    removeFile,
+    upload,
+  } = useDocumentUpload({ onUploadComplete });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,6 +58,8 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
             onDrop={handleDrop}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
+            role="button"
+            tabIndex={0}
           >
             <Upload className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-1">Drop files here or click to browse</p>
@@ -135,7 +70,7 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
               type="file"
               multiple
               accept={ALLOWED_TYPES.join(',')}
-              onChange={(e) => handleFileSelect(Array.from(e.target.files || []))}
+              onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
               className="hidden"
             />
             <Button type="button" asChild className="cursor-pointer">
@@ -143,7 +78,14 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
                 Select Files
               </label>
             </Button>
-            <input id="file-upload" type="file" className="sr-only" multiple accept={ALLOWED_TYPES.join(',')} onChange={(e) => handleFileSelect(Array.from(e.target.files || []))} />
+            <input
+              id="file-upload"
+              type="file"
+              className="sr-only"
+              multiple
+              accept={ALLOWED_TYPES.join(',')}
+              onChange={(e) => e.target.files && handleFileSelect(e.target.files)}
+            />
           </div>
 
           {files.length > 0 && (
@@ -162,19 +104,19 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {uploadProgress[file.name] > 0 && (
+                      {getProgress(file) > 0 && (
                         <div className="w-20 bg-muted rounded-full h-2">
                           <div
                             className="bg-primary h-2 rounded-full transition-all"
-                            style={{ width: `${uploadProgress[file.name]}%` }}
+                            style={{ width: `${getProgress(file)}%` }}
                           />
                         </div>
                       )}
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleRemoveFile(file)}
-                        disabled={uploadMutation.isPending}
+                        onClick={() => removeFile(file)}
+                        disabled={isUploading}
                       >
                         <X className="h-4 w-4" />
                       </Button>
@@ -183,11 +125,11 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
                 ))}
               </div>
               <Button
-                onClick={handleUpload}
-                disabled={uploadMutation.isPending || files.length === 0}
+                onClick={() => void upload()}
+                disabled={isUploading || files.length === 0}
                 className="w-full"
               >
-                {uploadMutation.isPending ? (
+                {isUploading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Uploading...

@@ -1,11 +1,13 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion, PanInfo } from "framer-motion";
 import { ArrowDown, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 
 import type { ChatMessage, ChatMessageView } from "../types";
 import { MessageList } from "./MessageList";
@@ -30,6 +32,10 @@ interface ConversationPaneProps {
   onAssistantLanguageChange: (value: string) => void;
   onSelectedModelChange: (value: string) => void;
   onStartNewSession: () => void;
+  onOpenSessions?: () => void;
+  onOpenInsights?: () => void;
+  onCloseKeyboard?: () => void;
+  onRefreshRequest?: () => void | Promise<void>;
 }
 
 export function ConversationPane({
@@ -51,6 +57,10 @@ export function ConversationPane({
   onAssistantLanguageChange,
   onSelectedModelChange,
   onStartNewSession,
+  onOpenSessions,
+  onOpenInsights,
+  onCloseKeyboard,
+  onRefreshRequest,
 }: ConversationPaneProps) {
   const messageViews = useMemo<ChatMessageView[]>(
     () =>
@@ -68,6 +78,77 @@ export function ConversationPane({
     [messages]
   );
 
+  const [isMobile, setIsMobile] = useState(false);
+  const refreshInProgressRef = useRef(false);
+  const gestureHaptic = useHapticFeedback({ pattern: [10, 40, 10] });
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const updateDeviceState = () => {
+      const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+      setIsMobile(coarsePointer || window.innerWidth < 1024);
+    };
+
+    updateDeviceState();
+    window.addEventListener("resize", updateDeviceState);
+    return () => window.removeEventListener("resize", updateDeviceState);
+  }, []);
+
+  const handlePanEnd = useCallback(
+    async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+      if (!isMobile) {
+        return;
+      }
+
+      const horizontalMomentum = info.offset.x + info.velocity.x * 120;
+      const verticalMomentum = info.offset.y + info.velocity.y * 140;
+
+      const absHorizontal = Math.abs(horizontalMomentum);
+      const absVertical = Math.abs(verticalMomentum);
+
+      const horizontalThreshold = 80;
+      const closeKeyboardThreshold = 60;
+      const refreshThreshold = 150;
+
+      if (absHorizontal > absVertical && absHorizontal > horizontalThreshold) {
+        if (horizontalMomentum > 0) {
+          if (onOpenSessions) {
+            gestureHaptic();
+            onOpenSessions();
+          }
+        } else if (onOpenInsights) {
+          gestureHaptic();
+          onOpenInsights();
+        }
+        return;
+      }
+
+      if (verticalMomentum > refreshThreshold) {
+        if (!refreshInProgressRef.current) {
+          refreshInProgressRef.current = true;
+          gestureHaptic([15, 60, 15]);
+          try {
+            await Promise.resolve(onRefreshRequest?.());
+          } finally {
+            refreshInProgressRef.current = false;
+          }
+        }
+        onCloseKeyboard?.();
+        return;
+      }
+
+      if (verticalMomentum > closeKeyboardThreshold) {
+        if (onCloseKeyboard) {
+          gestureHaptic();
+          onCloseKeyboard();
+        }
+      }
+    },
+    [gestureHaptic, isMobile, onCloseKeyboard, onOpenInsights, onOpenSessions, onRefreshRequest]
+  );
+
   const {
     scrollRef: messageListRef,
     hasNewMessages,
@@ -83,7 +164,10 @@ export function ConversationPane({
   );
 
   return (
-    <div className="flex h-full flex-col relative">
+    <motion.div
+      className="relative flex h-full flex-col"
+      onPanEnd={isMobile ? handlePanEnd : undefined}
+    >
       {/* Streaming indicator badge */}
       {isStreaming && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
@@ -142,6 +226,6 @@ export function ConversationPane({
 
       {/* Spacer for mobile to prevent content from being hidden behind sticky composer */}
       <div className="md:hidden h-[200px]" aria-hidden="true" />
-    </div>
+    </motion.div>
   );
 }

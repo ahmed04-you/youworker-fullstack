@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -54,6 +54,21 @@ export default function ChatPage() {
   } = useChatController();
 
   const [insightsOpen, setInsightsOpen] = useState(false);
+  const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
+
+  const handleCloseKeyboard = useCallback(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+    const activeElement = document.activeElement as HTMLElement | null;
+    if (activeElement && typeof activeElement.blur === "function") {
+      activeElement.blur();
+    }
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    await Promise.allSettled([refreshSessions(), fetchHealth()]);
+  }, [fetchHealth, refreshSessions]);
 
   if (!isAuthenticated && !authLoading) {
     return (
@@ -99,6 +114,8 @@ export default function ChatPage() {
             enableTools={enableTools}
             deriveSessionName={deriveSessionName}
             onOpenInsights={() => setInsightsOpen(true)}
+            mobileDrawerOpen={sessionDrawerOpen}
+            onMobileDrawerChange={setSessionDrawerOpen}
           />
         }
         conversation={
@@ -122,6 +139,10 @@ export default function ChatPage() {
               onAssistantLanguageChange={setAssistantLanguage}
               onSelectedModelChange={setSelectedModel}
               onStartNewSession={startNewSession}
+              onOpenSessions={() => setSessionDrawerOpen(true)}
+              onOpenInsights={() => setInsightsOpen(true)}
+              onCloseKeyboard={handleCloseKeyboard}
+              onRefreshRequest={handleRefresh}
             />
           </ErrorBoundary>
         }

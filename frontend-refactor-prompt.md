@@ -25,13 +25,18 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 - ✅ Added Contact Support section to HelpModal
 - ✅ Created KeyboardShortcutsHint floating component
 - ✅ Integrated KeyboardShortcutsHint into layout.tsx
+- ✅ Added fully editable keyboard shortcut configuration UI in settings
+- ✅ Implemented mobile swipe gestures (sessions, insights, keyboard dismiss, pull-to-refresh)
+- ✅ Added haptic feedback for primary mobile chat actions
+- ✅ Added animated voice recording waveform to the chat composer
+- ✅ Refactored UploadDialog to use a shared useDocumentUpload hook with deduping and progress handling
+- ✅ Added Vitest coverage for useDocumentUpload and keyboard shortcut hooks
 
 ### Priority Next Steps
 1. **Backend Integration**: Connect settings page handlers to actual API endpoints (export/clear/delete)
-2. **Mobile Experience**: Add swipe gestures with framer-motion
-3. **Testing**: Add unit tests (Vitest) and E2E tests (Playwright)
-4. **Accessibility**: Conduct comprehensive color contrast audit
-5. **Performance**: Add optimistic updates with rollback for mutations
+2. **Testing**: Add unit tests (Vitest) and E2E tests (Playwright)
+3. **Accessibility**: Conduct comprehensive color contrast audit
+4. **Performance**: Add optimistic updates with rollback for mutations
 
 ## Phase 1.3: Settings Page Enhancement (Needs Backend Integration)
 - **Connect settings handlers to actual API endpoints**: The settings page UI is complete, but handlers for export/clear/delete need to be connected to real backend endpoints once they're available.
@@ -53,18 +58,14 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
   - ✅ useKeyboardShortcut and useKeyboardShortcuts hooks enhanced
   - ✅ CommandPalette implemented with cmdk
   - ✅ KeyboardShortcutsHint component shows common shortcuts
-  - TODO: Add configuration UI in settings for customizing shortcuts
-- **2.4 Mobile Experience Improvements** (PARTIALLY COMPLETE):
+  - ✅ Added configuration UI in settings for customizing shortcuts
+- **2.4 Mobile Experience Improvements** (COMPLETE):
   - ✅ Implemented touch targets (44x44px minimum) via globals.css media queries
   - ✅ Added sticky compose bar at bottom on mobile
   - ✅ Auto-scroll to latest message already implemented with useAutoScroll
-  - TODO: Implement swipe gestures with framer-motion:
-    - Right swipe: Open session list
-    - Left swipe: Open insights panel
-    - Down swipe: Close keyboard
-    - Pull down: Refresh
-  - TODO: Add haptic feedback for button presses on mobile (if supported)
-  - TODO: Add visual waveform for voice recording
+  - ✅ Implemented swipe gestures with framer-motion (sessions drawer, insights panel, keyboard dismiss, pull-to-refresh)
+  - ✅ Added haptic feedback for button presses on supported mobile devices
+  - ✅ Added animated voice recording waveform in the chat composer
 
 ## Phase 3: Polish & Quality (Mostly Complete)
 - **3.1 Error Handling** (COMPLETE):
@@ -93,7 +94,7 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 
 ## Testing Requirements (Pending)
 - **Unit Tests (Vitest)**:
-  - Add tests for custom hooks (useChatController, useDocumentUpload, useKeyboardShortcut)
+  - Add tests for custom hooks (useChatController)
   - Add tests for API client functions
   - Add tests for utility functions (shortcuts helpers, format functions)
   - Aim for 70-90% code coverage
@@ -142,25 +143,18 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 
 ### Known Issues / Technical Debt
 - Settings page handlers need backend API endpoints (export, clear, regenerate key)
-- Mobile swipe gestures not yet implemented
-- Visual waveform for voice recording not implemented
-- No tests written yet (unit or E2E)
+- Automated test coverage still missing for complex flows (only basic hooks covered so far)
 - Full color contrast audit needed (WCAG AA standards)
 - Optimistic updates not yet implemented for mutations
 - Documentation needs updating (README, CONTRIBUTING, API docs)
-- Keyboard shortcuts configuration UI not yet added to settings
 
 ### Implementation Strategy Going Forward
 1. **Short-term** (1-2 days):
    - Connect settings page to backend APIs when ready
    - Implement optimistic updates for key mutations
-   - Add configuration UI for keyboard shortcuts in settings
    - Audit toast usage across all async operations
 2. **Medium-term** (1 week):
-   - Implement swipe gestures for mobile with framer-motion
-   - Add visual waveform for voice recording
    - Conduct comprehensive color contrast audit (WCAG AA)
-   - Add haptic feedback for mobile button presses
 3. **Long-term** (ongoing):
    - Write comprehensive unit tests (aim for 70%+ coverage)
    - Add E2E tests for critical user flows

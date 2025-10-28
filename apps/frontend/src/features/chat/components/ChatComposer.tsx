@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +25,8 @@ import {
   Sparkles,
   Volume2,
 } from "lucide-react";
+
+import { useHapticFeedback } from "@/hooks/useHapticFeedback";
 
 interface ChatComposerProps {
   input: string;
@@ -64,6 +67,7 @@ export function ChatComposer({
   onToggleAudio,
   voiceSupported = true,
 }: ChatComposerProps) {
+  const triggerHaptic = useHapticFeedback();
   const languageOptions = useMemo(
     () => ["auto", "en", "es", "fr", "de", "ja"],
     []
@@ -80,6 +84,35 @@ export function ChatComposer({
     }
     return [selectedModel, ...modelPresets];
   }, [selectedModel, modelPresets]);
+
+  const handleToggleTools = () => {
+    triggerHaptic();
+    onToggleTools();
+  };
+
+  const handleToggleAudio = () => {
+    triggerHaptic();
+    onToggleAudio();
+  };
+
+  const handleSend = () => {
+    triggerHaptic([8, 32]);
+    onSendText();
+  };
+
+  const handleMicPress = () => {
+    triggerHaptic(12);
+    if (isRecording) {
+      onStopRecording();
+    } else {
+      onStartRecording();
+    }
+  };
+
+  const handleStopStreaming = () => {
+    triggerHaptic();
+    onStopStreaming();
+  };
 
   return (
     <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl" data-testid="chat-composer">
@@ -116,7 +149,7 @@ export function ChatComposer({
               <Button
                 variant={enableTools ? "default" : "outline"}
                 className="rounded-full"
-                onClick={onToggleTools}
+                onClick={handleToggleTools}
                 data-testid="toggle-tools"
               >
                 <Sparkles className="mr-2 h-4 w-4" />
@@ -137,7 +170,7 @@ export function ChatComposer({
               <Button
                 variant={expectAudio ? "default" : "outline"}
                 className="rounded-full"
-                onClick={onToggleAudio}
+                onClick={handleToggleAudio}
                 data-testid="toggle-audio"
               >
                 <Volume2 className="mr-2 h-4 w-4" />
@@ -182,17 +215,17 @@ export function ChatComposer({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
-                  onClick={() => (isRecording ? onStopRecording() : onStartRecording())}
-                  disabled={isStreaming || !voiceSupported}
-                  data-testid="mic-button"
-                >
-                  {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
+                onClick={handleMicPress}
+                disabled={isStreaming || !voiceSupported}
+                data-testid="mic-button"
+              >
+                {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+              </Button>
               </TooltipTrigger>
               <TooltipContent>
                 <p>{isRecording ? "Stop recording (Cmd+Shift+V)" : "Start voice recording (Cmd+Shift+V)"}</p>
@@ -205,10 +238,13 @@ export function ChatComposer({
                   ? "Recording… release to send."
                   : "Hold to speak."}
             </span>
+            {voiceSupported && (
+              <VoiceWaveform active={isRecording} />
+            )}
           </div>
           <div className="flex items-center gap-2">
             {isStreaming && (
-              <Button variant="ghost" onClick={onStopStreaming} className="rounded-full">
+              <Button variant="ghost" onClick={handleStopStreaming} className="rounded-full">
                 <LogOut className="mr-2 h-4 w-4" />
                 Stop response
               </Button>
@@ -216,7 +252,7 @@ export function ChatComposer({
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
-                  onClick={onSendText}
+                  onClick={handleSend}
                   disabled={!input.trim() || isStreaming}
                   className="rounded-full px-6"
                   data-testid="send"
@@ -241,6 +277,41 @@ export function ChatComposer({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+const WAVEFORM_BARS = Array.from({ length: 8 }, (_, index) => ({
+  id: `wave-${index}`,
+  delay: index * 0.08,
+}));
+
+function VoiceWaveform({ active }: { active: boolean }) {
+  return (
+    <div
+      className="flex h-6 items-end gap-[3px]"
+      aria-hidden={!active}
+    >
+      {WAVEFORM_BARS.map(({ id, delay }) => (
+        <motion.span
+          key={id}
+          initial={{ scaleY: 0.4 }}
+          animate={
+            active
+              ? { scaleY: [0.4, 1.1, 0.7, 1] }
+              : { scaleY: 0.3 }
+          }
+          transition={{
+            repeat: active ? Infinity : 0,
+            repeatType: "loop",
+            duration: 1.4,
+            delay,
+            ease: "easeInOut",
+          }}
+          className="w-1 rounded-full bg-primary/80"
+          style={{ transformOrigin: "center bottom" }}
+        />
+      ))}
     </div>
   );
 }
