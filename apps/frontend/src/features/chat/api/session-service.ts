@@ -82,16 +82,41 @@ export function useRenameSessionMutation() {
   return useMutation({
     mutationFn: ({ sessionId, title }: { sessionId: number; title: string }) =>
       renameSession(sessionId, title),
-    onSuccess: () => {
-      toastSuccess("Session renamed");
-      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
+    onMutate: async ({ sessionId, title }) => {
+      // Cancel any outgoing refetches to avoid overwriting optimistic update
+      await queryClient.cancelQueries({ queryKey: sessionKeys.all });
+
+      // Snapshot the previous value
+      const previousSessions = queryClient.getQueryData<SessionSummary[]>(sessionKeys.all);
+
+      // Optimistically update the session title
+      queryClient.setQueryData<SessionSummary[]>(sessionKeys.all, (old) =>
+        old?.map((session) =>
+          session.id === sessionId ? { ...session, title } : session
+        ) ?? []
+      );
+
+      // Return context with previous data for rollback
+      return { previousSessions };
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
+      // Rollback to previous value on error
+      if (context?.previousSessions) {
+        queryClient.setQueryData(sessionKeys.all, context.previousSessions);
+      }
+
       if (error instanceof ApiError && error.status === 404) {
         toastError("Session not found");
       } else {
         toastError("Failed to rename session");
       }
+    },
+    onSuccess: () => {
+      toastSuccess("Session renamed");
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure server state
+      queryClient.invalidateQueries({ queryKey: sessionKeys.all });
     },
   });
 }
