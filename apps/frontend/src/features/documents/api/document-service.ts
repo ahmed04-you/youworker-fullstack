@@ -37,7 +37,7 @@ export async function fetchDocuments(page = 1, limit = 20, filters?: Record<stri
   return response;
 }
 
-export async function deleteDocument(documentId: string) {
+export async function deleteDocument(documentId: string): Promise<void> {
   return apiDelete(`/v1/documents/${documentId}`);
 }
 
@@ -133,7 +133,7 @@ export function useDeleteDocumentMutation() {
   });
 }
 
-export function useUploadDocumentsMutation(options?: { onSuccess?: () => void }) {
+export function useUploadDocumentsMutation(options?: { onSuccess?: () => void; onError?: () => void }) {
   const queryClient = useQueryClient();
 
   return useMutation<Document[], unknown, File[], DocumentsQuerySnapshot>({
@@ -187,6 +187,7 @@ export function useUploadDocumentsMutation(options?: { onSuccess?: () => void })
       } else {
         toastError("Failed to upload documents");
       }
+      options?.onError?.();
     },
     onSuccess: (data, _variables, context) => {
       const applyResult = (documents: Document[] | undefined) => {

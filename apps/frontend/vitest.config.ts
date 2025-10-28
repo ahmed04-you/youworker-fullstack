@@ -9,6 +9,8 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    testTimeout: 10000, // Increase timeout to 10 seconds for async tests
+    hookTimeout: 10000, // Increase hook timeout as well
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],

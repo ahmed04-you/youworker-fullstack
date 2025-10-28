@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+"use client";
+
+import React, { memo, useCallback, useState } from 'react';
 import { useDocuments, useDeleteDocumentMutation } from '../api/document-service';
 import { Document, DocumentFilters } from '../types';
 import { DocumentCard } from './DocumentCard';
@@ -61,7 +63,7 @@ interface DocumentListProps {
  * @see {@link useDocuments} for data fetching
  * @see {@link useDocumentStore} for global document state
  */
-export function DocumentList({ onDocumentSelect }: DocumentListProps) {
+function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
   const [page, setPage] = useState(1);
   const [uploadOpen, setUploadOpen] = useState(false);
   const { filters, selectedDocuments, clearSelection } = useDocumentStore();
@@ -71,20 +73,20 @@ export function DocumentList({ onDocumentSelect }: DocumentListProps) {
   const documents = data?.documents || [];
   const totalPages = Math.ceil((data?.total || 0) / 20);
 
-  const handleBatchDelete = () => {
+  const handleBatchDelete = useCallback(() => {
     if (selectedDocuments.length === 0) return;
     if (confirm(`Delete ${selectedDocuments.length} document(s)?`)) {
       selectedDocuments.forEach((doc) => deleteMutation.mutate(doc.id));
       clearSelection();
       toastSuccess(`${selectedDocuments.length} documents deleted`);
     }
-  };
+  }, [selectedDocuments, deleteMutation, clearSelection]);
 
-  const handleUploadComplete = () => {
+  const handleUploadComplete = useCallback(() => {
     setUploadOpen(false);
     refetch();
     clearSelection();
-  };
+  }, [refetch, clearSelection]);
 
   if (error) {
     return (
@@ -203,3 +205,7 @@ export function DocumentList({ onDocumentSelect }: DocumentListProps) {
     </div>
   );
 }
+
+DocumentListComponent.displayName = 'DocumentList';
+
+export const DocumentList = memo(DocumentListComponent);

@@ -1,11 +1,12 @@
 import React from 'react';
-import { 
-  PieChart, 
-  Pie, 
-  Cell, 
+import {
+  PieChart,
+  Pie,
+  Cell,
   ResponsiveContainer,
-  Tooltip 
+  Tooltip
 } from 'recharts';
+import { format } from 'date-fns';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { SessionStat } from '../types';
@@ -56,27 +57,37 @@ export function SessionAnalytics({ data, height = 300 }: SessionAnalyticsProps) 
         {/* Pie Chart */}
         <div className="space-y-4">
           <h3 className="text-lg font-semibold">Model Distribution</h3>
-          <AccessibleChart title="Session Model Distribution" description="Pie chart showing distribution of sessions by model">
-            <ResponsiveContainer width="100%" height={height}>
-              <PieChart>
-                <Pie
-                  data={pieData}
-                  cx="50%"
-                  cy="50%"
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                  nameKey="name"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                >
-                  {pieData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [value, 'Sessions']} />
-              </PieChart>
-            </ResponsiveContainer>
-          </AccessibleChart>
+          <AccessibleChart
+            title="Session Model Distribution"
+            description="Pie chart showing distribution of sessions by model"
+            ariaLabel="Pie chart showing the distribution of sessions by model"
+            data={pieData}
+            dataKeys={[
+              { key: 'name', label: 'Model' },
+              { key: 'value', label: 'Sessions' },
+            ]}
+            chart={
+              <ResponsiveContainer width="100%" height={height}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={(props: any) => `${props.name} ${(props.percent * 100).toFixed(0)}%`}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => [value, 'Sessions']} />
+                </PieChart>
+              </ResponsiveContainer>
+            }
+          />
         </div>
 
         {/* Top Sessions Table */}

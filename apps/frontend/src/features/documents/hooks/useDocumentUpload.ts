@@ -126,7 +126,7 @@ export function useDocumentUpload(options: UseDocumentUploadOptions = {}) {
   );
 
   const handleFileSelect = useCallback(
-    (incoming: FileList | File[]) => {
+    (incoming: ArrayLike<File> | File[]) => {
       const next = Array.from(incoming ?? []);
       void acceptFiles(next);
     },

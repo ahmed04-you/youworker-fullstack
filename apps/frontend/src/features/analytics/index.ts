@@ -8,7 +8,5 @@ export * from './components/SessionAnalytics';
 export * from './components/IngestionMetrics';
 export * from './components/DateRangePicker';
 export * from './components/MetricCard';
-export * from './hooks/useAnalyticsData';
-export * from './hooks/useTokenUsage';
-export * from './hooks/useToolMetrics';
+// Note: useAnalyticsData is already exported from './api/analytics-service'
 export * from './utils/chart-formatters';

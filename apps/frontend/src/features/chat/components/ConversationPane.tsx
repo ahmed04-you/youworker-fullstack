@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, PanInfo } from "framer-motion";
 import { ArrowDown, Loader2 } from "lucide-react";
 
@@ -38,7 +38,7 @@ interface ConversationPaneProps {
   onRefreshRequest?: () => void | Promise<void>;
 }
 
-export function ConversationPane({
+function ConversationPaneComponent({
   messages,
   isStreaming,
   isRecording,
@@ -229,3 +229,7 @@ export function ConversationPane({
     </motion.div>
   );
 }
+
+ConversationPaneComponent.displayName = "ConversationPane";
+
+export const ConversationPane = memo(ConversationPaneComponent);

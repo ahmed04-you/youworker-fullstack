@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, waitFor } from '@testing-library/react';
+import { act } from 'react';
 import { useHapticFeedback } from './useHapticFeedback';
 
 describe('useHapticFeedback', () => {
@@ -32,12 +33,14 @@ describe('useHapticFeedback', () => {
   });
 
   describe('Feature Detection', () => {
-    it('should return a function', () => {
+    it('should return a function', async () => {
       const { result } = renderHook(() => useHapticFeedback());
-      expect(typeof result.current).toBe('function');
+      await waitFor(() => {
+        expect(typeof result.current).toBe('function');
+      });
     });
 
-    it('should support haptic feedback on touch devices without reduced motion', () => {
+    it('should support haptic feedback on touch devices without reduced motion', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: true };
@@ -49,13 +52,15 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(true);
-      expect(navigatorSpy).toHaveBeenCalled();
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(true);
+        expect(navigatorSpy).toHaveBeenCalled();
+      });
     });
 
-    it('should not trigger haptic on non-touch devices', () => {
+    it('should not trigger haptic on non-touch devices', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: false };
@@ -64,13 +69,15 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(false);
-      expect(navigatorSpy).not.toHaveBeenCalled();
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+        expect(navigatorSpy).not.toHaveBeenCalled();
+      });
     });
 
-    it('should respect prefers-reduced-motion', () => {
+    it('should respect prefers-reduced-motion', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: true };
@@ -82,13 +89,15 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(false);
-      expect(navigatorSpy).not.toHaveBeenCalled();
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+        expect(navigatorSpy).not.toHaveBeenCalled();
+      });
     });
 
-    it('should handle missing vibrate API', () => {
+    it('should handle missing vibrate API', async () => {
       // Remove vibrate from navigator
       Object.defineProperty(navigator, 'vibrate', {
         writable: true,
@@ -103,9 +112,11 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(false);
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+      });
     });
   });
 
@@ -119,59 +130,76 @@ describe('useHapticFeedback', () => {
       });
     });
 
-    it('should use default pattern when none provided', () => {
+    it('should use default pattern when none provided', async () => {
       const { result } = renderHook(() => useHapticFeedback());
-      result.current();
 
-      expect(navigatorSpy).toHaveBeenCalledWith(10);
+      await waitFor(() => {
+        result.current();
+        expect(navigatorSpy).toHaveBeenCalledWith(10);
+      });
     });
 
-    it('should use custom pattern from options', () => {
+    it('should use custom pattern from options', async () => {
       const { result } = renderHook(() => useHapticFeedback({ pattern: 50 }));
-      result.current();
 
-      expect(navigatorSpy).toHaveBeenCalledWith(50);
+      await waitFor(() => {
+        result.current();
+        expect(navigatorSpy).toHaveBeenCalledWith(50);
+      });
     });
 
-    it('should accept array pattern', () => {
+    it('should accept array pattern', async () => {
       const { result } = renderHook(() => useHapticFeedback({ pattern: [10, 50, 10] }));
-      result.current();
 
-      expect(navigatorSpy).toHaveBeenCalledWith([10, 50, 10]);
+      await waitFor(() => {
+        result.current();
+        expect(navigatorSpy).toHaveBeenCalledWith([10, 50, 10]);
+      });
     });
 
-    it('should allow custom pattern override at call time', () => {
+    it('should allow custom pattern override at call time', async () => {
       const { result } = renderHook(() => useHapticFeedback({ pattern: 10 }));
-      result.current(100);
 
-      expect(navigatorSpy).toHaveBeenCalledWith(100);
+      await waitFor(() => {
+        result.current(100);
+        expect(navigatorSpy).toHaveBeenCalledWith(100);
+      });
     });
 
-    it('should allow custom array pattern override at call time', () => {
+    it('should allow custom array pattern override at call time', async () => {
       const { result } = renderHook(() => useHapticFeedback({ pattern: 10 }));
-      result.current([20, 40, 20]);
 
-      expect(navigatorSpy).toHaveBeenCalledWith([20, 40, 20]);
+      await waitFor(() => {
+        result.current([20, 40, 20]);
+        expect(navigatorSpy).toHaveBeenCalledWith([20, 40, 20]);
+      });
     });
 
-    it('should update pattern when options change', () => {
+    it('should update pattern when options change', async () => {
       const { result, rerender } = renderHook(
         ({ pattern }) => useHapticFeedback({ pattern }),
         { initialProps: { pattern: 10 } }
       );
 
-      result.current();
-      expect(navigatorSpy).toHaveBeenCalledWith(10);
+      await waitFor(() => {
+        result.current();
+        expect(navigatorSpy).toHaveBeenCalledWith(10);
+      });
 
       // Update pattern
-      rerender({ pattern: 50 });
-      result.current();
-      expect(navigatorSpy).toHaveBeenCalledWith(50);
+      act(() => {
+        rerender({ pattern: 50 });
+      });
+
+      await waitFor(() => {
+        result.current();
+        expect(navigatorSpy).toHaveBeenCalledWith(50);
+      });
     });
   });
 
   describe('Enabled/Disabled State', () => {
-    it('should be enabled by default', () => {
+    it('should be enabled by default', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: true };
@@ -180,13 +208,15 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(true);
-      expect(navigatorSpy).toHaveBeenCalled();
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(true);
+        expect(navigatorSpy).toHaveBeenCalled();
+      });
     });
 
-    it('should not trigger when disabled', () => {
+    it('should not trigger when disabled', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: true };
@@ -195,13 +225,15 @@ describe('useHapticFeedback', () => {
       });
 
       const { result } = renderHook(() => useHapticFeedback({ enabled: false }));
-      const success = result.current();
 
-      expect(success).toBe(false);
-      expect(navigatorSpy).not.toHaveBeenCalled();
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+        expect(navigatorSpy).not.toHaveBeenCalled();
+      });
     });
 
-    it('should update support when enabled changes', () => {
+    it('should update support when enabled changes', async () => {
       matchMediaSpy.mockImplementation((query: string) => {
         if (query === '(pointer: coarse)') {
           return { matches: true };
@@ -215,14 +247,21 @@ describe('useHapticFeedback', () => {
       );
 
       // Initially disabled
-      let success = result.current();
-      expect(success).toBe(false);
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+      });
 
       // Enable it
-      rerender({ enabled: true });
-      success = result.current();
-      expect(success).toBe(true);
-      expect(navigatorSpy).toHaveBeenCalled();
+      act(() => {
+        rerender({ enabled: true });
+      });
+
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(true);
+        expect(navigatorSpy).toHaveBeenCalled();
+      });
     });
   });
 
@@ -236,24 +275,28 @@ describe('useHapticFeedback', () => {
       });
     });
 
-    it('should handle vibrate API errors gracefully', () => {
+    it('should handle vibrate API errors gracefully', async () => {
       navigatorSpy.mockImplementation(() => {
         throw new Error('Vibrate failed');
       });
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(false);
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+      });
     });
 
-    it('should return false when vibrate returns false', () => {
+    it('should return false when vibrate returns false', async () => {
       navigatorSpy.mockImplementation(() => false);
 
       const { result } = renderHook(() => useHapticFeedback());
-      const success = result.current();
 
-      expect(success).toBe(false);
+      await waitFor(() => {
+        const success = result.current();
+        expect(success).toBe(false);
+      });
     });
   });
 
@@ -267,17 +310,19 @@ describe('useHapticFeedback', () => {
       });
     });
 
-    it('should allow multiple haptic triggers', () => {
+    it('should allow multiple haptic triggers', async () => {
       const { result } = renderHook(() => useHapticFeedback({ pattern: 10 }));
 
-      result.current();
-      result.current(20);
-      result.current([10, 20, 10]);
+      await waitFor(() => {
+        result.current();
+        result.current(20);
+        result.current([10, 20, 10]);
 
-      expect(navigatorSpy).toHaveBeenCalledTimes(3);
-      expect(navigatorSpy).toHaveBeenNthCalledWith(1, 10);
-      expect(navigatorSpy).toHaveBeenNthCalledWith(2, 20);
-      expect(navigatorSpy).toHaveBeenNthCalledWith(3, [10, 20, 10]);
+        expect(navigatorSpy).toHaveBeenCalledTimes(3);
+        expect(navigatorSpy).toHaveBeenNthCalledWith(1, 10);
+        expect(navigatorSpy).toHaveBeenNthCalledWith(2, 20);
+        expect(navigatorSpy).toHaveBeenNthCalledWith(3, [10, 20, 10]);
+      });
     });
   });
 
@@ -291,24 +336,32 @@ describe('useHapticFeedback', () => {
       });
     });
 
-    it('should return stable function reference', () => {
+    it('should return stable function reference', async () => {
       const { result, rerender } = renderHook(() => useHapticFeedback({ pattern: 10 }));
 
       const firstRef = result.current;
-      rerender();
+
+      await act(async () => {
+        rerender();
+      });
+
       const secondRef = result.current;
 
       expect(firstRef).toBe(secondRef);
     });
 
-    it('should maintain stable reference even when pattern changes', () => {
+    it('should maintain stable reference even when pattern changes', async () => {
       const { result, rerender } = renderHook(
         ({ pattern }) => useHapticFeedback({ pattern }),
         { initialProps: { pattern: 10 } }
       );
 
       const firstRef = result.current;
-      rerender({ pattern: 50 });
+
+      await act(async () => {
+        rerender({ pattern: 50 });
+      });
+
       const secondRef = result.current;
 
       // Function reference should be stable (useCallback)

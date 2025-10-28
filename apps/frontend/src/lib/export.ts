@@ -4,10 +4,10 @@ export function exportToCSV(data: any, filename: string) {
   const headers = Object.keys(data);
   const csvContent = [
     headers.join(','),
-    ...Object.values(data).map(row => 
-      Object.values(row).map(value => 
-        typeof value === 'string' && value.includes(',') 
-          ? `"${value}"` 
+    ...Object.values(data).map((row: any) =>
+      Object.values(row as Record<string, any>).map(value =>
+        typeof value === 'string' && value.includes(',')
+          ? `"${value}"`
           : value
       ).join(',')
     )

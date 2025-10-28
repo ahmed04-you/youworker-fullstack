@@ -103,6 +103,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
               toastInfo("Preview not implemented yet");
             }}
             title="Preview"
+            aria-label={`Preview ${document.name}`}
           >
             <Eye className="h-4 w-4" />
           </Button>
@@ -115,6 +116,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
               toastInfo("Download not implemented yet");
             }}
             title="Download"
+            aria-label={`Download ${document.name}`}
           >
             <Download className="h-4 w-4" />
           </Button>
@@ -123,6 +125,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
             size="sm"
             onClick={handleDelete}
             title="Delete"
+            aria-label={`Delete ${document.name}`}
             className="text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
@@ -147,6 +150,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
             variant="ghost"
             size="sm"
             onClick={handleSelect}
+            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${document.name}`}
             className={`h-6 w-6 p-0 ${isSelected ? 'bg-primary text-primary-foreground' : ''}`}
           >
             <input
@@ -154,6 +158,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
               checked={isSelected}
               onChange={() => {}}
               className="sr-only"
+              aria-hidden="true"
             />
             <div className={`h-3 w-3 rounded transition-colors ${isSelected ? 'bg-white' : 'bg-transparent border-2 border-muted-foreground'}`} />
           </Button>

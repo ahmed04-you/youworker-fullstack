@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ interface HelpModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
-export function HelpModal({ open, onOpenChange }: HelpModalProps) {
+function HelpModalComponent({ open, onOpenChange }: HelpModalProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const { settings } = useSettings();
 
@@ -50,25 +50,37 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
     },
   ];
 
-  const filteredFAQ = faqItems.filter(item =>
-    item.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.answer.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredFAQ = useMemo(
+    () =>
+      faqItems.filter(
+        (item) =>
+          item.question.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          item.answer.toLowerCase().includes(searchTerm.toLowerCase())
+      ),
+    [searchTerm]
   );
 
   // Get all shortcuts from shortcuts.ts and filter them
-  const shortcutCategories = getShortcutsByCategory();
-  const allShortcuts = shortcutCategories.flatMap(cat =>
-    cat.shortcuts.map(s => ({
-      key: formatShortcutKey(s.key),
-      action: s.action,
-      description: s.description,
-    }))
-  );
+  const allShortcuts = useMemo(() => {
+    const shortcutCategories = getShortcutsByCategory();
+    return shortcutCategories.flatMap((cat) =>
+      cat.shortcuts.map((s) => ({
+        key: formatShortcutKey(s.key),
+        action: s.action,
+        description: s.description,
+      }))
+    );
+  }, []);
 
-  const filteredShortcuts = allShortcuts.filter(shortcut =>
-    shortcut.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    shortcut.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    shortcut.key.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredShortcuts = useMemo(
+    () =>
+      allShortcuts.filter(
+        (shortcut) =>
+          shortcut.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          shortcut.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          shortcut.key.toLowerCase().includes(searchTerm.toLowerCase())
+      ),
+    [allShortcuts, searchTerm]
   );
 
   return (
@@ -180,3 +192,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
     </Dialog>
   );
 }
+
+HelpModalComponent.displayName = 'HelpModal';
+
+export const HelpModal = memo(HelpModalComponent);

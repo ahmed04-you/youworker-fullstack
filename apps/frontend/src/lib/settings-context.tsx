@@ -88,7 +88,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     // Connection status - simple ping
     const checkConnection = async () => {
       try {
-        const response = await fetch('/api/health', { method: 'HEAD' });
+        const response = await fetch('/api/health', { method: 'GET' });
         setIsConnected(response.ok);
       } catch {
         setIsConnected(false);

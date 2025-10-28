@@ -4,8 +4,7 @@ export * from './components/DocumentList';
 export * from './components/DocumentCard';
 export * from './components/UploadDialog';
 export * from './components/IngestionHistory';
-export * from './components/DocumentFilters';
-export * from './hooks/useDocuments';
+// Note: DocumentFilters component is not exported to avoid conflict with DocumentFilters type
+export { DocumentFilters as DocumentFiltersComponent } from './components/DocumentFilters';
 export * from './hooks/useDocumentUpload';
-export * from './hooks/useIngestionRuns';
 export * from './store/document-store';

@@ -37,19 +37,22 @@ export const fileValidationSchema = z.object({
     ),
 });
 
+// FileList polyfill for SSR
+const FileListConstructor = typeof FileList !== 'undefined' ? FileList : class FileList {};
+
 export const multipleFilesValidationSchema = z.object({
   files: z
-    .instanceof(FileList)
-    .refine((files) => files.length > 0, {
+    .instanceof(FileListConstructor as any)
+    .refine((files: any) => files.length > 0, {
       message: "At least one file is required",
     })
-    .refine((files) => files.length <= 50, {
+    .refine((files: any) => files.length <= 50, {
       message: "Maximum 50 files allowed",
     })
-    .transform((files) => Array.from(files))
+    .transform((files: any) => Array.from(files) as File[])
     .refine(
-      (files) =>
-        files.every((file) => file.size <= 100 * 1024 * 1024),
+      (files: any) =>
+        files.every((file: File) => file.size <= 100 * 1024 * 1024),
       {
         message: "Each file must be less than 100MB",
       }

@@ -13,78 +13,9 @@ interface IngestionHistoryProps {
   limit?: number;
 }
 
-const columns = [
-  {
-    accessorKey: 'id',
-    header: 'ID',
-    cell: ({ row }: { row: { original: IngestionRun } }) => (
-      <span className="font-mono text-xs text-muted-foreground">{row.original.id.slice(-8)}</span>
-    ),
-  },
-  {
-    accessorKey: 'status',
-    header: 'Status',
-    cell: ({ row }: { row: { original: IngestionRun } }) => {
-      const status = row.original.status;
-      return (
-        <Badge variant={status === 'failed' ? 'destructive' : status === 'completed' ? 'default' : 'secondary'}>
-          {status}
-        </Badge>
-      );
-    },
-  },
-  {
-    accessorKey: 'filesProcessed',
-    header: 'Files',
-    cell: ({ row }: { row: { original: IngestionRun } }) => row.original.filesProcessed,
-  },
-  {
-    accessorKey: 'chunksWritten',
-    header: 'Chunks',
-    cell: ({ row }: { row: { original: IngestionRun } }) => row.original.chunksWritten,
-  },
-  {
-    accessorKey: 'startedAt',
-    header: 'Started',
-    cell: ({ row }: { row: { original: IngestionRun } }) => format(new Date(row.original.startedAt), 'PPPp'),
-  },
-  {
-    accessorKey: 'completedAt',
-    header: 'Completed',
-    cell: ({ row }: { row: { original: IngestionRun } }) =>
-      row.original.completedAt ? format(new Date(row.original.completedAt), 'PPPp') : 'Ongoing',
-  },
-  {
-    accessorKey: 'errors',
-    header: 'Errors',
-    cell: ({ row }: { row: { original: IngestionRun } }) => (
-      <span className="text-xs">{row.original.errors.length} errors</span>
-    ),
-  },
-  {
-    id: 'actions',
-    cell: ({ row }: { row: { original: IngestionRun } }) => {
-      const deleteMutation = useDeleteIngestionRunMutation();
-      return (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            if (confirm(`Delete ingestion run ${row.original.id}?`)) {
-              deleteMutation.mutate(row.original.id);
-            }
-          }}
-          className="h-6 w-6 p-0"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      );
-    },
-  },
-];
-
 export function IngestionHistory({ limit = 10 }: IngestionHistoryProps) {
   const { data: runs = [], isLoading, error } = useIngestionRuns(limit);
+  const deleteMutation = useDeleteIngestionRunMutation();
 
   if (error) {
     return (
@@ -119,7 +50,65 @@ export function IngestionHistory({ limit = 10 }: IngestionHistoryProps) {
         <h3 className="text-lg font-semibold">Ingestion History</h3>
         <Badge variant="secondary">{runs.length} runs</Badge>
       </div>
-      <DataTable columns={columns} data={runs} />
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Files</TableHead>
+              <TableHead>Chunks</TableHead>
+              <TableHead>Started</TableHead>
+              <TableHead>Completed</TableHead>
+              <TableHead>Errors</TableHead>
+              <TableHead className="w-[50px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {runs.map((run) => (
+              <TableRow key={run.id}>
+                <TableCell>
+                  <span className="font-mono text-xs text-muted-foreground">{run.id.slice(-8)}</span>
+                </TableCell>
+                <TableCell>
+                  <Badge variant={run.status === 'failed' ? 'destructive' : run.status === 'completed' ? 'default' : 'secondary'}>
+                    {run.status}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {run.filesProcessed}
+                </TableCell>
+                <TableCell>
+                  {run.chunksWritten}
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs">{format(new Date(run.startedAt), 'PPPp')}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs">{run.completedAt ? format(new Date(run.completedAt), 'PPPp') : 'Ongoing'}</span>
+                </TableCell>
+                <TableCell>
+                  <span className="text-xs">{run.errors.length} errors</span>
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      if (confirm(`Delete ingestion run ${run.id}?`)) {
+                        deleteMutation.mutate(run.id);
+                      }
+                    }}
+                    className="h-6 w-6 p-0"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
       {runs.some((run) => run.errors.length > 0) && (
         <div className="text-xs text-destructive mt-2">
           Some runs have errors. Check individual run details for more information.

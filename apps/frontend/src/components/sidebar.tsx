@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, Home, FileText, Clock, BarChart3, Settings, LogOut, User } from "lucide-react";
@@ -21,10 +21,13 @@ export function Sidebar() {
     await logout();
   };
 
-  const navLinkClass = (href: string) =>
-    `flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors ${
-      pathname === href ? "bg-accent text-accent-foreground" : ""
-    }`;
+  const navLinkClass = useCallback(
+    (href: string) =>
+      `flex items-center gap-2 p-2 rounded-md hover:bg-accent transition-colors ${
+        pathname === href ? "bg-accent text-accent-foreground" : ""
+      }`,
+    [pathname]
+  );
 
   return (
     <>

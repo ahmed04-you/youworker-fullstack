@@ -29,7 +29,7 @@ export async function fetchTokenUsage(dateRange?: DateRange): Promise<TokenUsage
     start: dateRange.start.toISOString(), 
     end: dateRange.end.toISOString() 
   } : {};
-  const response = await apiGet<TokenUsage[]>('/v1/analytics/tokens', { query: params });
+  const response = await apiGet<TokenUsage[]>('/v1/analytics/tokens-timeline', { query: params });
   return response;
 }
 
@@ -38,7 +38,7 @@ export async function fetchToolMetrics(dateRange?: DateRange): Promise<ToolMetri
     start: dateRange.start.toISOString(), 
     end: dateRange.end.toISOString() 
   } : {};
-  const response = await apiGet<ToolMetric[]>('/v1/analytics/tools', { query: params });
+  const response = await apiGet<ToolMetric[]>('/v1/analytics/tool-performance', { query: params });
   return response;
 }
 
@@ -47,7 +47,7 @@ export async function fetchSessionStats(dateRange?: DateRange): Promise<SessionS
     start: dateRange.start.toISOString(), 
     end: dateRange.end.toISOString() 
   } : {};
-  const response = await apiGet<SessionStat[]>('/v1/analytics/sessions', { query: params });
+  const response = await apiGet<SessionStat[]>('/v1/analytics/session-activity', { query: params });
   return response;
 }
 
@@ -56,7 +56,7 @@ export async function fetchIngestionMetrics(dateRange?: DateRange): Promise<Inge
     start: dateRange.start.toISOString(), 
     end: dateRange.end.toISOString() 
   } : {};
-  const response = await apiGet<IngestionMetric[]>('/v1/analytics/ingestion', { query: params });
+  const response = await apiGet<IngestionMetric[]>('/v1/analytics/ingestion-stats', { query: params });
   return response;
 }
 

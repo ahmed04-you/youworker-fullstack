@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -19,52 +19,71 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
   const [startDate, setStartDate] = useState<Date | undefined>(filters.dateRange?.start);
   const [endDate, setEndDate] = useState<Date | undefined>(filters.dateRange?.end);
 
-  const handleSearchChange = (value: string) => {
-    const newFilters = { ...filters, search: value || undefined };
-    setFilters(newFilters);
-    onFiltersChange?.(newFilters);
-  };
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      const newFilters = { ...filters, search: value || undefined };
+      setFilters(newFilters);
+      onFiltersChange?.(newFilters);
+    },
+    [filters, setFilters, onFiltersChange]
+  );
 
-  const handleTypeChange = (value: string) => {
-    const newFilters = { ...filters, fileType: value || undefined };
-    setFilters(newFilters);
-    onFiltersChange?.(newFilters);
-  };
+  const handleTypeChange = useCallback(
+    (value: string) => {
+      const newFilters = { ...filters, fileType: value || undefined };
+      setFilters(newFilters);
+      onFiltersChange?.(newFilters);
+    },
+    [filters, setFilters, onFiltersChange]
+  );
 
-  const handleSourceChange = (value: string) => {
-    const newFilters = { ...filters, source: value as any || undefined };
-    setFilters(newFilters);
-    onFiltersChange?.(newFilters);
-  };
+  const handleSourceChange = useCallback(
+    (value: string) => {
+      const newFilters = { ...filters, source: value as any || undefined };
+      setFilters(newFilters);
+      onFiltersChange?.(newFilters);
+    },
+    [filters, setFilters, onFiltersChange]
+  );
 
-  const handleStatusChange = (value: string) => {
-    const newFilters = { ...filters, status: value as any || undefined };
-    setFilters(newFilters);
-    onFiltersChange?.(newFilters);
-  };
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      const newFilters = { ...filters, status: value as any || undefined };
+      setFilters(newFilters);
+      onFiltersChange?.(newFilters);
+    },
+    [filters, setFilters, onFiltersChange]
+  );
 
-  const updateDateRange = () => {
+  const updateDateRange = useCallback(() => {
     const newDateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
     const newFilters = { ...filters, dateRange: newDateRange };
     setFilters(newFilters);
     onFiltersChange?.(newFilters);
-  };
+  }, [startDate, endDate, filters, setFilters, onFiltersChange]);
 
-  const handleStartChange = (value: string) => {
-    setStartDate(value ? new Date(value) : undefined);
-    updateDateRange();
-  };
+  const handleStartChange = useCallback(
+    (value: string) => {
+      setStartDate(value ? new Date(value) : undefined);
+      updateDateRange();
+    },
+    [updateDateRange]
+  );
 
-  const handleEndChange = (value: string) => {
-    setEndDate(value ? new Date(value) : undefined);
-    updateDateRange();
-  };
+  const handleEndChange = useCallback(
+    (value: string) => {
+      setEndDate(value ? new Date(value) : undefined);
+      updateDateRange();
+    },
+    [updateDateRange]
+  );
 
-  const handleReset = () => {
+  const handleReset = useCallback(() => {
     resetFilters();
-    setDateRange(undefined);
+    setStartDate(undefined);
+    setEndDate(undefined);
     onFiltersChange?.({});
-  };
+  }, [resetFilters, onFiltersChange]);
 
   return (
     <div className="flex flex-col sm:flex-row gap-2 items-end">
@@ -121,6 +140,7 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
         <Input
           type="date"
           placeholder="Start Date"
+          aria-label="Start date"
           value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
           onChange={(e) => handleStartChange(e.target.value)}
           className="w-[120px]"
@@ -128,6 +148,7 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
         <Input
           type="date"
           placeholder="End Date"
+          aria-label="End date"
           value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
           onChange={(e) => handleEndChange(e.target.value)}
           className="w-[120px]"
@@ -137,13 +158,10 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => {
-            handleReset();
-            setStartDate(undefined);
-            setEndDate(undefined);
-          }}
+          onClick={handleReset}
           className="h-9 px-2"
           title="Reset filters"
+          aria-label="Reset filters"
         >
           <X className="h-4 w-4" />
         </Button>

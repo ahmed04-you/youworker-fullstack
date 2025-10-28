@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
@@ -31,7 +32,7 @@ interface ModelSelectorProps {
   className?: string;
 }
 
-export function ModelSelector({
+function ModelSelectorComponent({
   models,
   value,
   onValueChange,
@@ -45,7 +46,7 @@ export function ModelSelector({
     <Tooltip>
       <TooltipTrigger asChild>
         <div>
-          <Select value={value} onValueChange={onValueChange}>
+          <Select value={value} onValueChange={onValueChange} aria-label="Select AI model">
             <SelectTrigger className={cn("w-[200px]", className)}>
               <SelectValue placeholder={placeholder} />
             </SelectTrigger>
@@ -76,3 +77,7 @@ export function ModelSelector({
     </Tooltip>
   );
 }
+
+ModelSelectorComponent.displayName = 'ModelSelector';
+
+export const ModelSelector = memo(ModelSelectorComponent);

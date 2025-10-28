@@ -3,7 +3,7 @@
  */
 "use client";
 
-import { useState, useEffect } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Command } from 'cmdk';
 import {
@@ -40,7 +40,7 @@ interface CommandPaletteProps {
  * const [open, setOpen] = useState(false);
  * <CommandPalette open={open} onOpenChange={setOpen} />
  */
-export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
+function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
 
@@ -48,13 +48,21 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
   const { data: documentsData } = useDocuments();
 
   // Filter results based on search
-  const filteredSessions = sessions?.filter((s) =>
-    s.title?.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 5) || [];
+  const filteredSessions = useMemo(
+    () =>
+      sessions
+        ?.filter((s) => s.title?.toLowerCase().includes(search.toLowerCase()))
+        .slice(0, 5) || [],
+    [sessions, search]
+  );
 
-  const filteredDocuments = documentsData?.documents?.filter((d) =>
-    d.name?.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 5) || [];
+  const filteredDocuments = useMemo(
+    () =>
+      documentsData?.documents
+        ?.filter((d) => d.name?.toLowerCase().includes(search.toLowerCase()))
+        .slice(0, 5) || [],
+    [documentsData, search]
+  );
 
   // Reset search when dialog closes
   useEffect(() => {
@@ -63,10 +71,13 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     }
   }, [open]);
 
-  const runCommand = (command: () => void) => {
-    onOpenChange(false);
-    command();
-  };
+  const runCommand = useCallback(
+    (command: () => void) => {
+      onOpenChange(false);
+      command();
+    },
+    [onOpenChange]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -78,6 +89,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
               value={search}
               onValueChange={setSearch}
               placeholder="Search sessions, documents, or navigate..."
+              aria-label="Search commands, sessions, and documents"
               className="flex h-11 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
@@ -180,6 +192,10 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
     </Dialog>
   );
 }
+
+CommandPaletteComponent.displayName = 'CommandPalette';
+
+export const CommandPalette = memo(CommandPaletteComponent);
 
 /**
  * Hook to control command palette from anywhere

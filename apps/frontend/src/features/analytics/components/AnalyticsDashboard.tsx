@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Download } from 'lucide-react';
@@ -57,7 +57,7 @@ type PresetRange = typeof PRESET_RANGES[number]['value'];
  * @see {@link useAnalyticsData} for data fetching logic
  * @see {@link DateRangePicker} for custom date selection
  */
-export function AnalyticsDashboard() {
+function AnalyticsDashboardComponent() {
   const [pickerDateRange, setPickerDateRange] = useState<DayPickerDateRange | undefined>(undefined);
   const [preset, setPreset] = useState<PresetRange>('week');
 
@@ -69,7 +69,7 @@ export function AnalyticsDashboard() {
   const { overview, tokens, tools, sessions, ingestion, isLoading, error, refetch } = useAnalyticsData(dateRange);
   const refresh = useRefreshAnalytics();
 
-  const handlePresetChange = (newPreset: PresetRange) => {
+  const handlePresetChange = useCallback((newPreset: PresetRange) => {
     setPreset(newPreset);
     let newRange: DayPickerDateRange | undefined;
     const now = new Date();
@@ -100,9 +100,9 @@ export function AnalyticsDashboard() {
     }
 
     setPickerDateRange(newRange);
-  };
+  }, []);
 
-  const handleExport = (format: 'csv' | 'json') => {
+  const handleExport = useCallback((format: 'csv' | 'json') => {
     if (!overview) {
       toastError("No data to export");
       return;
@@ -132,7 +132,7 @@ export function AnalyticsDashboard() {
     }
 
     toastSuccess(`Analytics exported as ${format.toUpperCase()}`);
-  };
+  }, [overview, tokens, tools, sessions, ingestion, dateRange]);
 
   if (error) {
     return (
@@ -215,3 +215,7 @@ export function AnalyticsDashboard() {
     </div>
   );
 }
+
+AnalyticsDashboardComponent.displayName = 'AnalyticsDashboard';
+
+export const AnalyticsDashboard = memo(AnalyticsDashboardComponent);

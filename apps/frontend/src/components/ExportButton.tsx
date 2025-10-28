@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { Download, FileJson, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,7 +23,7 @@ interface ExportButtonProps {
   className?: string;
 }
 
-export function ExportButton({
+function ExportButtonComponent({
   data,
   filename = "export",
   formats = ["json", "csv", "txt"],
@@ -31,7 +31,18 @@ export function ExportButton({
 }: ExportButtonProps) {
   const [isExporting, setIsExporting] = useState(false);
 
-  const exportAsJson = async () => {
+  const downloadFile = useCallback((blob: Blob, name: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, []);
+
+  const exportAsJson = useCallback(async () => {
     setIsExporting(true);
     try {
       const jsonString = JSON.stringify(data, null, 2);
@@ -44,9 +55,9 @@ export function ExportButton({
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [data, filename, downloadFile]);
 
-  const exportAsCsv = async () => {
+  const exportAsCsv = useCallback(async () => {
     setIsExporting(true);
     try {
       const csv = convertToCSV(data);
@@ -59,9 +70,9 @@ export function ExportButton({
     } finally {
       setIsExporting(false);
     }
-  };
+  }, [data, filename, downloadFile]);
 
-  const exportAsText = async () => {
+  const exportAsText = useCallback(async () => {
     setIsExporting(true);
     try {
       const text = convertToText(data);
@@ -74,18 +85,7 @@ export function ExportButton({
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const downloadFile = (blob: Blob, name: string) => {
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-  };
+  }, [data, filename, downloadFile]);
 
   return (
     <DropdownMenu>
@@ -131,6 +131,10 @@ export function ExportButton({
     </DropdownMenu>
   );
 }
+
+ExportButtonComponent.displayName = 'ExportButton';
+
+export const ExportButton = memo(ExportButtonComponent);
 
 function convertToCSV(data: any): string {
   if (Array.isArray(data)) {

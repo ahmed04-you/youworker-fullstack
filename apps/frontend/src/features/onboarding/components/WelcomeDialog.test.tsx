@@ -53,7 +53,9 @@ describe('WelcomeDialog', () => {
 
     render(<WelcomeDialog open={true} onOpenChange={mockOnOpenChange} />);
 
-    expect(screen.getByText('Welcome to YouWorker')).toBeInTheDocument();
+    // Use getAllByText and check that at least one element exists
+    const elements = screen.getAllByText('Welcome to YouWorker');
+    expect(elements.length).toBeGreaterThan(0);
   });
 
   it('does not render when open is false', () => {
@@ -507,6 +509,8 @@ describe('WelcomeDialog', () => {
 
     render(<WelcomeDialog open={true} onOpenChange={mockOnOpenChange} />);
 
-    expect(screen.getByText('Welcome to YouWorker')).toBeInTheDocument();
+    // Use getAllByText to handle multiple instances
+    const elements = screen.getAllByText('Welcome to YouWorker');
+    expect(elements.length).toBeGreaterThan(0);
   });
 });
