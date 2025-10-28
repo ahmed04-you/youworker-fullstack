@@ -11,7 +11,7 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
   - analytics.spec.ts: Tests for dashboard display, date range filtering, data export (CSV/JSON), preset ranges, error handling, mobile responsiveness
   - onboarding.spec.ts: Tests for welcome dialog, resume tour, step navigation, localStorage persistence, accessibility, dismissal behavior
   - keyboard-shortcuts.spec.ts: Tests for navigation shortcuts (Cmd+N, Cmd+K, Cmd+B, Cmd+D), chat shortcuts, command palette, ESC handling, platform-specific modifiers
-- ✅ **Unit Tests Created**:
+- ✅ **Unit Tests Created (Session 1)**:
   - ChatComposer.test.tsx: Tests for input handling, send button states, streaming state, recording state, tool/audio toggles, model selector, keyboard shortcuts
   - SessionSidebar.test.tsx: Tests for rendering, new session, refresh, session list, active state, rename/delete dialogs, loading states, empty state, Knowledge Hub
   - DocumentList.test.tsx: Tests for rendering documents, loading states, error handling, empty state, pagination, selection, batch delete, upload dialog, filters
@@ -28,6 +28,10 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
   - **NEW: MarkdownRenderer.test.tsx** (28 tests): Tests for markdown rendering, code syntax highlighting, copy button, links, images, lists, tables, GFM features, theme-aware styling
   - **NEW: RenameSessionDialog.test.tsx** (20 tests): Tests for form submission, validation, loading states, cancel, title reset, error handling, disabled states
   - **NEW: DeleteConfirmDialog.test.tsx** (19 tests): Tests for confirm/cancel, loading states, custom text, async handling, error handling, button styling
+- ✅ **Unit Tests Created (Session 2 - Latest)**:
+  - **NEW: login-dialog.test.tsx** (19 tests): Tests for authentication dialog, form submission, error handling, loading states, input validation, security features, accessibility
+  - **NEW: WelcomeDialog.test.tsx** (22 tests): Tests for step navigation, progress bar, skip functionality, finish button, back/next buttons, state transitions, animations, accessibility
+  - **NEW: UploadDialog.test.tsx** (32 tests): Tests for file selection, drag and drop, file list rendering, upload progress, validation, multiple files, loading states, accessibility
 - ✅ **Color Contrast Improvements**: Applied WCAG AA compliance fixes
   - Darkened muted-foreground in light mode from 46.9% to 40% lightness (meets 4.5:1 ratio)
   - Improved border contrast in light mode from 91.4% to 78% lightness
@@ -80,11 +84,12 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
    - Capture screenshots of main features (chat, documents, analytics, settings)
    - Add mobile screenshots showing responsive design
    - Include dark mode variants
-2. **Testing Coverage**: Continue expanding unit test coverage (current: ~75%, aim for 80%+)
+2. **Testing Coverage**: Continue expanding unit test coverage (current: ~78%, aim for 80%+)
    - ✅ **DONE**: Added tests for ErrorBoundary, Skeleton, LoadingButton, DataLoader (55 tests)
-   - ✅ **DONE**: Added tests for ThemeToggle, MarkdownRenderer, RenameSessionDialog, DeleteConfirmDialog (80 new tests)
-   - Test edge cases for auth flows
-   - Add tests for remaining utility components (login-dialog, WelcomeDialog, etc.)
+   - ✅ **DONE**: Added tests for ThemeToggle, MarkdownRenderer, RenameSessionDialog, DeleteConfirmDialog (80 tests)
+   - ✅ **DONE**: Added tests for login-dialog, WelcomeDialog, UploadDialog (73 new tests)
+   - Test edge cases for auth flows and error scenarios
+   - Add tests for remaining components (QuickStartGuide, TutorialVideo, HelpModal, etc.)
 
 ## Phase 2: UX Improvements (Mostly Complete)
 - **2.1 Onboarding Experience** (COMPLETE):
@@ -157,9 +162,12 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
   - ✅ **NEW**: Added unit tests for MarkdownRenderer component (28 tests - markdown rendering, syntax highlighting, GFM, copy button)
   - ✅ **NEW**: Added unit tests for RenameSessionDialog component (20 tests - form submission, validation, loading states)
   - ✅ **NEW**: Added unit tests for DeleteConfirmDialog component (19 tests - confirm/cancel, loading states, async handling)
-  - TODO: Aim for 80%+ code coverage overall (currently at ~75% with 135 new tests added)
-  - TODO: Test edge cases for auth flows
-  - TODO: Add tests for remaining utility components (login-dialog, WelcomeDialog, etc.)
+  - ✅ **NEW (Session 2)**: Added unit tests for login-dialog component (19 tests - auth dialog, form submission, error handling, loading states)
+  - ✅ **NEW (Session 2)**: Added unit tests for WelcomeDialog component (22 tests - step navigation, progress bar, skip/finish functionality)
+  - ✅ **NEW (Session 2)**: Added unit tests for UploadDialog component (32 tests - file selection, drag/drop, upload progress, accessibility)
+  - TODO: Aim for 80%+ code coverage overall (currently at ~78% with 208 new tests added)
+  - TODO: Test edge cases for auth flows and error scenarios
+  - TODO: Add tests for remaining components (QuickStartGuide, TutorialVideo, HelpModal, KeyboardShortcutsHint, etc.)
 - **E2E Tests (Playwright)**:
   - ✅ chat.spec.ts: Send messages, voice recording, toggle tools/audio, new session
   - ✅ documents.spec.ts: Upload dialog, list documents, selection, pagination, mobile responsive
@@ -211,10 +219,10 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
 - Floating keyboard hints for discoverability
 
 ### Known Issues / Technical Debt
-- Test coverage now at ~75% (up from ~65%, with 135 new tests added for utility components)
+- Test coverage now at ~78% (up from ~65%, with 208 new tests added for components)
 - Screenshot assets for README still needed (chat, documents, analytics, settings views in light/dark mode)
 - Some edge case testing needed for auth flows and error scenarios
-- Additional utility components could use tests (login-dialog, WelcomeDialog, UploadDialog, etc.)
+- Additional components could use tests (QuickStartGuide, TutorialVideo, HelpModal, KeyboardShortcutsHint, etc.)
 - ✅ **FIXED**: Color contrast now meets WCAG AA standards (4.5:1 for text, 3:1 for UI)
 - ✅ **FIXED**: Architecture documentation completed (ARCHITECTURE.md with comprehensive diagrams and patterns)
 - ✅ **FIXED**: Rename session mutation now has optimistic updates (matching delete mutation pattern)
@@ -239,9 +247,10 @@ This document tracks the remaining frontend refactor tasks for the YouWorker.AI 
    - ✅ **DONE**: Created unit tests for useOnboarding hook
    - ✅ **DONE**: Created unit tests for ErrorBoundary, Skeleton, LoadingButton, DataLoader (55 tests)
    - ✅ **DONE**: Created unit tests for ThemeToggle, MarkdownRenderer, RenameSessionDialog, DeleteConfirmDialog (80 tests)
+   - ✅ **DONE**: Created unit tests for login-dialog, WelcomeDialog, UploadDialog (73 tests)
 2. **Medium-term** (1 week):
    - **TODO**: Capture and add updated UI screenshots to the README
-   - **TODO**: Expand unit test coverage to 80%+ (login-dialog, WelcomeDialog, UploadDialog, remaining utilities)
+   - **TODO**: Expand unit test coverage to 80%+ (QuickStartGuide, TutorialVideo, HelpModal, remaining components)
    - **TODO**: Test edge cases for auth, upload, analytics flows
 3. **Long-term** (ongoing):
    - **TODO**: Continue writing unit tests to reach 80%+ coverage
