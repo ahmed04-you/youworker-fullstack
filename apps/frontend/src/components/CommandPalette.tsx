@@ -21,8 +21,8 @@ import {
   Plus,
 } from 'lucide-react';
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
-import { useSessionsQuery } from '@/lib/queries/sessions';
-import { useDocumentsQuery } from '@/lib/queries/documents';
+import { useSessionsQuery } from '@/features/chat/api/session-service';
+import { useDocumentsQuery } from '@/features/documents/api/document-service';
 
 interface CommandPaletteProps {
   open: boolean;

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import { X } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+
 import { Button } from "@/components/ui/button";
-import { SessionSummary } from "@/lib/types";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import type { SessionSummary } from "@/lib/types";
+
 import { SessionSidebar } from "./SessionSidebar";
 
-interface MobileSessionDrawerProps {
+type MobileSessionDrawerProps = {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   sessions: SessionSummary[];
@@ -16,9 +17,10 @@ interface MobileSessionDrawerProps {
   onRefresh: () => void;
   onNewSession: () => void;
   onSelectSession: (session: SessionSummary) => void;
-  onRenameSession: (session: SessionSummary) => void;
+  onRenameSession: (session: SessionSummary, title: string) => void;
   onDeleteSession: (session: SessionSummary) => void;
-}
+  deriveSessionName: (session: SessionSummary | null) => string;
+};
 
 export function MobileSessionDrawer({
   open = false,
@@ -31,11 +33,11 @@ export function MobileSessionDrawer({
   onSelectSession,
   onRenameSession,
   onDeleteSession,
+  deriveSessionName,
 }: MobileSessionDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>
-        {/* This will be triggered externally, so no trigger needed here */}
         <div />
       </SheetTrigger>
       <SheetContent side="left" className="w-[300px] p-0">
@@ -47,6 +49,7 @@ export function MobileSessionDrawer({
               size="icon"
               onClick={() => onOpenChange?.(false)}
               className="h-8 w-8"
+              aria-label="Close sessions"
             >
               <X className="h-4 w-4" />
             </Button>
@@ -62,6 +65,7 @@ export function MobileSessionDrawer({
             onSelectSession={onSelectSession}
             onRenameSession={onRenameSession}
             onDeleteSession={onDeleteSession}
+            deriveSessionName={deriveSessionName}
           />
         </div>
       </SheetContent>

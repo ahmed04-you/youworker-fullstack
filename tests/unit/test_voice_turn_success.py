@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any, AsyncIterator
 
 import pytest
+from fastapi import Request
 from fastapi.testclient import TestClient
 
 from apps.api import main
@@ -69,7 +70,10 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
     async def fake_get_current_active_user() -> dict:
         return {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
 
-    main.app.dependency_overrides[get_current_user_with_collection_access] = lambda: {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
+    async def fake_get_current_user_with_collection_access():
+        return {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
+
+    main.app.dependency_overrides[get_current_user_with_collection_access] = fake_get_current_user_with_collection_access
 
     async def fake_ensure_root_user(*args: Any, **kwargs: Any) -> dict:
         return {"id": 1, "username": "root", "api_key": "dev-root-key", "is_root": True}
@@ -80,6 +84,15 @@ def voice_client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("packages.db.crud.ensure_root_user", fake_ensure_root_user)
     monkeypatch.setattr("packages.db.crud.grant_user_collection_access", fake_grant_collection_access)
     monkeypatch.setattr("apps.api.auth.security.ensure_root_user", fake_ensure_root_user)
+
+    # Mock CSRF middleware to bypass validation
+    from apps.api.middleware.csrf import CSRFMiddleware
+
+    async def fake_csrf_dispatch(self, request: Request, call_next):
+        request.state.csrf_token = "fake-token"
+        return await call_next(request)
+
+    monkeypatch.setattr(CSRFMiddleware, "dispatch", fake_csrf_dispatch)
 
     # Stub transcription and synthesis
     async def fake_transcribe(audio_pcm: bytes, sample_rate: int) -> dict[str, Any]:

@@ -1,7 +1,15 @@
 "use client";
 
+import { useMemo } from "react";
+
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Send,
   Loader2,
@@ -29,6 +37,7 @@ interface ChatComposerProps {
   onToggleTools: () => void;
   expectAudio: boolean;
   onToggleAudio: () => void;
+  voiceSupported?: boolean;
 }
 
 export function ChatComposer({
@@ -48,32 +57,55 @@ export function ChatComposer({
   onToggleTools,
   expectAudio,
   onToggleAudio,
+  voiceSupported = true,
 }: ChatComposerProps) {
+  const languageOptions = useMemo(
+    () => ["auto", "en", "es", "fr", "de", "ja"],
+    []
+  );
+
+  const modelPresets = useMemo(
+    () => ["gpt-oss:20b", "gpt-4-turbo", "gpt-3.5", "claude-3-opus"],
+    []
+  );
+
+  const modelOptions = useMemo(() => {
+    if (!selectedModel || modelPresets.includes(selectedModel)) {
+      return modelPresets;
+    }
+    return [selectedModel, ...modelPresets];
+  }, [selectedModel, modelPresets]);
+
   return (
-    <div
-      className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl backdrop-blur"
-      data-testid="chat-composer"
-    >
+    <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl" data-testid="chat-composer">
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-            <span>Assistant language</span>
-            <Input
-              value={assistantLanguage}
-              onChange={(event) => onAssistantLanguageChange(event.target.value)}
-              className="h-7 w-16 rounded-full border-0 bg-transparent px-2 text-xs font-semibold uppercase text-foreground"
-              data-testid="assistant-language"
-            />
-          </div>
-          <div className="flex items-center gap-2 rounded-full border border-border/80 bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
-            <span>Model</span>
-            <Input
-              value={selectedModel}
-              onChange={(event) => onSelectedModelChange(event.target.value)}
-              className="h-7 w-[140px] rounded-full border-0 bg-transparent px-2 text-xs font-semibold text-foreground"
-              data-testid="model-input"
-            />
-          </div>
+          <Select value={assistantLanguage} onValueChange={onAssistantLanguageChange}>
+            <SelectTrigger className="h-9 w-40 rounded-full border border-border/80 bg-background px-3 text-xs font-semibold uppercase text-foreground">
+              <SelectValue placeholder="Language" data-testid="assistant-language" />
+            </SelectTrigger>
+            <SelectContent>
+              {languageOptions.map((language) => (
+                <SelectItem key={language} value={language} className="text-xs uppercase">
+                  {language === "auto" ? "Auto" : language.toUpperCase()}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={selectedModel} onValueChange={onSelectedModelChange}>
+            <SelectTrigger className="h-9 w-48 rounded-full border border-border/80 bg-background px-3 text-xs font-semibold text-foreground">
+              <SelectValue placeholder="Model" data-testid="model-input" />
+            </SelectTrigger>
+            <SelectContent>
+              {modelOptions.map((model) => (
+                <SelectItem key={model} value={model} className="text-xs">
+                  {model}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
           <Button
             variant={enableTools ? "default" : "outline"}
             className="rounded-full"
@@ -113,16 +145,15 @@ export function ChatComposer({
               onSendText();
             }
           }}
-          onFocus={(e) => {
-            // Scroll into view on mobile to prevent keyboard overlap
+          onFocus={(event) => {
             if (window.innerWidth < 768) {
               setTimeout(() => {
-                e.target.scrollIntoView({ behavior: "smooth", block: "center" });
+                event.currentTarget.scrollIntoView({ behavior: "smooth", block: "center" });
               }, 300);
             }
           }}
           placeholder="Ask anything… Request a plan, run a tool, or brainstorm in crimson style."
-          className="min-h-[80px] md:min-h-[110px] w-full rounded-2xl border border-border/70 bg-background/70 p-3 md:p-4 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30 resize-none touch-manipulation"
+          className="min-h-[80px] md:min-h-[110px] w-full resize-none rounded-2xl border border-border/70 bg-background/70 p-3 md:p-4 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           rows={3}
           aria-label="Message input"
           data-testid="input"
@@ -136,17 +167,17 @@ export function ChatComposer({
               size="icon"
               className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
               onClick={() => (isRecording ? onStopRecording() : onStartRecording())}
-              disabled={isStreaming}
+              disabled={isStreaming || !voiceSupported}
               data-testid="mic-button"
             >
-              {isRecording ? (
-                <StopCircle className="h-4 w-4" />
-              ) : (
-                <Mic className="h-4 w-4" />
-              )}
+              {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
             </Button>
             <span data-testid={isRecording ? "recording-indicator" : undefined}>
-              {isRecording ? "Recording… release to send." : "Hold to speak."}
+              {!voiceSupported
+                ? "Voice input not supported on this device."
+                : isRecording
+                  ? "Recording… release to send."
+                  : "Hold to speak."}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -164,7 +195,7 @@ export function ChatComposer({
             >
               {isStreaming ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 motion-safe:animate-spin" />
                   Streaming…
                 </>
               ) : (

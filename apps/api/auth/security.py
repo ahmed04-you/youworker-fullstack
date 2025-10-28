@@ -45,6 +45,8 @@ async def get_current_user(
     authorization: Optional[str] = Header(default=None),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     youworker_token: Optional[str] = Cookie(default=None),
+    authentik_api_key: Optional[str] = Header(default=None, alias="X-Authentik-Api-Key"),
+    authentik_username: Optional[str] = Header(default=None, alias="X-Authentik-Username"),
 ):
     """
     Get the current user from JWT token (cookie or header) or API key.
@@ -52,7 +54,8 @@ async def get_current_user(
     Authentication priority:
     1. HttpOnly cookie (youworker_token)
     2. Authorization header (Bearer token)
-    3. X-API-Key header (fallback for backward compatibility)
+    3. Authentik API key header (if enabled)
+    4. X-API-Key header (fallback for backward compatibility)
 
     Supports both JWT tokens and API keys for backward compatibility.
     """
@@ -94,22 +97,29 @@ async def get_current_user(
 
         # If JWT failed or not provided, try API key authentication
         if not user:
-            api_key = provided_api_key
+            # If Authentik is enabled, prioritize Authentik API key
+            if settings.authentik_enabled and authentik_api_key:
+                api_key = authentik_api_key
+                username = authentik_username or "root"
+            else:
+                api_key = provided_api_key
+                username = "root"
+    
             if not api_key:
                 raise HTTPException(
                     status_code=401,
                     detail="Not authenticated",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-
+    
             # Use constant-time comparison to prevent timing attacks
             if not secrets.compare_digest(api_key, settings.root_api_key):
                 raise HTTPException(status_code=401, detail="Invalid API key")
-
-            user = await _ensure_root_user_impl(session=db, username="root", api_key=api_key)
+    
+            user = await _ensure_root_user_impl(session=db, username=username, api_key=api_key)
             if not user:
                 raise HTTPException(status_code=401, detail="Invalid API key")
-
+    
         return user
 
 

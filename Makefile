@@ -46,7 +46,7 @@ compose-up:
 	else \
 		echo "[compose-up] No GPU detected; services will run on CPU"; \
 	fi
-	@$(COMPOSE_CMD) up -d
+	@$(COMPOSE_CMD) --env-file .env up -d
 
 # Stop all services
 compose-down:

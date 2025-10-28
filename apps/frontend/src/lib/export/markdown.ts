@@ -1,8 +1,8 @@
 /**
  * Markdown export utilities
  */
-import { SessionDetail } from '@/lib/types';
-import { ConversationMessage } from '@/stores/chat-store';
+import { SessionDetail } from "@/lib/types";
+import type { ChatMessage } from "@/features/chat";
 
 /**
  * Exports a conversation as Markdown format
@@ -12,7 +12,7 @@ import { ConversationMessage } from '@/stores/chat-store';
  */
 export function exportConversationAsMarkdown(
   session: { title?: string | null; model?: string | null; created_at: string },
-  messages: ConversationMessage[]
+  messages: ChatMessage[]
 ): string {
   const title = session.title || 'Conversation';
   const date = new Date(session.created_at).toLocaleDateString();

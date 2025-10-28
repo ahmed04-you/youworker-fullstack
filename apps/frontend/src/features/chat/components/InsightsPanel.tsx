@@ -1,9 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Sparkles,
   Cpu,
@@ -12,46 +9,26 @@ import {
   ChevronRight,
   Loader2,
 } from "lucide-react";
-import { ChatToolEvent, ChatLogEntry } from "@/lib/types";
 
-interface HealthStatus {
-  status: string;
-  components?: {
-    ollama?: {
-      ready: boolean;
-      missing: string[];
-      models: Record<
-        string,
-        {
-          name: string;
-          available: boolean;
-        }
-      >;
-    };
-    agent?: string;
-    voice?: {
-      stt_available: boolean;
-      tts_available: boolean;
-    };
-  };
-}
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import type { ChatLogEntry, ChatToolEvent } from "@/lib/types";
 
-interface SttMeta {
-  confidence?: number;
-  language?: string;
-}
+import type { HealthStatus, SpeechTranscriptMeta } from "../types";
 
-interface InsightSidebarProps {
+interface InsightsProps {
   toolTimeline: ChatToolEvent[];
   logEntries: ChatLogEntry[];
   transcript: string | null;
-  sttMeta: SttMeta;
+  sttMeta: SpeechTranscriptMeta;
   health: HealthStatus | null;
   healthLoading: boolean;
   onRefreshHealth: () => void;
 }
 
-export function InsightSidebar({
+function InsightsContent({
   toolTimeline,
   logEntries,
   transcript,
@@ -59,10 +36,10 @@ export function InsightSidebar({
   health,
   healthLoading,
   onRefreshHealth,
-}: InsightSidebarProps) {
+}: InsightsProps) {
   return (
-    <aside className="hidden w-[320px] space-y-5 xl:flex xl:flex-col">
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
+    <div className="space-y-5">
+      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <Sparkles className="h-4 w-4 text-primary" />
@@ -88,7 +65,7 @@ export function InsightSidebar({
                         event.status === "start"
                           ? "bg-primary/10 text-primary"
                           : event.status === "success"
-                            ? "bg-emerald-100 text-emerald-600"
+                            ? "bg-emerald-100 text-emerald-700"
                             : "bg-destructive/10 text-destructive"
                       }`}
                     >
@@ -97,8 +74,7 @@ export function InsightSidebar({
                   </div>
                   {event.latency_ms && (
                     <p className="mt-1 text-muted-foreground">
-                      {event.latency_ms} ms •{" "}
-                      {event.result_preview?.slice(0, 60)}
+                      {event.latency_ms} ms • {event.result_preview?.slice(0, 60)}
                       {event.result_preview && event.result_preview.length > 60 ? "…" : ""}
                     </p>
                   )}
@@ -115,7 +91,7 @@ export function InsightSidebar({
         </CardContent>
       </Card>
 
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
+      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <Cpu className="h-4 w-4 text-primary" />
@@ -143,7 +119,7 @@ export function InsightSidebar({
         </CardContent>
       </Card>
 
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
+      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <Volume2 className="h-4 w-4 text-primary" />
@@ -153,27 +129,22 @@ export function InsightSidebar({
         <CardContent>
           {transcript ? (
             <div className="space-y-2 text-sm">
-              <p
-                className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground"
-                data-testid="transcript"
-              >
+              <p className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground" data-testid="transcript">
                 {transcript}
               </p>
               <p className="text-xs text-muted-foreground">
-                Confidence {(sttMeta.confidence ?? 0).toFixed(2)} •{" "}
-                {sttMeta.language?.toUpperCase() || "auto"}
+                Confidence {(sttMeta.confidence ?? 0).toFixed(2)} • {sttMeta.language?.toUpperCase() || "auto"}
               </p>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">
-              When you speak to YouWorker we transcribe locally and surface the transcript
-              here.
+              When you speak to YouWorker we transcribe locally and surface the transcript here.
             </p>
           )}
         </CardContent>
       </Card>
 
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg backdrop-blur">
+      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-sm font-semibold">
             <ArrowRight className="h-4 w-4 text-primary" />
@@ -181,55 +152,80 @@ export function InsightSidebar({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 text-xs">
-          {health ? (
-            <>
-              <div className="flex items-center gap-2">
-                <Badge
-                  className={`rounded-full text-[10px] uppercase tracking-wider ${
-                    health.status === "healthy"
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}
-                >
-                  {health.status}
-                </Badge>
-                <span className="text-muted-foreground">
-                  {health.components?.agent === "ready"
-                    ? "Agent ready"
-                    : "Agent warming up"}
-                </span>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge
+                className={`rounded-full text-[10px] uppercase tracking-wider ${
+                  health?.status === "healthy"
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {health?.status || "unknown"}
+              </Badge>
+              <span className="text-muted-foreground">
+                {health?.components?.agent === "ready" ? "Agent ready" : "Agent warming up"}
+              </span>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRefreshHealth}
+              className="rounded-full"
+              disabled={healthLoading}
+            >
+              {healthLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : "Refresh"}
+            </Button>
+          </div>
+
+          {health?.components?.ollama?.models ? (
+            <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2">
+              <p className="font-semibold text-foreground">Models</p>
+              <div className="mt-2 space-y-1">
+                {Object.entries(health.components.ollama.models).map(([key, model]) => (
+                  <div key={key} className="flex items-center justify-between text-muted-foreground">
+                    <span>{model.name}</span>
+                    <span className={model.available ? "text-emerald-600" : "text-destructive font-medium"}>
+                      {model.available ? "ready" : "missing"}
+                    </span>
+                  </div>
+                ))}
               </div>
-              <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2">
-                <p className="font-semibold text-foreground">Models</p>
-                <div className="mt-2 space-y-1">
-                  {health.components?.ollama?.models &&
-                    Object.entries(health.components.ollama.models).map(([key, model]) => (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between text-muted-foreground"
-                      >
-                        <span>{model.name}</span>
-                        <span
-                          className={
-                            model.available
-                              ? "text-emerald-600"
-                              : "text-destructive font-medium"
-                          }
-                        >
-                          {model.available ? "ready" : "missing"}
-                        </span>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            </>
+            </div>
           ) : (
-            <p className="text-muted-foreground">
-              Health data will appear once the agent connects to the backend.
-            </p>
+            <p className="text-muted-foreground">Health data will appear once the agent connects to the backend.</p>
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+export function InsightsPanel(props: InsightsProps) {
+  return (
+    <aside className="hidden w-[320px] xl:flex xl:flex-col">
+      <InsightsContent {...props} />
     </aside>
+  );
+}
+
+interface MobileInsightsDrawerProps extends InsightsProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function MobileInsightsDrawer({ open, onOpenChange, ...props }: MobileInsightsDrawerProps) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetTrigger asChild>
+        <div />
+      </SheetTrigger>
+      <SheetContent side="bottom" className="h-[70vh] overflow-y-auto rounded-t-3xl border-border bg-background px-4 py-6">
+        <SheetHeader className="mb-4">
+          <SheetTitle className="text-center text-base font-semibold">Insights</SheetTitle>
+        </SheetHeader>
+        <InsightsContent {...props} />
+      </SheetContent>
+    </Sheet>
   );
 }

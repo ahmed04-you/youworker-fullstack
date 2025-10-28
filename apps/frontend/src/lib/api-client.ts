@@ -165,9 +165,23 @@ export async function apiFetch<T = unknown>(
   const url = resolveUrl(path, query);
   const method = (init.method || "GET").toUpperCase();
 
+  const normalizedHeaders: Record<string, string> = (() => {
+    if (!headers) {
+      return {};
+    }
+    if (headers instanceof Headers) {
+      return Object.fromEntries(headers.entries());
+    }
+    if (Array.isArray(headers)) {
+      return Object.fromEntries(headers);
+    }
+    return headers;
+  })();
+
   const requestHeaders: Record<string, string> = {
     Accept: "application/json",
-    ...(headers || {}),
+    ...(process.env.NEXT_PUBLIC_API_KEY ? { "X-API-Key": process.env.NEXT_PUBLIC_API_KEY } : {}),
+    ...normalizedHeaders,
   };
 
   if (!SAFE_METHODS.has(method) && !requestHeaders[CSRF_HEADER_NAME]) {

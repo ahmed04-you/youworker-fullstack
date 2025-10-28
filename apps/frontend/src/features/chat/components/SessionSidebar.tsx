@@ -1,8 +1,7 @@
 "use client";
 
-import { SessionSummary } from "@/lib/types";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import Link from "next/link";
+import { useState } from "react";
 import {
   Loader2,
   RefreshCw,
@@ -11,7 +10,29 @@ import {
   Trash2,
   BookOpen,
 } from "lucide-react";
-import Link from "next/link";
+
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import type { SessionSummary } from "@/lib/types";
 
 interface SessionSidebarProps {
   sessions: SessionSummary[];
@@ -20,21 +41,9 @@ interface SessionSidebarProps {
   onRefresh: () => void;
   onNewSession: () => void;
   onSelectSession: (session: SessionSummary) => void;
-  onRenameSession: (session: SessionSummary) => void;
+  onRenameSession: (session: SessionSummary, title: string) => void;
   onDeleteSession: (session: SessionSummary) => void;
-}
-
-function deriveSessionName(session: SessionSummary | null) {
-  if (!session) {
-    return "New Conversation";
-  }
-  if (session.title) {
-    return session.title;
-  }
-  if (session.external_id) {
-    return session.external_id.slice(0, 8);
-  }
-  return `Session #${session.id}`;
+  deriveSessionName: (session: SessionSummary | null) => string;
 }
 
 export function SessionSidebar({
@@ -46,7 +55,22 @@ export function SessionSidebar({
   onSelectSession,
   onRenameSession,
   onDeleteSession,
+  deriveSessionName,
 }: SessionSidebarProps) {
+  const [renameTarget, setRenameTarget] = useState<SessionSummary | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<SessionSummary | null>(null);
+
+  const closeRenameDialog = () => {
+    setRenameTarget(null);
+    setRenameValue("");
+  };
+
+  const openRenameDialog = (session: SessionSummary) => {
+    setRenameTarget(session);
+    setRenameValue(session.title ?? deriveSessionName(session));
+  };
+
   return (
     <aside className="hidden w-[320px] flex-col border-r border-border/60 bg-card/70 p-4 lg:flex">
       <div className="mb-4 flex items-center justify-between">
@@ -54,8 +78,8 @@ export function SessionSidebar({
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Workspace</p>
           <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
         </div>
-        <Button size="icon" variant="ghost" onClick={onRefresh}>
-          {sessionsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+        <Button size="icon" variant="ghost" onClick={onRefresh} aria-label="Refresh sessions">
+          {sessionsLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : <RefreshCw className="h-4 w-4" />}
         </Button>
       </div>
 
@@ -96,7 +120,10 @@ export function SessionSidebar({
                       {new Date(session.updated_at).toLocaleString()}
                     </p>
                   </div>
-                  <Badge variant="outline" className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary"
+                  >
                     {session.model ? session.model.split(":")[0] : "auto"}
                   </Badge>
                 </div>
@@ -111,8 +138,9 @@ export function SessionSidebar({
                     className="ml-auto h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onRenameSession(session);
+                      openRenameDialog(session);
                     }}
+                    aria-label="Rename session"
                   >
                     <Sparkles className="h-4 w-4" />
                   </Button>
@@ -122,8 +150,9 @@ export function SessionSidebar({
                     className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onDeleteSession(session);
+                      setDeleteTarget(session);
                     }}
+                    aria-label="Delete session"
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -146,6 +175,64 @@ export function SessionSidebar({
           </Link>
         </p>
       </div>
+
+      <Dialog open={Boolean(renameTarget)} onOpenChange={(open) => (!open ? closeRenameDialog() : undefined)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename conversation</DialogTitle>
+            <DialogDescription>
+              Choose a concise title so you can recognize this session later.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameValue}
+            onChange={(event) => setRenameValue(event.target.value)}
+            placeholder="Team sync notes"
+            autoFocus
+          />
+          <DialogFooter>
+            <Button variant="ghost" onClick={closeRenameDialog}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (!renameTarget) return;
+                const trimmed = renameValue.trim();
+                if (!trimmed) return;
+                onRenameSession(renameTarget, trimmed);
+                closeRenameDialog();
+              }}
+              disabled={!renameValue.trim()}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => (!open ? setDeleteTarget(null) : undefined)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this session?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? deriveSessionName(deleteTarget) : ""} will be removed permanently. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) {
+                  onDeleteSession(deleteTarget);
+                }
+                setDeleteTarget(null);
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </aside>
   );
 }
