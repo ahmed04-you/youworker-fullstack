@@ -1,16 +1,9 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useState, useEffect } from "react";
 import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -22,7 +15,6 @@ import {
   LogOut,
   Mic,
   StopCircle,
-  Sparkles,
   Volume2,
 } from "lucide-react";
 
@@ -137,23 +129,12 @@ export const ChatComposer = memo(function ChatComposer({
   onToggleAudio,
   voiceSupported = true,
 }: ChatComposerProps) {
+  const [mounted, setMounted] = useState(false);
   const triggerHaptic = useHapticFeedback();
-  const languageOptions = useMemo(
-    () => ["auto", "en", "es", "fr", "de", "ja"],
-    []
-  );
 
-  const modelPresets = useMemo(
-    () => ["gpt-oss:20b", "gpt-4-turbo", "gpt-3.5", "claude-3-opus"],
-    []
-  );
-
-  const modelOptions = useMemo(() => {
-    if (!selectedModel || modelPresets.includes(selectedModel)) {
-      return modelPresets;
-    }
-    return [selectedModel, ...modelPresets];
-  }, [selectedModel, modelPresets]);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleToggleTools = () => {
     triggerHaptic();
@@ -187,77 +168,6 @@ export const ChatComposer = memo(function ChatComposer({
   return (
     <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl" data-testid="chat-composer">
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={assistantLanguage} onValueChange={onAssistantLanguageChange}>
-            <SelectTrigger className="h-9 w-40 rounded-full border border-border/80 bg-background px-3 text-xs font-semibold uppercase text-foreground">
-              <SelectValue placeholder="Language" data-testid="assistant-language" />
-            </SelectTrigger>
-            <SelectContent>
-              {languageOptions.map((language) => (
-                <SelectItem key={language} value={language} className="text-xs uppercase">
-                  {language === "auto" ? "Auto" : language.toUpperCase()}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={selectedModel} onValueChange={onSelectedModelChange}>
-            <SelectTrigger className="h-9 w-48 rounded-full border border-border/80 bg-background px-3 text-xs font-semibold text-foreground">
-              <SelectValue placeholder="Model" data-testid="model-input" />
-            </SelectTrigger>
-            <SelectContent>
-              {modelOptions.map((model) => (
-                <SelectItem key={model} value={model} className="text-xs">
-                  {model}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={enableTools ? "default" : "outline"}
-                className="rounded-full"
-                onClick={handleToggleTools}
-                data-testid="toggle-tools"
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {enableTools ? "Tools active" : "Enable tools"}
-                {enableTools && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="tools-active">
-                    Active
-                  </span>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{enableTools ? "Disable tools" : "Enable tools like web search, code execution"}</p>
-            </TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={expectAudio ? "default" : "outline"}
-                className="rounded-full"
-                onClick={handleToggleAudio}
-                data-testid="toggle-audio"
-              >
-                <Volume2 className="mr-2 h-4 w-4" />
-                {expectAudio ? "Voice-on" : "Voice-off"}
-                {expectAudio && (
-                  <span className="ml-2 text-[10px] uppercase tracking-wide" data-testid="voice-on">
-                    Voice
-                  </span>
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{expectAudio ? "Disable voice responses" : "Enable voice responses from assistant"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
-
         <textarea
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
@@ -282,33 +192,24 @@ export const ChatComposer = memo(function ChatComposer({
         />
 
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
-                onClick={handleMicPress}
-                disabled={isStreaming || !voiceSupported}
-                data-testid="mic-button"
-              >
-                {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-              </Button>
+                <Button
+                  variant={expectAudio ? "default" : "outline"}
+                  size="icon"
+                  className="rounded-full"
+                  onClick={handleToggleAudio}
+                  data-testid="toggle-audio"
+                >
+                  <Volume2 className="h-4 w-4" />
+                </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isRecording ? "Stop recording (Cmd+Shift+V)" : "Start voice recording (Cmd+Shift+V)"}</p>
+                <p>{expectAudio ? "Disable voice responses" : "Enable voice responses"}</p>
               </TooltipContent>
             </Tooltip>
-            <span data-testid={isRecording ? "recording-indicator" : undefined}>
-              {!voiceSupported
-                ? "Voice input not supported on this device."
-                : isRecording
-                  ? "Recording… release to send."
-                  : "Hold to speak."}
-            </span>
-            {voiceSupported && (
+            {mounted && voiceSupported && isRecording && (
               <VoiceWaveform active={isRecording} />
             )}
           </div>
@@ -316,32 +217,47 @@ export const ChatComposer = memo(function ChatComposer({
             {isStreaming && (
               <Button variant="ghost" onClick={handleStopStreaming} className="rounded-full">
                 <LogOut className="mr-2 h-4 w-4" />
-                Stop response
+                Stop
               </Button>
+            )}
+            {mounted && voiceSupported && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
+                    onClick={handleMicPress}
+                    disabled={isStreaming}
+                    data-testid="mic-button"
+                  >
+                    {isRecording ? <StopCircle className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{isRecording ? "Stop recording" : "Start voice recording"}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
                   onClick={handleSend}
                   disabled={!input.trim() || isStreaming}
-                  className="rounded-full px-6"
+                  className="rounded-full"
+                  size="icon"
                   data-testid="send"
                 >
                   {isStreaming ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 motion-safe:animate-spin" />
-                      Streaming…
-                    </>
+                    <Loader2 className="h-4 w-4 motion-safe:animate-spin" />
                   ) : (
-                    <>
-                      <Send className="mr-2 h-4 w-4" />
-                      Send
-                    </>
+                    <Send className="h-4 w-4" />
                   )}
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>{isStreaming ? "Response streaming..." : "Send message (Cmd+Enter)"}</p>
+                <p>{isStreaming ? "Streaming..." : "Send message"}</p>
               </TooltipContent>
             </Tooltip>
           </div>
