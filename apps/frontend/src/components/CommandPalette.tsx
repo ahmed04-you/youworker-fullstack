@@ -13,7 +13,6 @@ import {
 import {
   Home,
   FileText,
-  Clock,
   BarChart3,
   Settings,
   MessageSquare,
@@ -23,6 +22,7 @@ import {
 import { useKeyboardShortcut } from '@/hooks/useKeyboardShortcut';
 import { useSessionsQuery } from '@/features/chat/api/session-service';
 import { useDocuments } from '@/features/documents/api/document-service';
+import { useAuth } from '@/lib/auth-context';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -43,9 +43,10 @@ interface CommandPaletteProps {
 function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
   const router = useRouter();
   const [search, setSearch] = useState('');
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
-  const { data: sessions } = useSessionsQuery();
-  const { data: documentsData } = useDocuments();
+  const { data: sessions } = useSessionsQuery(50, { enabled: !authLoading && isAuthenticated });
+  const { data: documentsData } = useDocuments(1, 20, undefined, { enabled: !authLoading && isAuthenticated });
 
   // Filter results based on search
   const filteredSessions = useMemo(
@@ -113,13 +114,6 @@ function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
               >
                 <FileText className="h-4 w-4" />
                 <span>Documents</span>
-              </Command.Item>
-              <Command.Item
-                onSelect={() => runCommand(() => router.push('/sessions'))}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <Clock className="h-4 w-4" />
-                <span>Sessions</span>
               </Command.Item>
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/analytics'))}

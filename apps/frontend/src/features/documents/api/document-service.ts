@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { QueryKey } from "@tanstack/react-query";
 
-import { apiDelete, apiGet, apiPost } from "@/lib/api-client";
+import { apiDelete, apiGet, apiPost, apiPostMultipart } from "@/lib/api-client";
 import {
   toastError,
   toastLoading,
@@ -11,8 +11,15 @@ import {
 } from "@/lib/toast-helpers";
 import type { Document, IngestionRun } from "../types";
 
+type PaginatedDocuments = {
+  documents: Document[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 type DocumentsQuerySnapshot = {
-  previousQueries: Array<[QueryKey, Document[] | undefined]>;
+  previousQueries: Array<[QueryKey, PaginatedDocuments | undefined]>;
   toastId?: string | number;
   optimisticIds?: string[];
 };
@@ -47,19 +54,8 @@ export async function uploadDocuments(files: File[]): Promise<Document[]> {
     formData.append("files", file);
   });
 
-  // Use fetch directly for multipart upload to avoid Content-Type override
-  const response = await fetch("/v1/ingest/upload", {
-    method: "POST",
-    body: formData,
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(`Upload failed: ${response.statusText}`);
-  }
-
-  const data = await response.json();
+  // Use apiPostMultipart to handle CSRF token and credentials properly
+  const data = await apiPostMultipart<{ documents: Document[] }>("/v1/ingest/upload", formData);
   return data.documents;
 }
 
@@ -95,15 +91,18 @@ export function useDeleteDocumentMutation() {
     onMutate: async (documentId) => {
       await queryClient.cancelQueries({ queryKey: documentKeys.lists() });
 
-      const previousQueries = queryClient.getQueriesData<Document[]>({
+      const previousQueries = queryClient.getQueriesData<PaginatedDocuments>({
         queryKey: documentKeys.lists(),
       });
 
       previousQueries.forEach(([key, previous]) => {
-        queryClient.setQueryData<Document[] | undefined>(
-          key,
-          (previous ?? []).filter((document) => document.id !== documentId)
-        );
+        if (previous) {
+          queryClient.setQueryData<PaginatedDocuments>(key, {
+            ...previous,
+            documents: previous.documents.filter((document) => document.id !== documentId),
+            total: Math.max(0, previous.total - 1),
+          });
+        }
       });
 
       const toastId = toastLoading("Deleting document…");
@@ -141,7 +140,7 @@ export function useUploadDocumentsMutation(options?: { onSuccess?: () => void; o
     onMutate: async (files) => {
       await queryClient.cancelQueries({ queryKey: documentKeys.lists() });
 
-      const previousQueries = queryClient.getQueriesData<Document[]>({
+      const previousQueries = queryClient.getQueriesData<PaginatedDocuments>({
         queryKey: documentKeys.lists(),
       });
 
@@ -164,10 +163,13 @@ export function useUploadDocumentsMutation(options?: { onSuccess?: () => void; o
       }));
 
       previousQueries.forEach(([key, existing]) => {
-        queryClient.setQueryData<Document[] | undefined>(key, [
-          ...(existing ?? []),
-          ...optimisticDocuments,
-        ]);
+        if (existing) {
+          queryClient.setQueryData<PaginatedDocuments>(key, {
+            ...existing,
+            documents: [...existing.documents, ...optimisticDocuments],
+            total: existing.total + optimisticDocuments.length,
+          });
+        }
       });
 
       const toastId = toastLoading("Uploading documents…");
@@ -190,16 +192,24 @@ export function useUploadDocumentsMutation(options?: { onSuccess?: () => void; o
       options?.onError?.();
     },
     onSuccess: (data, _variables, context) => {
-      const applyResult = (documents: Document[] | undefined) => {
-        const withoutOptimistic = (documents ?? []).filter(
+      const applyResult = (existing: PaginatedDocuments | undefined) => {
+        if (!existing) return existing;
+
+        const withoutOptimistic = existing.documents.filter(
           (doc) => !context?.optimisticIds?.includes(doc.id)
         );
-        return [...withoutOptimistic, ...data];
+        const newTotal = existing.total - (existing.documents.length - withoutOptimistic.length) + data.length;
+
+        return {
+          ...existing,
+          documents: [...withoutOptimistic, ...data],
+          total: newTotal,
+        };
       };
 
       if (context?.previousQueries) {
         context.previousQueries.forEach(([key]) => {
-          queryClient.setQueryData<Document[] | undefined>(key, (existing) =>
+          queryClient.setQueryData<PaginatedDocuments | undefined>(key, (existing) =>
             applyResult(existing)
           );
         });
@@ -225,10 +235,21 @@ export function useIngestFromUrlMutation() {
   return useMutation({
     mutationFn: ingestFromUrl,
     onSuccess: (data) => {
-      queryClient.setQueryData(documentKeys.lists(), (old: Document[] | undefined) => [
-        ...(old || []),
-        data,
-      ]);
+      // Update all paginated queries
+      const queries = queryClient.getQueriesData<PaginatedDocuments>({
+        queryKey: documentKeys.lists(),
+      });
+
+      queries.forEach(([key, existing]) => {
+        if (existing) {
+          queryClient.setQueryData<PaginatedDocuments>(key, {
+            ...existing,
+            documents: [...existing.documents, data],
+            total: existing.total + 1,
+          });
+        }
+      });
+
       toastSuccess("Document ingested from URL");
     },
     onError: () => {

@@ -8,13 +8,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { useAuth } from '@/lib/auth-context';
 
 interface IngestionHistoryProps {
   limit?: number;
 }
 
 export function IngestionHistory({ limit = 10 }: IngestionHistoryProps) {
-  const { data: runs = [], isLoading, error } = useIngestionRuns(limit);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data: runs = [], isLoading, error } = useIngestionRuns(limit, {
+    enabled: !authLoading && isAuthenticated
+  });
   const deleteMutation = useDeleteIngestionRunMutation();
 
   if (error) {

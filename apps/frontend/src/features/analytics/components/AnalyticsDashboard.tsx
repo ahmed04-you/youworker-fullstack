@@ -3,27 +3,21 @@
 import React, { memo, useCallback, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download } from 'lucide-react';
 import { DateRange as DayPickerDateRange } from 'react-day-picker';
-import { DateRangePicker } from './DateRangePicker';
 import { OverviewSection } from './OverviewSection';
 import { TokenUsageChart } from './TokenUsageChart';
 import { ToolMetricsTable } from './ToolMetricsTable';
-import { SessionAnalytics } from './SessionAnalytics';
 import { IngestionMetrics } from './IngestionMetrics';
 import { useAnalyticsData } from '../hooks/useAnalyticsData';
 import { useRefreshAnalytics } from '../api/analytics-service';
 import { Skeleton } from '@/components/ui/skeleton';
-import { exportToCSV, exportToJSON } from '@/lib/export';
-import { toastError, toastSuccess } from '@/lib/toast-helpers';
 import { DateRange } from '../types';
 
 const PRESET_RANGES = [
   { label: 'Today', value: 'today' as const },
   { label: 'This Week', value: 'week' as const },
   { label: 'This Month', value: 'month' as const },
-  { label: 'Last 30 Days', value: '30days' as const },
-  { label: 'Custom', value: 'custom' as const },
+  { label: 'All Time', value: 'alltime' as const },
 ];
 
 type PresetRange = typeof PRESET_RANGES[number]['value'];
@@ -89,50 +83,13 @@ function AnalyticsDashboardComponent() {
         const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
         newRange = { from: monthStart, to: end };
         break;
-      case '30days':
-        const thirtyDaysAgo = new Date(now);
-        thirtyDaysAgo.setDate(now.getDate() - 30);
-        newRange = { from: thirtyDaysAgo, to: end };
-        break;
-      case 'custom':
-        newRange = undefined;
+      case 'alltime':
+        newRange = undefined; // No date range means all time
         break;
     }
 
     setPickerDateRange(newRange);
   }, []);
-
-  const handleExport = useCallback((format: 'csv' | 'json') => {
-    if (!overview) {
-      toastError("No data to export");
-      return;
-    }
-
-    const exportData = {
-      overview,
-      tokens,
-      tools,
-      sessions: sessions.slice(0, 10), // Limit for export
-      ingestion,
-      dateRange: dateRange ? {
-        start: dateRange.start.toISOString(),
-        end: dateRange.end.toISOString(),
-      } : null,
-      exportedAt: new Date().toISOString(),
-    };
-
-    const formatDate = (date: Date) => {
-      return date.toISOString().split('T')[0];
-    };
-
-    if (format === 'csv') {
-      exportToCSV(exportData, `youworker-analytics-${formatDate(new Date())}`);
-    } else {
-      exportToJSON(exportData, `youworker-analytics-${formatDate(new Date())}`);
-    }
-
-    toastSuccess(`Analytics exported as ${format.toUpperCase()}`);
-  }, [overview, tokens, tools, sessions, ingestion, dateRange]);
 
   if (error) {
     return (
@@ -167,21 +124,6 @@ function AnalyticsDashboardComponent() {
               </Button>
             ))}
           </div>
-          <DateRangePicker
-            value={pickerDateRange}
-            onChange={setPickerDateRange}
-            placeholder="Custom date range"
-          />
-          <div className="flex gap-1">
-            <Button variant="outline" size="sm" onClick={() => handleExport('csv')}>
-              <Download className="mr-2 h-4 w-4" />
-              CSV
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => handleExport('json')}>
-              <Download className="mr-2 h-4 w-4" />
-              JSON
-            </Button>
-          </div>
           <Button variant="ghost" size="sm" onClick={refresh}>
             Refresh
           </Button>
@@ -202,10 +144,7 @@ function AnalyticsDashboardComponent() {
       ) : (
         <div className="space-y-8">
           <OverviewSection />
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            <TokenUsageChart data={tokens} />
-            <SessionAnalytics data={sessions} />
-          </div>
+          <TokenUsageChart data={tokens} />
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <ToolMetricsTable data={tools} />
             <IngestionMetrics data={ingestion} />

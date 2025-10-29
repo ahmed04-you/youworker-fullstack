@@ -124,7 +124,9 @@ class ChatSession(AsyncAttrs, Base):
 
     user: Mapped[User] = relationship(back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
-        back_populates="session", cascade="all, delete-orphan"
+        back_populates="session",
+        cascade="all, delete-orphan",
+        order_by="ChatMessage.created_at"
     )
 
     __table_args__ = (Index("idx_chat_sessions_user_created", "user_id", created_at.desc()),)

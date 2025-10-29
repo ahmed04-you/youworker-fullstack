@@ -18,7 +18,6 @@ interface ConversationPaneProps {
   isStreaming: boolean;
   isRecording: boolean;
   input: string;
-  assistantLanguage: string;
   selectedModel: string;
   enableTools: boolean;
   expectAudio: boolean;
@@ -29,7 +28,6 @@ interface ConversationPaneProps {
   onStopStreaming: () => void;
   onToggleTools: () => void;
   onToggleAudio: () => void;
-  onAssistantLanguageChange: (value: string) => void;
   onSelectedModelChange: (value: string) => void;
   onStartNewSession: () => void;
   onOpenSessions?: () => void;
@@ -43,7 +41,6 @@ function ConversationPaneComponent({
   isStreaming,
   isRecording,
   input,
-  assistantLanguage,
   selectedModel,
   enableTools,
   expectAudio,
@@ -54,7 +51,6 @@ function ConversationPaneComponent({
   onStopStreaming,
   onToggleTools,
   onToggleAudio,
-  onAssistantLanguageChange,
   onSelectedModelChange,
   onStartNewSession,
   onOpenSessions,
@@ -165,7 +161,7 @@ function ConversationPaneComponent({
 
   return (
     <motion.div
-      className="relative flex h-full flex-col"
+      className="relative flex flex-col h-full overflow-hidden"
       onPanEnd={isMobile ? handlePanEnd : undefined}
     >
       {/* Streaming indicator badge */}
@@ -201,13 +197,12 @@ function ConversationPaneComponent({
         </Button>
       )}
 
-      {/* Sticky compose bar on mobile, relative on desktop */}
-      <div className="md:relative md:mt-6 fixed bottom-0 left-0 right-0 md:left-auto md:right-auto md:bottom-auto bg-background md:bg-transparent p-4 md:p-0 border-t md:border-t-0 z-20">
+      {/* Compose bar */}
+      <div className="flex-shrink-0 mt-4">
         <ChatComposer
           input={input}
           isStreaming={isStreaming}
           isRecording={isRecording}
-          assistantLanguage={assistantLanguage}
           selectedModel={selectedModel}
           enableTools={enableTools}
           expectAudio={expectAudio}
@@ -218,14 +213,10 @@ function ConversationPaneComponent({
           onStopStreaming={onStopStreaming}
           onToggleTools={onToggleTools}
           onToggleAudio={onToggleAudio}
-          onAssistantLanguageChange={onAssistantLanguageChange}
           onSelectedModelChange={onSelectedModelChange}
           voiceSupported={voiceSupported}
         />
       </div>
-
-      {/* Spacer for mobile to prevent content from being hidden behind sticky composer */}
-      <div className="md:hidden h-[200px]" aria-hidden="true" />
     </motion.div>
   );
 }

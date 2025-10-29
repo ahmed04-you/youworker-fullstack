@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Upload, Trash2, FileText } from 'lucide-react';
 import { useDocumentStore } from '../store/document-store';
 import { toastSuccess } from '@/lib/toast-helpers';
+import { useAuth } from '@/lib/auth-context';
 
 /**
  * Props for the DocumentList component
@@ -68,7 +69,10 @@ function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const { filters, selectedDocuments, clearSelection } = useDocumentStore();
   const deleteMutation = useDeleteDocumentMutation();
-  const { data, isLoading, error, refetch } = useDocuments(page, 20, filters, { enabled: true });
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const { data, isLoading, error, refetch } = useDocuments(page, 20, filters, {
+    enabled: !authLoading && isAuthenticated
+  });
 
   const documents = data?.documents || [];
   const totalPages = Math.ceil((data?.total || 0) / 20);
@@ -98,28 +102,20 @@ function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold">Documents</h2>
-          {selectedDocuments.length > 0 && (
-            <Badge variant="secondary">{selectedDocuments.length} selected</Badge>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {selectedDocuments.length > 0 && (
-            <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
-              <Trash2 className="mr-1 h-4 w-4" />
-              Delete Selected
-            </Button>
-          )}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2 flex-1">
           <FiltersComponent onFiltersChange={(newFilters: DocumentFilters) => {
             setPage(1);
           }} />
-          <Button onClick={() => setUploadOpen(true)}>
-            <Upload className="mr-2 h-4 w-4" />
-            Upload
-          </Button>
+          {selectedDocuments.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={handleBatchDelete}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         </div>
+        <Button onClick={() => setUploadOpen(true)}>
+          <Upload className="h-4 w-4" />
+        </Button>
       </div>
 
       {isLoading ? (
@@ -139,10 +135,6 @@ function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
               Get started by uploading your first document. Supported formats include PDF, DOCX, TXT, and more.
             </p>
           </div>
-          <Button onClick={() => setUploadOpen(true)} size="lg">
-            <Upload className="mr-2 h-4 w-4" />
-            Upload Document
-          </Button>
         </div>
       ) : (
         <>

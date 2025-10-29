@@ -322,6 +322,53 @@ export function apiDelete<T = unknown>(path: string, options?: FetchOptions) {
   return apiFetch<T>(path, { ...options, method: "DELETE" });
 }
 
+export async function apiPostMultipart<T = unknown>(
+  path: string,
+  formData: FormData,
+  options?: FetchOptions
+): Promise<T> {
+  const url = resolveUrl(path, options?.query);
+
+  const requestHeaders: Record<string, string> = {};
+
+  // Get CSRF token for non-safe methods
+  const token = await ensureCsrfToken();
+  requestHeaders[CSRF_HEADER_NAME] = token;
+
+  // Add any additional headers from options
+  if (options?.headers) {
+    const normalizedHeaders = options.headers instanceof Headers
+      ? Object.fromEntries(options.headers.entries())
+      : Array.isArray(options.headers)
+      ? Object.fromEntries(options.headers)
+      : options.headers;
+    Object.assign(requestHeaders, normalizedHeaders);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      body: formData,
+      headers: requestHeaders,
+      credentials: options?.credentials || "include",
+    });
+  } catch (error) {
+    throw new ApiError(
+      'Network error: Unable to connect to the server',
+      0,
+      error,
+      ErrorType.NETWORK
+    );
+  }
+
+  if (!response.ok && response.status === 403) {
+    invalidateCsrfToken();
+  }
+
+  return handleResponse<T>(response);
+}
+
 function parseSseChunk<T = unknown>(chunk: string): SseEvent<T> {
   let eventName = "message";
   const dataLines: string[] = [];

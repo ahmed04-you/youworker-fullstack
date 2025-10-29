@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { useShallow } from "zustand/react/shallow";
 
 import { useAuth } from "@/lib/auth-context";
 import { postEventStream } from "@/lib/api-client";
@@ -71,7 +72,6 @@ type ChatControllerSlice = Pick<
     | "isRecording"
     | "enableTools"
     | "expectAudio"
-    | "assistantLanguage"
     | "selectedModel"
     | "health"
     | "healthLoading"
@@ -95,7 +95,6 @@ type ChatControllerSlice = Pick<
   setIsRecording: ChatStore["setIsRecording"];
   setEnableTools: ChatStore["setEnableTools"];
   setExpectAudio: ChatStore["setExpectAudio"];
-  setAssistantLanguage: ChatStore["setAssistantLanguage"];
   setSelectedModel: ChatStore["setSelectedModel"];
   setHealth: ChatStore["setHealth"];
   setHealthLoading: ChatStore["setHealthLoading"];
@@ -248,6 +247,54 @@ export function useChatController() {
   const recordingStopResolverRef = useRef<(() => void) | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
+  // Memoize selector to prevent infinite loops in useSyncExternalStore
+  const selector = useCallback((state: ChatStore): ChatControllerSlice => ({
+    sessions: state.sessions,
+    sessionsLoading: state.sessionsLoading,
+    activeSession: state.activeSession,
+    sessionIdentifier: state.sessionIdentifier,
+    messages: state.messages,
+    input: state.input,
+    isStreaming: state.isStreaming,
+    streamController: state.streamController,
+    toolTimeline: state.toolTimeline,
+    logEntries: state.logEntries,
+    transcript: state.transcript,
+    sttMeta: state.sttMeta,
+    isRecording: state.isRecording,
+    enableTools: state.enableTools,
+    expectAudio: state.expectAudio,
+    selectedModel: state.selectedModel,
+    health: state.health,
+    healthLoading: state.healthLoading,
+    setSessions: state.setSessions,
+    setSessionsLoading: state.setSessionsLoading,
+    setActiveSession: state.setActiveSession,
+    setSessionIdentifier: state.setSessionIdentifier,
+    setMessages: state.setMessages,
+    addMessage: state.addMessage,
+    updateMessage: state.updateMessage,
+    setInput: state.setInput,
+    setStreamController: state.setStreamController,
+    setIsStreaming: state.setIsStreaming,
+    setToolTimeline: state.setToolTimeline,
+    setLogEntries: state.setLogEntries,
+    addToolEvent: state.addToolEvent,
+    addLogEntry: state.addLogEntry,
+    setTranscript: state.setTranscript,
+    setSttMeta: state.setSttMeta,
+    setIsRecording: state.setIsRecording,
+    setEnableTools: state.setEnableTools,
+    setExpectAudio: state.setExpectAudio,
+    setSelectedModel: state.setSelectedModel,
+    setHealth: state.setHealth,
+    setHealthLoading: state.setHealthLoading,
+    clearStreamData: state.clearStreamData,
+    startNewSession: state.startNewSession,
+    getSessionHistory: state.getSessionHistory,
+    deriveSessionName: state.deriveSessionName,
+  }), []);
+
   const {
     sessions,
     sessionsLoading,
@@ -287,7 +334,6 @@ export function useChatController() {
     setIsRecording,
     setEnableTools,
     setExpectAudio,
-    setAssistantLanguage,
     setSelectedModel,
     setHealth,
     setHealthLoading,
@@ -295,61 +341,14 @@ export function useChatController() {
     startNewSession,
     getSessionHistory,
     deriveSessionName,
-  } = useChatStore((state) => ({
-      sessions: state.sessions,
-      sessionsLoading: state.sessionsLoading,
-      activeSession: state.activeSession,
-      sessionIdentifier: state.sessionIdentifier,
-      messages: state.messages,
-      input: state.input,
-      isStreaming: state.isStreaming,
-      streamController: state.streamController,
-      toolTimeline: state.toolTimeline,
-      logEntries: state.logEntries,
-      transcript: state.transcript,
-      sttMeta: state.sttMeta,
-      isRecording: state.isRecording,
-      enableTools: state.enableTools,
-      expectAudio: state.expectAudio,
-      assistantLanguage: state.assistantLanguage,
-      selectedModel: state.selectedModel,
-      health: state.health,
-      healthLoading: state.healthLoading,
-      setSessions: state.setSessions,
-      setSessionsLoading: state.setSessionsLoading,
-      setActiveSession: state.setActiveSession,
-      setSessionIdentifier: state.setSessionIdentifier,
-      setMessages: state.setMessages,
-      addMessage: state.addMessage,
-      updateMessage: state.updateMessage,
-      setInput: state.setInput,
-      setStreamController: state.setStreamController,
-      setIsStreaming: state.setIsStreaming,
-      setToolTimeline: state.setToolTimeline,
-      setLogEntries: state.setLogEntries,
-      addToolEvent: state.addToolEvent,
-      addLogEntry: state.addLogEntry,
-      setTranscript: state.setTranscript,
-      setSttMeta: state.setSttMeta,
-      setIsRecording: state.setIsRecording,
-      setEnableTools: state.setEnableTools,
-      setExpectAudio: state.setExpectAudio,
-      setAssistantLanguage: state.setAssistantLanguage,
-      setSelectedModel: state.setSelectedModel,
-      setHealth: state.setHealth,
-      setHealthLoading: state.setHealthLoading,
-      clearStreamData: state.clearStreamData,
-      startNewSession: state.startNewSession,
-      getSessionHistory: state.getSessionHistory,
-      deriveSessionName: state.deriveSessionName,
-    })) as ChatControllerSlice;
+  } = useChatStore(useShallow(selector));
 
   const {
     data: sessionsData,
     refetch: refetchSessions,
     isLoading: sessionsLoadingQuery,
     isFetching: sessionsFetching,
-  } = useSessionsQuery();
+  } = useSessionsQuery(50, { enabled: !authLoading && isAuthenticated });
   const deleteSessionMutation = useDeleteSessionMutation();
   const renameSessionMutation = useRenameSessionMutation();
   const {
@@ -592,7 +591,6 @@ export function useChatController() {
       text_input: userMessage.content,
       messages: snapshot.getSessionHistory(),
       session_id: snapshot.sessionIdentifier,
-      assistant_language: snapshot.assistantLanguage,
       enable_tools: snapshot.enableTools,
       model: snapshot.selectedModel,
       expect_audio: snapshot.expectAudio,
@@ -801,7 +799,6 @@ export function useChatController() {
         sample_rate: 16_000,
         messages: snapshot.getSessionHistory(),
         session_id: snapshot.sessionIdentifier,
-        assistant_language: snapshot.assistantLanguage,
         enable_tools: snapshot.enableTools,
         model: snapshot.selectedModel,
         expect_audio: true,
@@ -922,14 +919,12 @@ export function useChatController() {
     isRecording,
     enableTools,
     expectAudio,
-    assistantLanguage,
     selectedModel,
     health,
     healthLoading,
     setInput,
     setEnableTools,
     setExpectAudio,
-    setAssistantLanguage,
     setSelectedModel,
     refreshSessions,
     fetchHealth,

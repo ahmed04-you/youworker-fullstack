@@ -6,11 +6,9 @@ import { useAuth } from "@/lib/auth-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import {
   AppShell,
-  ChatHeader,
   ConversationPane,
   InsightsPanel,
   MobileInsightsDrawer,
-  SessionSidebar,
   useChatController,
 } from "@/features/chat";
 
@@ -18,14 +16,10 @@ export default function ChatPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const {
-    sessions,
-    sessionsLoading,
-    activeSession,
     messages,
     input,
     isStreaming,
     isRecording,
-    assistantLanguage,
     selectedModel,
     enableTools,
     expectAudio,
@@ -36,25 +30,20 @@ export default function ChatPage() {
     health,
     healthLoading,
     setInput,
-    setAssistantLanguage,
     setSelectedModel,
     setEnableTools,
     setExpectAudio,
     refreshSessions,
     fetchHealth,
-    handleSelectSession,
-    handleDeleteSession,
-    renameSession,
     stopStreaming,
     handleSendText,
     startRecording,
     stopRecording,
     startNewSession,
-    deriveSessionName,
   } = useChatController();
 
-  const [insightsOpen, setInsightsOpen] = useState(false);
   const [sessionDrawerOpen, setSessionDrawerOpen] = useState(false);
+  const [insightsOpen, setInsightsOpen] = useState(false);
 
   const handleCloseKeyboard = useCallback(() => {
     if (typeof document === "undefined") {
@@ -85,39 +74,6 @@ export default function ChatPage() {
   return (
     <>
       <AppShell
-        sidebar={
-          <SessionSidebar
-            sessions={sessions}
-            sessionsLoading={sessionsLoading}
-            activeSession={activeSession}
-            onRefresh={refreshSessions}
-            onNewSession={startNewSession}
-            onSelectSession={handleSelectSession}
-            onRenameSession={renameSession}
-            onDeleteSession={handleDeleteSession}
-            deriveSessionName={deriveSessionName}
-          />
-        }
-        header={
-          <ChatHeader
-            sessions={sessions}
-            sessionsLoading={sessionsLoading}
-            activeSession={activeSession}
-            onRefreshSessions={refreshSessions}
-            onNewSession={startNewSession}
-            onSelectSession={handleSelectSession}
-            onRenameSession={renameSession}
-            onDeleteSession={handleDeleteSession}
-            onRefreshHealth={fetchHealth}
-            healthLoading={healthLoading}
-            isStreaming={isStreaming}
-            enableTools={enableTools}
-            deriveSessionName={deriveSessionName}
-            onOpenInsights={() => setInsightsOpen(true)}
-            mobileDrawerOpen={sessionDrawerOpen}
-            onMobileDrawerChange={setSessionDrawerOpen}
-          />
-        }
         conversation={
           <ErrorBoundary>
             <ConversationPane
@@ -125,7 +81,6 @@ export default function ChatPage() {
               isStreaming={isStreaming}
               isRecording={isRecording}
               input={input}
-              assistantLanguage={assistantLanguage}
               selectedModel={selectedModel}
               enableTools={enableTools}
               expectAudio={expectAudio}
@@ -134,9 +89,8 @@ export default function ChatPage() {
               onStartRecording={startRecording}
               onStopRecording={stopRecording}
               onStopStreaming={stopStreaming}
-              onToggleTools={() => setEnableTools(!enableTools)}
+              onToggleTools={() => setEnableTools(true)}
               onToggleAudio={() => setExpectAudio(!expectAudio)}
-              onAssistantLanguageChange={setAssistantLanguage}
               onSelectedModelChange={setSelectedModel}
               onStartNewSession={startNewSession}
               onOpenSessions={() => setSessionDrawerOpen(true)}

@@ -526,16 +526,17 @@ async def get_user_sessions(
 async def get_session_with_messages(
     session: AsyncSession, session_id: int, user_id: int
 ) -> ChatSession | None:
-    """Get a chat session with all its messages."""
+    """Get a chat session with all its messages (ordered by created_at via relationship)."""
     from sqlalchemy.orm import joinedload
 
     q = (
         select(ChatSession)
-        .options(joinedload(ChatSession.messages).order_by(ChatMessage.created_at.asc()))
+        .options(joinedload(ChatSession.messages))
         .where(ChatSession.id == session_id, ChatSession.user_id == user_id)
     )
     result = await session.execute(q)
-    chat_session = result.scalar_one_or_none()
+    # unique() is required for joined eager loads against collections in SQLAlchemy 2.0
+    chat_session = result.unique().scalar_one_or_none()
     if not chat_session:
         return None
 

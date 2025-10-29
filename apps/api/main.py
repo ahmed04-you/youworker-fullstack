@@ -148,11 +148,12 @@ app.add_middleware(
 )
 
 # Enforce CSRF protection on state-changing requests
+# Note: auto-login is exempt because it's the initial SSO authentication step
 app.add_middleware(
     CSRFMiddleware,
     header_name=settings.csrf_header_name,
     cookie_name=settings.csrf_cookie_name,
-    exempt_paths={"/v1/auth/csrf-token"},
+    exempt_paths={"/v1/auth/csrf-token", "/v1/auth/auto-login"},
 )
 
 

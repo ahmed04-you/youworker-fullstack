@@ -20,6 +20,11 @@ const inter = Inter({ subsets: ["latin"] });
 export const metadata: Metadata = {
   title: "YouWorker.AI - Professional AI Assistant",
   description: "Advanced conversational AI with voice, semantic search, and extensible tools.",
+  icons: {
+    icon: "/YouWorker.ai-ico.svg",
+    shortcut: "/YouWorker.ai-ico.svg",
+    apple: "/YouWorker.ai-ico.svg",
+  },
 };
 
 export default function RootLayout({

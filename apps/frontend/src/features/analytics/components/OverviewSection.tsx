@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { SessionsCard, TokensCard, ToolCallsCard, DurationCard, DocumentsCard, ChunksCard } from './MetricCard';
+import { TokensCard, ToolCallsCard, DocumentsCard } from './MetricCard';
 import { useAnalyticsOverview } from '../api/analytics-service';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -27,8 +27,8 @@ export function OverviewSection() {
           <CardTitle>Overview</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
               <Skeleton key={i} className="h-24 w-full" />
             ))}
           </div>
@@ -43,13 +43,10 @@ export function OverviewSection() {
         <CardTitle>Overview</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <SessionsCard data={overview!} />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <TokensCard data={overview!} />
           <ToolCallsCard data={overview!} />
-          <DurationCard data={overview!} />
           <DocumentsCard data={overview!} />
-          <ChunksCard data={overview!} />
         </div>
       </CardContent>
     </Card>

@@ -21,7 +21,10 @@ interface SessionAnalyticsProps {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
 
 export function SessionAnalytics({ data, height = 300 }: SessionAnalyticsProps) {
-  if (data.length === 0) {
+  // Ensure data is an array and handle undefined/null cases
+  const sessionData = Array.isArray(data) ? data : [];
+
+  if (sessionData.length === 0) {
     return (
       <div className="space-y-4">
         <div className="h-[300px] flex items-center justify-center text-muted-foreground rounded-md border p-4">
@@ -36,7 +39,7 @@ export function SessionAnalytics({ data, height = 300 }: SessionAnalyticsProps) 
   }
 
   // Model distribution for pie chart
-  const modelDistribution = data.reduce((acc, session) => {
+  const modelDistribution = sessionData.reduce((acc, session) => {
     acc[session.model] = (acc[session.model] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -47,7 +50,7 @@ export function SessionAnalytics({ data, height = 300 }: SessionAnalyticsProps) 
   }));
 
   // Top 5 sessions by tokens
-  const topSessions = [...data]
+  const topSessions = [...sessionData]
     .sort((a, b) => b.tokens - a.tokens)
     .slice(0, 5);
 

@@ -1,18 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { memo, useState } from "react";
 import {
-  Loader2,
-  RefreshCw,
   Plus,
-  Sparkles,
+  MoreVertical,
+  Pencil,
   Trash2,
-  BookOpen,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -33,6 +29,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { SessionSummary } from "@/lib/types";
 
 /**
@@ -125,17 +127,7 @@ export const SessionSidebar = memo(function SessionSidebar({
   };
 
   return (
-    <aside className="hidden w-[320px] flex-col border-r border-border/60 bg-card/70 p-4 lg:flex">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground">Workspace</p>
-          <h2 className="text-lg font-semibold text-foreground">Conversations</h2>
-        </div>
-        <Button size="icon" variant="ghost" onClick={onRefresh} aria-label="Refresh sessions">
-          {sessionsLoading ? <Loader2 className="h-4 w-4 motion-safe:animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-        </Button>
-      </div>
-
+    <aside className="hidden w-[280px] flex-col border-r border-border/60 bg-card/70 p-4 lg:flex">
       <Button
         variant="secondary"
         className="mb-4 w-full gap-2 rounded-2xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
@@ -150,16 +142,13 @@ export const SessionSidebar = memo(function SessionSidebar({
         {sessionsLoading ? (
           <>
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="rounded-2xl border border-border/60 bg-background/60 p-4">
-                <div className="flex items-start justify-between gap-2">
+              <div key={i} className="rounded-2xl border border-border/60 bg-background/60 p-3">
+                <div className="flex items-center justify-between gap-2">
                   <div className="flex-1">
                     <Skeleton className="h-4 w-3/4 mb-2" />
                     <Skeleton className="h-3 w-1/2" />
                   </div>
-                  <Skeleton className="h-5 w-12 rounded-full" />
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
                 </div>
               </div>
             ))}
@@ -172,78 +161,78 @@ export const SessionSidebar = memo(function SessionSidebar({
           sessions.map((session) => {
             const isActive = activeSession?.id === session.id;
             return (
-              <button
+              <div
                 key={session.id}
-                className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                className={`w-full rounded-2xl border px-3 py-2 text-left transition group ${
                   isActive
                     ? "border-primary/60 bg-primary/10 shadow-sm"
                     : "border-transparent bg-background/60 hover:border-border/80 hover:bg-background"
                 }`}
-                onClick={() => onSelectSession(session)}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
+                <div className="flex items-center justify-between gap-2">
+                  <div
+                    className="flex-1 cursor-pointer"
+                    onClick={() => onSelectSession(session)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onSelectSession(session);
+                      }
+                    }}
+                  >
+                    <p className="text-sm font-medium text-foreground line-clamp-1">
                       {deriveSessionName(session)}
                     </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(session.updated_at).toLocaleString()}
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {new Date(session.updated_at).toLocaleString(undefined, {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className="rounded-full border-primary/40 text-[10px] uppercase tracking-wide text-primary"
-                  >
-                    {session.model ? session.model.split(":")[0] : "auto"}
-                  </Badge>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label="Session options"
+                      >
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openRenameDialog(session);
+                        }}
+                      >
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteTarget(session);
+                        }}
+                        className="text-destructive"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
-                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 font-medium text-primary">
-                    <Sparkles className="h-3 w-3" />
-                    {session.enable_tools ? "Tools" : "Chat"}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="ml-auto h-8 w-8 rounded-full text-muted-foreground hover:text-primary"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      openRenameDialog(session);
-                    }}
-                    aria-label="Rename session"
-                  >
-                    <Sparkles className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 rounded-full text-muted-foreground hover:text-destructive"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      setDeleteTarget(session);
-                    }}
-                    aria-label="Delete session"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </button>
+              </div>
             );
           })
         )}
-      </div>
-
-      <div className="mt-4 rounded-2xl border border-border bg-background/70 p-4 text-sm text-muted-foreground">
-        <p className="flex items-center gap-2 font-medium text-foreground">
-          <BookOpen className="h-4 w-4 text-primary" />
-          Knowledge Hub
-        </p>
-        <p className="mt-1">
-          Curate documents and tools that fuel the agent&apos;s reasoning.{" "}
-          <Link href="/documents" className="text-primary underline">
-            Visit documents →
-          </Link>
-        </p>
       </div>
 
       <Dialog open={Boolean(renameTarget)} onOpenChange={(open) => (!open ? closeRenameDialog() : undefined)}>

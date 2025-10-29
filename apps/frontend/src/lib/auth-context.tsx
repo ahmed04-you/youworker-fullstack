@@ -1,16 +1,14 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode, useRef } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { apiGet, apiPost } from "@/lib/api-client";
 
 interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   username: string | null;
-  login: (apiKey: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<boolean>;
-  attemptAutoLogin: () => Promise<boolean>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,30 +18,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [username, setUsername] = useState<string | null>(null);
   const [isMounted, setIsMounted] = useState(false);
-  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const clearRefreshTimeout = () => {
-    if (refreshTimeoutRef.current) {
-      clearTimeout(refreshTimeoutRef.current);
-      refreshTimeoutRef.current = null;
-    }
-  };
-
-  const activateGuestSession = () => {
-    clearRefreshTimeout();
-    setIsAuthenticated(true);
-    setUsername("guest");
-  };
-
-  const scheduleRefresh = (expiresIn?: number | null) => {
-    clearRefreshTimeout();
-    const ttlSeconds = (expiresIn ?? 1800) - 60;
-    if (ttlSeconds > 0) {
-      refreshTimeoutRef.current = setTimeout(() => {
-        void refreshToken();
-      }, ttlSeconds * 1000);
-    }
-  };
 
   const checkAuth = async (): Promise<boolean> => {
     try {
@@ -51,11 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const data = await apiGet<{ username: string }>("/v1/auth/me");
       setIsAuthenticated(true);
       setUsername(data.username);
-      scheduleRefresh();
       return true;
     } catch (error) {
       console.error("Auth check failed:", error);
-      clearRefreshTimeout();
       setIsAuthenticated(false);
       setUsername(null);
       return false;
@@ -64,37 +36,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const attemptAutoLogin = async (): Promise<boolean> => {
+  const attemptAuthentikLogin = async (): Promise<boolean> => {
     try {
       const data = await apiPost<{ username: string; expires_in: number }>(
         "/v1/auth/auto-login"
       );
       setIsAuthenticated(true);
       setUsername(data.username);
-      scheduleRefresh(data.expires_in);
       return true;
     } catch (error) {
-      if (process.env.NODE_ENV !== "production") {
-        console.debug("Auto-login skipped:", error);
-      }
+      console.error("Authentik SSO authentication failed:", error);
       return false;
-    }
-  };
-
-  const login = async (apiKey: string): Promise<void> => {
-    try {
-      const data = await apiPost<{ username: string; expires_in: number }>(
-        "/v1/auth/login",
-        {
-          api_key: apiKey,
-        }
-      );
-      setIsAuthenticated(true);
-      setUsername(data.username);
-      scheduleRefresh(data.expires_in);
-    } catch (error) {
-      console.error("Login failed:", error);
-      throw error;
     }
   };
 
@@ -104,19 +56,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error("Logout failed:", error);
     } finally {
-      clearRefreshTimeout();
       setIsAuthenticated(false);
       setUsername(null);
-    }
-  };
-
-  const refreshToken = async (): Promise<void> => {
-    try {
-      const data = await apiPost<{ expires_in: number }>("/v1/auth/refresh");
-      scheduleRefresh(data.expires_in);
-    } catch (error) {
-      console.error("Token refresh failed:", error);
-      await logout();
     }
   };
 
@@ -125,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsMounted(true);
   }, []);
 
-  // Second useEffect: Run auth bootstrap only after component is mounted
+  // Second useEffect: Authentik SSO bootstrap - no guest mode fallback
   useEffect(() => {
     if (!isMounted) {
       return;
@@ -134,13 +75,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
 
     const bootstrap = async () => {
-      const initialAuth = await checkAuth();
-      if (!initialAuth && !cancelled) {
+      // Try to restore existing session
+      const existingSession = await checkAuth();
+
+      // If no existing session, attempt Authentik SSO authentication
+      if (!existingSession && !cancelled) {
         setIsLoading(true);
-        const auto = await attemptAutoLogin();
-        if (!cancelled && !auto) {
-          activateGuestSession();
+        const authentikAuth = await attemptAuthentikLogin();
+
+        if (!authentikAuth && !cancelled) {
+          // No guest mode fallback - user must authenticate via Authentik
+          console.warn("Authentication required: Authentik SSO not configured or unavailable");
+          setIsAuthenticated(false);
+          setUsername(null);
         }
+
         if (!cancelled) {
           setIsLoading(false);
         }
@@ -150,7 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       cancelled = true;
-      clearRefreshTimeout();
     };
   }, [isMounted]);
 
@@ -160,12 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isAuthenticated,
         isLoading,
         username,
-        login,
-      logout,
-      checkAuth,
-      attemptAutoLogin,
-    }}
-  >
+        logout,
+        checkAuth,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

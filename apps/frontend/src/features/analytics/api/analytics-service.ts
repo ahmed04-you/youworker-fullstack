@@ -25,39 +25,69 @@ export async function fetchAnalyticsOverview(): Promise<AnalyticsOverview> {
 }
 
 export async function fetchTokenUsage(dateRange?: DateRange): Promise<TokenUsage[]> {
-  const params = dateRange ? { 
-    start: dateRange.start.toISOString(), 
-    end: dateRange.end.toISOString() 
+  const params = dateRange ? {
+    start: dateRange.start.toISOString(),
+    end: dateRange.end.toISOString()
   } : {};
-  const response = await apiGet<TokenUsage[]>('/v1/analytics/tokens-timeline', { query: params });
-  return response;
+  const response = await apiGet<{interval: string, data: any[]}>('/v1/analytics/tokens-timeline', { query: params });
+  // Transform snake_case API response to camelCase
+  return (response.data || []).map((item: any) => ({
+    date: item.period,
+    inputTokens: item.tokens_in || 0,
+    outputTokens: item.tokens_out || 0,
+    totalTokens: item.total_tokens || 0,
+    model: 'default', // API doesn't provide model per period
+  }));
 }
 
 export async function fetchToolMetrics(dateRange?: DateRange): Promise<ToolMetric[]> {
-  const params = dateRange ? { 
-    start: dateRange.start.toISOString(), 
-    end: dateRange.end.toISOString() 
+  const params = dateRange ? {
+    start: dateRange.start.toISOString(),
+    end: dateRange.end.toISOString()
   } : {};
-  const response = await apiGet<ToolMetric[]>('/v1/analytics/tool-performance', { query: params });
-  return response;
+  const response = await apiGet<{data: any[]}>('/v1/analytics/tool-performance', { query: params });
+  // Transform snake_case API response to camelCase
+  return (response.data || []).map((item: any) => ({
+    toolName: item.tool_name,
+    calls: item.total_runs || 0,
+    successRate: item.success_rate || 0,
+    avgDuration: item.avg_latency_ms || 0,
+    totalTokens: item.total_tokens || 0,
+  }));
 }
 
 export async function fetchSessionStats(dateRange?: DateRange): Promise<SessionStat[]> {
-  const params = dateRange ? { 
-    start: dateRange.start.toISOString(), 
-    end: dateRange.end.toISOString() 
+  const params = dateRange ? {
+    start: dateRange.start.toISOString(),
+    end: dateRange.end.toISOString()
   } : {};
-  const response = await apiGet<SessionStat[]>('/v1/analytics/session-activity', { query: params });
-  return response;
+  const response = await apiGet<{timeline: any[], by_model: any[]}>('/v1/analytics/session-activity', { query: params });
+  // Transform aggregated timeline data to match SessionStat interface
+  // Note: API returns aggregated data, not individual sessions
+  return (response.timeline || []).map((item: any) => ({
+    sessionId: item.period, // Using period as ID for aggregated data
+    duration: 0, // Not provided in aggregated data
+    tokens: 0, // Not provided in aggregated data
+    toolCalls: item.tools_enabled_count || 0,
+    model: 'aggregated',
+    createdAt: item.period,
+  }));
 }
 
 export async function fetchIngestionMetrics(dateRange?: DateRange): Promise<IngestionMetric[]> {
-  const params = dateRange ? { 
-    start: dateRange.start.toISOString(), 
-    end: dateRange.end.toISOString() 
+  const params = dateRange ? {
+    start: dateRange.start.toISOString(),
+    end: dateRange.end.toISOString()
   } : {};
-  const response = await apiGet<IngestionMetric[]>('/v1/analytics/ingestion-stats', { query: params });
-  return response;
+  const response = await apiGet<{timeline: any[], by_collection: any[]}>('/v1/analytics/ingestion-stats', { query: params });
+  // Transform snake_case API response to camelCase
+  return (response.timeline || []).map((item: any) => ({
+    date: item.period,
+    documentsAdded: item.total_files || 0,
+    chunksAdded: item.total_chunks || 0,
+    errors: item.run_count - (item.success_count || 0), // Calculate errors from failed runs
+    sources: {}, // Not provided in timeline, use by_collection if needed
+  }));
 }
 
 export function useAnalyticsOverview(options?: { enabled?: boolean }) {

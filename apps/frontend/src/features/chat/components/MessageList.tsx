@@ -5,6 +5,7 @@ import { BrainCircuit, Sparkles, Plus, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 import type { ChatMessageView } from "../types";
 
@@ -38,7 +39,13 @@ const MessageBubble = memo(({ message }: { message: ChatMessageView }) => {
         </span>
         <time dateTime={message.createdAt}>{message.createdAt}</time>
       </div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+      <div className="text-sm leading-relaxed">
+        {isAssistant ? (
+          <MarkdownRenderer content={message.content} />
+        ) : (
+          <p className="whitespace-pre-wrap">{message.content}</p>
+        )}
+      </div>
       {message.toolCallName && (
         <div className="flex items-center gap-2 text-xs">
           <Badge variant="secondary" className="rounded-full bg-background/40">
@@ -78,7 +85,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
       return (
         <div
           ref={ref}
-          className="flex h-[calc(100vh-320px)] flex-col gap-6 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
+          className="flex flex-1 flex-col gap-6 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
           role="region"
           aria-label="Empty chat conversation"
         >
@@ -136,7 +143,7 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     return (
       <div
         ref={ref}
-        className="flex h-[calc(100vh-320px)] flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
+        className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
         role="log"
         aria-label="Chat messages"
         aria-live="polite"

@@ -1,10 +1,8 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon, Search, X } from 'lucide-react';
-import { format } from 'date-fns';
+import { Search, X } from 'lucide-react';
 import type { DocumentFilters } from '../types';
 import { useDocumentStore } from '../store/document-store';
 
@@ -12,12 +10,8 @@ interface DocumentFiltersProps {
   onFiltersChange?: (filters: DocumentFilters) => void;
 }
 
-type DateRange = { start: Date; end: Date } | undefined;
-
 export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
   const { filters, setFilters, resetFilters } = useDocumentStore();
-  const [startDate, setStartDate] = useState<Date | undefined>(filters.dateRange?.start);
-  const [endDate, setEndDate] = useState<Date | undefined>(filters.dateRange?.end);
 
   const handleSearchChange = useCallback(
     (value: string) => {
@@ -55,33 +49,8 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
     [filters, setFilters, onFiltersChange]
   );
 
-  const updateDateRange = useCallback(() => {
-    const newDateRange = startDate && endDate ? { start: startDate, end: endDate } : undefined;
-    const newFilters = { ...filters, dateRange: newDateRange };
-    setFilters(newFilters);
-    onFiltersChange?.(newFilters);
-  }, [startDate, endDate, filters, setFilters, onFiltersChange]);
-
-  const handleStartChange = useCallback(
-    (value: string) => {
-      setStartDate(value ? new Date(value) : undefined);
-      updateDateRange();
-    },
-    [updateDateRange]
-  );
-
-  const handleEndChange = useCallback(
-    (value: string) => {
-      setEndDate(value ? new Date(value) : undefined);
-      updateDateRange();
-    },
-    [updateDateRange]
-  );
-
   const handleReset = useCallback(() => {
     resetFilters();
-    setStartDate(undefined);
-    setEndDate(undefined);
     onFiltersChange?.({});
   }, [resetFilters, onFiltersChange]);
 
@@ -135,24 +104,6 @@ export function DocumentFilters({ onFiltersChange }: DocumentFiltersProps) {
             <SelectItem value="error">Error</SelectItem>
           </SelectContent>
         </Select>
-
-        {/* Date Range - Simplified input for now */}
-        <Input
-          type="date"
-          placeholder="Start Date"
-          aria-label="Start date"
-          value={startDate ? format(startDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => handleStartChange(e.target.value)}
-          className="w-[120px]"
-        />
-        <Input
-          type="date"
-          placeholder="End Date"
-          aria-label="End date"
-          value={endDate ? format(endDate, 'yyyy-MM-dd') : ''}
-          onChange={(e) => handleEndChange(e.target.value)}
-          className="w-[120px]"
-        />
 
         {/* Reset Button */}
         <Button

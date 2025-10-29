@@ -21,13 +21,27 @@ export function ThemeToggle() {
     setMounted(true);
   }, []);
 
-  const effectiveTheme = !mounted ? "light" : theme ?? "system";
-  const displayTheme =
-    !mounted || effectiveTheme === "system" ? "system" : effectiveTheme;
+  // Prevent hydration mismatch by not rendering until mounted
+  if (!mounted) {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="inline-flex items-center gap-2 rounded-full text-xs text-muted-foreground hover:text-primary"
+        disabled
+        aria-label="Loading theme toggle"
+      >
+        <Laptop className="h-4 w-4" />
+        <span>System</span>
+      </Button>
+    );
+  }
+
+  const effectiveTheme = theme ?? "system";
+  const displayTheme = effectiveTheme === "system" ? "system" : effectiveTheme;
   const resolved = resolvedTheme ?? "light";
 
   const cycleTheme = () => {
-    if (!mounted) return;
     if (!theme || theme === "system") {
       setTheme("light");
     } else if (theme === "light") {
@@ -37,8 +51,7 @@ export function ThemeToggle() {
     }
   };
 
-  const iconTheme =
-    displayTheme === "system" ? resolved : displayTheme;
+  const iconTheme = displayTheme === "system" ? resolved : displayTheme;
 
   const icon =
     iconTheme === "light" ? (

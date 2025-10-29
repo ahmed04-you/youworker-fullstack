@@ -26,6 +26,7 @@ services:
     container_name: youworker-qdrant
     restart: unless-stopped
     ports:
+      - "8000:6333"
       - "6333:6333"
       - "6334:6334"
     volumes:
@@ -223,28 +224,6 @@ services:
       retries: 5
       start_period: 300s
 
-  frontend:
-    build:
-      context: ../..
-      dockerfile: ops/docker/Dockerfile.frontend
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-}
-        NEXT_PUBLIC_API_PORT: ${NEXT_PUBLIC_API_PORT:-8000}
-        NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-secure-dev-root-key-2025-v1}
-    container_name: youworker-frontend
-    env_file:
-      - ../../.env
-    restart: unless-stopped
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
-      start_period: 60s
-    environment:
-      NODE_ENV: "production"
-
   grafana:
     image: grafana/grafana:10.4.3
     container_name: youworker-grafana
@@ -291,19 +270,13 @@ services:
     image: nginx:1.25.5-alpine
     container_name: youworker-nginx
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    network_mode: "host"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ../../data/nginx/ssl:/etc/nginx/ssl
-    depends_on:
-      frontend:
-        condition: service_healthy
-      api:
-        condition: service_healthy
     healthcheck:
       <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --no-check-certificate https://127.0.0.1:8000/ || exit 1"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider --no-check-certificate https://127.0.0.1:443/ || exit 1"]
 
 networks:
   default:

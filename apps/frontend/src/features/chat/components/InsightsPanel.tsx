@@ -4,15 +4,10 @@ import Link from "next/link";
 import { memo } from "react";
 import {
   Sparkles,
-  Cpu,
-  Volume2,
-  ArrowRight,
   ChevronRight,
-  Loader2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { ChatLogEntry, ChatToolEvent } from "@/lib/types";
@@ -34,216 +29,77 @@ interface InsightsProps {
 
 function InsightsContent({
   toolTimeline,
-  logEntries,
-  transcript,
-  sttMeta,
-  health,
-  healthLoading,
-  onRefreshHealth,
-}: InsightsProps) {
+}: Pick<InsightsProps, 'toolTimeline'>) {
   return (
-    <div className="space-y-5">
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-primary" />
-            Tool timeline
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {toolTimeline.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Tools spring into action while you chat. You&apos;ll see them here in real time.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {toolTimeline.slice(-6).map((event, index) => (
-                <div
-                  key={`${event.tool}-${event.status}-${index}`}
-                  className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-xs"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-foreground">{event.tool}</span>
-                    <Badge
-                      className={`rounded-full text-[10px] uppercase tracking-wider ${
-                        event.status === "start"
-                          ? "bg-primary/10 text-primary"
-                          : event.status === "success"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-destructive/10 text-destructive"
-                      }`}
-                    >
-                      {event.status}
-                    </Badge>
-                  </div>
-                  {event.latency_ms && (
-                    <p className="mt-1 text-muted-foreground">
-                      {event.latency_ms} ms • {event.result_preview?.slice(0, 60)}
-                      {event.result_preview && event.result_preview.length > 60 ? "…" : ""}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          <Link
-            href="/analytics"
-            className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline"
-          >
-            View analytics <ChevronRight className="h-3 w-3" />
-          </Link>
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Cpu className="h-4 w-4 text-primary" />
-            Reasoning trace
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-xs">
-          {logEntries.length === 0 ? (
-            <p className="text-muted-foreground">
-              We&apos;ll surface the thought process, warnings, and tool diagnostics here.
-            </p>
-          ) : (
-            logEntries.slice(-8).map((log, index) => (
+    <Card className="rounded-3xl border border-border bg-card/70 shadow-lg h-full flex flex-col">
+      <CardHeader className="pb-3 flex-shrink-0">
+        <CardTitle className="flex items-center gap-2 text-sm font-semibold">
+          <Sparkles className="h-4 w-4 text-primary" />
+          Tool timeline
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-y-auto space-y-3">
+        {toolTimeline.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Tools spring into action while you chat. You&apos;ll see them here in real time.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {toolTimeline.map((event, index) => (
               <div
-                key={`${log.level}-${index}`}
-                className="rounded-2xl border border-border/40 bg-background/60 px-3 py-2"
+                key={`${event.tool}-${event.status}-${index}`}
+                className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-xs"
               >
-                <span className="font-semibold uppercase tracking-wide text-primary">
-                  {log.level}
-                </span>
-                <p className="mt-1 text-muted-foreground">{log.msg}</p>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium text-foreground">{event.tool}</span>
+                  <Badge
+                    className={`rounded-full text-[10px] uppercase tracking-wider ${
+                      event.status === "start"
+                        ? "bg-primary/10 text-primary"
+                        : event.status === "success"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-destructive/10 text-destructive"
+                    }`}
+                  >
+                    {event.status}
+                  </Badge>
+                </div>
+                {event.latency_ms && (
+                  <p className="mt-1 text-muted-foreground">
+                    {event.latency_ms} ms • {event.result_preview?.slice(0, 60)}
+                    {event.result_preview && event.result_preview.length > 60 ? "…" : ""}
+                  </p>
+                )}
               </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <Volume2 className="h-4 w-4 text-primary" />
-            Voice capture
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {transcript ? (
-            <div className="space-y-2 text-sm">
-              <p className="rounded-2xl border border-border/60 bg-background/70 px-3 py-2 text-foreground" data-testid="transcript">
-                {transcript}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Confidence {(sttMeta.confidence ?? 0).toFixed(2)} • {sttMeta.language?.toUpperCase() || "auto"}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              When you speak to YouWorker we transcribe locally and surface the transcript here.
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="rounded-3xl border border-border bg-card/70 shadow-lg">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-semibold">
-            <ArrowRight className="h-4 w-4 text-primary" />
-            System health
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3 text-xs">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Badge
-                className={`rounded-full text-[10px] uppercase tracking-wider ${
-                  health?.status === "healthy"
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-amber-100 text-amber-700"
-                }`}
-              >
-                {health?.status || "unknown"}
-              </Badge>
-              <span className="text-muted-foreground">
-                {health?.components?.agent === "ready" ? "Agent ready" : "Agent warming up"}
-              </span>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRefreshHealth}
-              className="rounded-full"
-              disabled={healthLoading}
-            >
-              {healthLoading ? <Loader2 className="h-3.5 w-3.5 motion-safe:animate-spin" /> : "Refresh"}
-            </Button>
+            ))}
           </div>
-
-          {health?.components?.ollama?.models ? (
-            <div className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2">
-              <p className="font-semibold text-foreground">Models</p>
-              <div className="mt-2 space-y-1">
-                {Object.entries(health.components.ollama.models).map(([key, model]) => (
-                  <div key={key} className="flex items-center justify-between text-muted-foreground">
-                    <span>{model.name}</span>
-                    <span className={model.available ? "text-emerald-600" : "text-destructive font-medium"}>
-                      {model.available ? "ready" : "missing"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <p className="text-muted-foreground">Health data will appear once the agent connects to the backend.</p>
-          )}
-        </CardContent>
-      </Card>
-    </div>
+        )}
+        <Link
+          href="/analytics"
+          className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline mt-3"
+        >
+          View analytics <ChevronRight className="h-3 w-3" />
+        </Link>
+      </CardContent>
+    </Card>
   );
 }
 
 /**
- * Insights panel component displaying real-time chat diagnostics
+ * Insights panel component displaying real-time tool timeline
  *
- * Shows comprehensive information about the active chat session including
- * tool execution timeline, reasoning traces, voice transcripts, and system
- * health status. Designed for desktop display (hidden on mobile, use
+ * Shows tool execution timeline for the active chat session.
+ * Designed for desktop display (hidden on mobile, use
  * MobileInsightsDrawer instead). Optimized with React.memo for performance.
  *
  * @component
  * @param {InsightsProps} props - Component props
  * @param {ChatToolEvent[]} props.toolTimeline - Timeline of tool executions
- * @param {ChatLogEntry[]} props.logEntries - Reasoning and diagnostic logs
- * @param {string | null} props.transcript - Latest voice transcript
- * @param {SpeechTranscriptMeta} props.sttMeta - Speech-to-text metadata
- * @param {HealthStatus | null} props.health - System health status
- * @param {boolean} props.healthLoading - Whether health data is loading
- * @param {function} props.onRefreshHealth - Handler to refresh health data
- *
- * @example
- * ```tsx
- * <InsightsPanel
- *   toolTimeline={toolEvents}
- *   logEntries={logs}
- *   transcript={lastTranscript}
- *   sttMeta={{ confidence: 0.95, language: 'en' }}
- *   health={healthStatus}
- *   healthLoading={false}
- *   onRefreshHealth={refreshHealth}
- * />
- * ```
  *
  * Features:
  * - Tool timeline showing recent tool executions with status badges
- * - Reasoning trace displaying AI thought process and warnings
- * - Voice capture section with transcript and metadata
- * - System health status with model availability
- * - Refresh button for health data
  * - Link to full analytics dashboard
- * - Auto-displays last 6 tool events and 8 log entries
+ * - Auto-displays last 6 tool events
  * - Status-based color coding (success, error, in-progress)
  * - Desktop only (hidden on mobile via xl:flex)
  *
@@ -251,8 +107,8 @@ function InsightsContent({
  */
 export const InsightsPanel = memo(function InsightsPanel(props: InsightsProps) {
   return (
-    <aside className="hidden w-[320px] xl:flex xl:flex-col">
-      <InsightsContent {...props} />
+    <aside className="hidden w-[320px] xl:flex xl:flex-col overflow-hidden h-full">
+      <InsightsContent toolTimeline={props.toolTimeline} />
     </aside>
   );
 });
@@ -270,41 +126,18 @@ interface MobileInsightsDrawerProps extends InsightsProps {
  * Mobile drawer for insights panel
  *
  * Bottom sheet drawer variant of InsightsPanel optimized for mobile devices.
- * Displays the same diagnostic information (tools, logs, transcripts, health)
- * in a mobile-friendly drawer format.
+ * Displays tool timeline in a mobile-friendly drawer format.
  *
  * @component
  * @param {MobileInsightsDrawerProps} props - Component props
  * @param {boolean} props.open - Whether drawer is open
  * @param {function} props.onOpenChange - Handler for drawer open state
  * @param {ChatToolEvent[]} props.toolTimeline - Timeline of tool executions
- * @param {ChatLogEntry[]} props.logEntries - Reasoning and diagnostic logs
- * @param {string | null} props.transcript - Latest voice transcript
- * @param {SpeechTranscriptMeta} props.sttMeta - Speech-to-text metadata
- * @param {HealthStatus | null} props.health - System health status
- * @param {boolean} props.healthLoading - Whether health data is loading
- * @param {function} props.onRefreshHealth - Handler to refresh health data
- *
- * @example
- * ```tsx
- * <MobileInsightsDrawer
- *   open={drawerOpen}
- *   onOpenChange={setDrawerOpen}
- *   toolTimeline={toolEvents}
- *   logEntries={logs}
- *   transcript={lastTranscript}
- *   sttMeta={{ confidence: 0.95, language: 'en' }}
- *   health={healthStatus}
- *   healthLoading={false}
- *   onRefreshHealth={refreshHealth}
- * />
- * ```
  *
  * Features:
  * - Bottom sheet presentation (70% viewport height)
  * - Rounded top corners for modern mobile UI
  * - Scrollable content area
- * - Identical content to desktop InsightsPanel
  * - Swipe-to-dismiss gesture support
  *
  * @see {@link InsightsPanel} for desktop equivalent
@@ -312,7 +145,7 @@ interface MobileInsightsDrawerProps extends InsightsProps {
 export const MobileInsightsDrawer = memo(function MobileInsightsDrawer({
   open,
   onOpenChange,
-  ...props
+  toolTimeline,
 }: MobileInsightsDrawerProps) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -321,9 +154,9 @@ export const MobileInsightsDrawer = memo(function MobileInsightsDrawer({
       </SheetTrigger>
       <SheetContent side="bottom" className="h-[70vh] overflow-y-auto rounded-t-3xl border-border bg-background px-4 py-6">
         <SheetHeader className="mb-4">
-          <SheetTitle className="text-center text-base font-semibold">Insights</SheetTitle>
+          <SheetTitle className="text-center text-base font-semibold">Tool Timeline</SheetTitle>
         </SheetHeader>
-        <InsightsContent {...props} />
+        <InsightsContent toolTimeline={toolTimeline} />
       </SheetContent>
     </Sheet>
   );

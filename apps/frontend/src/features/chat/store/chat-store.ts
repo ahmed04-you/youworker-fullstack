@@ -12,7 +12,7 @@ import type {
 } from "../types";
 
 const DEFAULT_MODEL = "gpt-oss:20b";
-const DEFAULT_LANGUAGE = "en";
+const DEFAULT_LANGUAGE = "auto";
 const MAX_HISTORY = 6_000;
 
 type MessageUpdater =
@@ -231,7 +231,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   clearStreamData: () =>
     set({
-      toolTimeline: [],
+      // toolTimeline persists across messages in the same session
+      // It will be cleared only when starting a new session
       logEntries: [],
       transcript: null,
       sttMeta: {},
@@ -257,6 +258,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       sessionIdentifier: identifier,
       messages: [],
       input: "",
+      toolTimeline: [], // Clear tools when starting new session
     });
 
     get().clearStreamData();

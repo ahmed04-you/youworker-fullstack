@@ -44,40 +44,25 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_current_user(
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     youworker_token: Optional[str] = Cookie(default=None),
     authentik_api_key: Optional[str] = Header(default=None, alias="X-Authentik-Api-Key"),
     authentik_username: Optional[str] = Header(default=None, alias="X-Authentik-Username"),
 ):
     """
-    Get the current user from JWT token (cookie or header) or API key.
+    Get the current user from JWT cookie.
 
-    Authentication priority:
-    1. HttpOnly cookie (youworker_token)
-    2. Authorization header (Bearer token)
-    3. Authentik API key header (if enabled)
-    4. X-API-Key header (fallback for backward compatibility)
+    This function only supports JWT token authentication from the HttpOnly cookie.
+    The JWT token is issued after successful Authentik SSO authentication via /v1/auth/auto-login.
 
-    Supports both JWT tokens and API keys for backward compatibility.
+    Authentication flow:
+    1. Check for JWT token in youworker_token cookie
+    2. If no cookie but Authentik headers present, validate Authentik credentials
+    3. Return user object if authenticated, raise 401 otherwise
     """
-
     async with get_async_session() as db:
-        user = None
-        token = youworker_token  # Try cookie first
-        provided_api_key = x_api_key.strip() if isinstance(x_api_key, str) else None
+        token = youworker_token
 
-        # Try JWT authentication from cookie or Authorization header
-        if not token and authorization:
-            # Extract token from "Bearer <token>" format
-            scheme, _, bearer_token = authorization.partition(" ")
-            if scheme.lower() == "bearer" and bearer_token:
-                token = bearer_token
-            else:
-                # Support raw API key in Authorization header for backward compatibility
-                provided_api_key = authorization.strip()
-
-        # Decode JWT token if present
+        # Try JWT authentication from cookie
         if token:
             try:
                 secret = settings.jwt_secret or settings.root_api_key
@@ -92,62 +77,51 @@ async def get_current_user(
                         return user
             except JWTError as e:
                 logger.warning(f"JWT authentication failed: {e}")
-                # Fall back to API key authentication
+                # Fall through to Authentik header check
             except ValueError as e:
                 logger.warning(f"Token parsing failed: {e}")
-                # Fall back to API key authentication
+                # Fall through to Authentik header check
 
-        # If JWT failed or not provided, try API key authentication
-        if not user:
-            # If Authentik is enabled, prioritize Authentik API key
-            if settings.authentik_enabled and authentik_api_key:
-                api_key = authentik_api_key
-                username = authentik_username or "root"
-            else:
-                api_key = provided_api_key
-                username = "root"
+        # If JWT not present or invalid, check for Authentik headers (for direct API access)
+        if authentik_api_key:
+            username = authentik_username or "root"
 
-            if not api_key:
+            if not await _verify_api_key_with_session(db, authentik_api_key):
                 raise HTTPException(
                     status_code=401,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
+                    detail="Invalid Authentik credentials"
                 )
 
-            if not await _verify_api_key_with_session(db, api_key):
-                raise HTTPException(status_code=401, detail="Invalid API key")
+            user = await _ensure_root_user_impl(
+                session=db,
+                username=username,
+                api_key=authentik_api_key
+            )
+            if user:
+                return user
 
-            user = await _ensure_root_user_impl(session=db, username=username, api_key=api_key)
-            if not user:
-                raise HTTPException(status_code=401, detail="Invalid API key")
-
-        return user
+        # No valid authentication found
+        raise HTTPException(
+            status_code=401,
+            detail="Not authenticated - please authenticate via Authentik SSO",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 async def get_current_user_optional(
-    authorization: Optional[str] = Header(default=None),
-    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
     youworker_token: Optional[str] = Cookie(default=None),
+    authentik_api_key: Optional[str] = Header(default=None, alias="X-Authentik-Api-Key"),
+    authentik_username: Optional[str] = Header(default=None, alias="X-Authentik-Username"),
 ):
     """
-    Get the current user from JWT token (cookie or header) or API key, or None if no authentication provided.
+    Get the current user from JWT cookie, or None if no valid authentication.
+
+    Same as get_current_user but returns None instead of raising HTTPException.
     """
     async with get_async_session() as db:
-        user = None
-        token = youworker_token  # Try cookie first
-        provided_api_key = x_api_key.strip() if isinstance(x_api_key, str) else None
+        token = youworker_token
 
-        # Try JWT authentication from cookie or Authorization header
-        if not token and authorization:
-            # Extract token from "Bearer <token>" format
-            scheme, _, bearer_token = authorization.partition(" ")
-            if scheme.lower() == "bearer" and bearer_token:
-                token = bearer_token
-            else:
-                # Support raw API key in Authorization header for backward compatibility
-                provided_api_key = authorization.strip()
-
-        # Decode JWT token if present
+        # Try JWT authentication from cookie
         if token:
             try:
                 secret = settings.jwt_secret or settings.root_api_key
@@ -161,17 +135,18 @@ async def get_current_user_optional(
                     if user:
                         return user
             except JWTError as e:
-                logger.warning(f"JWT authentication failed: {e}")
-                # Fall back to API key authentication
+                logger.debug(f"JWT authentication failed: {e}")
             except ValueError as e:
-                logger.warning(f"Token parsing failed: {e}")
-                # Fall back to API key authentication
+                logger.debug(f"Token parsing failed: {e}")
 
-        # If JWT failed or not provided, try API key authentication
-        if not user and provided_api_key:
-            if await _verify_api_key_with_session(db, provided_api_key):
+        # Try Authentik headers
+        if authentik_api_key:
+            username = authentik_username or "root"
+            if await _verify_api_key_with_session(db, authentik_api_key):
                 user = await _ensure_root_user_impl(
-                    session=db, username="root", api_key=provided_api_key
+                    session=db,
+                    username=username,
+                    api_key=authentik_api_key
                 )
                 if user:
                     return user

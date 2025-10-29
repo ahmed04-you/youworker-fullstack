@@ -10,7 +10,10 @@ interface ToolMetricsTableProps {
 }
 
 export function ToolMetricsTable({ data }: ToolMetricsTableProps) {
-  if (data.length === 0) {
+  // Ensure data is an array and handle undefined/null cases
+  const toolMetrics = Array.isArray(data) ? data : [];
+
+  if (toolMetrics.length === 0) {
     return (
       <div className="rounded-md border p-8 text-center text-muted-foreground">
         <Zap className="mx-auto h-12 w-12 mb-4" />
@@ -33,7 +36,7 @@ export function ToolMetricsTable({ data }: ToolMetricsTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {data.map((tool, index) => (
+          {toolMetrics.map((tool, index) => (
             <TableRow key={tool.toolName || index}>
               <TableCell className="font-medium">
                 <div className="flex items-center gap-2">
