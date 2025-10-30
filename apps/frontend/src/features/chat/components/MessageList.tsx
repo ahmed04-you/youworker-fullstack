@@ -33,22 +33,34 @@ const MessageBubble = memo(
     }, []);
 
     if (isUser) {
-      // User message: bubble with background, icon on top right
+      // User message: bubble with gradient accent and enhanced styling
       return (
         <div
-          className={`flex items-start gap-2 justify-end transition-all duration-300 ease-out ${
+          className={`flex items-start gap-3 justify-end transition-all duration-300 ease-spring ${
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
           }`}
           data-testid="messages"
           role="article"
           aria-label="Message from you"
         >
-          <div className="flex flex-col items-end gap-0.5 max-w-4xl">
-            <div className="rounded-full bg-primary/10 p-1">
-              <User className="h-3.5 w-3.5 text-primary" />
+          <div className="flex flex-col items-end gap-2 max-w-2xl">
+            {/* Avatar with gradient */}
+            <div className="relative">
+              <div className="rounded-full gradient-accent p-2 shadow-md">
+                <User className="h-4 w-4 text-white" />
+              </div>
             </div>
-            <div className="rounded-2xl px-2.5 py-1.5 bg-primary text-primary-foreground shadow-lg">
-              <p className="text-sm leading-snug whitespace-pre-wrap">{message.content}</p>
+
+            {/* Message bubble with enhanced styling */}
+            <div className="group relative">
+              <div className="rounded-2xl rounded-tr-sm px-4 py-3 bg-primary text-primary-foreground shadow-lg hover:shadow-xl transition-shadow duration-200">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+              </div>
+
+              {/* Timestamp on hover */}
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-muted-foreground mt-1 text-right">
+                {message.createdAt}
+              </div>
             </div>
           </div>
         </div>
@@ -56,44 +68,58 @@ const MessageBubble = memo(
     }
 
     if (isAssistant) {
-      // Assistant message: full width, transparent background, icon on top left
+      // Assistant message: full width with enhanced styling
       return (
         <div
-          className={`flex items-start gap-2 transition-all duration-300 ease-out ${
+          className={`flex items-start gap-3 transition-all duration-300 ease-spring ${
             isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
           }`}
           data-testid="messages"
           role="article"
           aria-label="Message from assistant"
         >
-          <div className="flex flex-col items-start gap-0.5 w-full">
-            <div className="rounded-full bg-primary/10 p-1">
-              <Bot className="h-3.5 w-3.5 text-primary" />
+          <div className="flex flex-col items-start gap-2 w-full max-w-4xl">
+            {/* Avatar with subtle animation */}
+            <div className="relative">
+              <div className="rounded-full bg-primary/10 p-2 border border-primary/20">
+                <Bot className="h-4 w-4 text-primary" />
+              </div>
+              {message.streaming && (
+                <div className="absolute -inset-1 rounded-full bg-primary/20 animate-ping" />
+              )}
             </div>
-            <div className="w-full">
-              <div className="text-sm leading-snug">
-                <div className="relative">
+
+            {/* Message content with better styling */}
+            <div className="group w-full">
+              <div className="rounded-2xl rounded-tl-sm px-4 py-3 bg-muted/50 border border-border/50">
+                <div className="text-sm leading-relaxed prose prose-sm max-w-none dark:prose-invert">
                   <MarkdownRenderer content={message.content} />
                   {message.streaming && message.content && <StreamingCursor />}
                 </div>
-              </div>
-              {message.toolCallName && (
-                <div className="flex items-center gap-1.5 text-xs mt-1">
-                  <Badge variant="secondary" className="rounded-full bg-background/40">
-                    Tool
-                  </Badge>
-                  <span>{message.toolCallName}</span>
-                </div>
-              )}
-              {message.streaming && (
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-fade-in mt-1">
-                  <div className="relative flex items-center">
-                    <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
-                    <span className="absolute inset-0 h-3 w-3 rounded-full bg-primary/20 animate-ping" />
+
+                {message.toolCallName && (
+                  <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                    <Badge variant="secondary" className="rounded-full bg-primary/10 text-primary border border-primary/20">
+                      <BrainCircuit className="h-3 w-3 mr-1" />
+                      {message.toolCallName}
+                    </Badge>
                   </div>
-                  <span className="animate-pulse">Streaming insight…</span>
-                </div>
-              )}
+                )}
+
+                {message.streaming && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-fade-in mt-2">
+                    <div className="relative flex items-center">
+                      <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
+                    </div>
+                    <span className="animate-pulse">Streaming insight…</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Timestamp on hover */}
+              <div className="opacity-0 group-hover:opacity-100 transition-opacity text-xs text-muted-foreground mt-1">
+                {message.createdAt}
+              </div>
             </div>
           </div>
         </div>

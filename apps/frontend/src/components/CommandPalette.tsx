@@ -98,30 +98,41 @@ function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
               No results found.
             </Command.Empty>
 
-            {/* Navigation */}
-            <Command.Group heading="Navigate">
+            {/* Navigation - Quick Actions */}
+            <Command.Group heading="Quick Actions">
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/'))}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Home className="h-4 w-4" />
-                <span>Chat</span>
+                <span className="flex-1">Chat</span>
+                <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>H
+                </kbd>
               </Command.Item>
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/documents'))}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <FileText className="h-4 w-4" />
-                <span>Documents</span>
+                <span className="flex-1">Documents</span>
+                <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>D
+                </kbd>
               </Command.Item>
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/settings'))}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Settings className="h-4 w-4" />
-                <span>Settings</span>
+                <span className="flex-1">Settings</span>
+                <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>,
+                </kbd>
               </Command.Item>
             </Command.Group>
+
+            <Command.Separator />
 
             {/* Recent Sessions */}
             {filteredSessions.length > 0 && (
@@ -163,13 +174,19 @@ function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
             )}
 
             {/* Actions */}
+            {(filteredSessions.length > 0 || filteredDocuments.length > 0) && (
+              <Command.Separator />
+            )}
             <Command.Group heading="Actions">
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/'))}
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
               >
                 <Plus className="h-4 w-4" />
-                <span>New conversation</span>
+                <span className="flex-1">New conversation</span>
+                <kbd className="ml-auto pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground opacity-100">
+                  <span className="text-xs">⌘</span>N
+                </kbd>
               </Command.Item>
             </Command.Group>
           </Command.List>

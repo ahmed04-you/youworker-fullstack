@@ -154,8 +154,16 @@ export const ChatComposer = memo(function ChatComposer({
   };
 
   return (
-    <div className="mt-4 rounded-lg border border-border bg-card/80 p-3 shadow-xl" data-testid="chat-composer">
-      <div className="flex flex-col gap-2">
+    <div className="relative mt-4 rounded-2xl border border-border/50 p-4 glass-strong shadow-2xl" data-testid="chat-composer" role="region" aria-label="Message composer">
+      {/* Subtle gradient overlay */}
+      <div className="absolute inset-0 rounded-2xl gradient-mesh opacity-20 pointer-events-none" />
+
+      {/* Streaming indicator for screen readers */}
+      <div role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {isStreaming && 'AI is responding'}
+      </div>
+
+      <div className="relative flex flex-col gap-3">
         <textarea
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
@@ -175,11 +183,11 @@ export const ChatComposer = memo(function ChatComposer({
           placeholder="Ask anything… Request a plan, run a tool, or brainstorm in crimson style."
           className="min-h-[80px] md:min-h-[110px] w-full resize-none rounded-lg border border-border/70 bg-background/70 p-2 md:p-3 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           rows={3}
-          aria-label="Message input"
+          aria-label="Type your message"
           data-testid="input"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3" role="toolbar" aria-label="Message actions">
           <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>

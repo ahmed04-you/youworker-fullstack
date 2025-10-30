@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { EmptyState } from '@/components/ui/empty-state';
 import { Upload, Trash2, FileText } from 'lucide-react';
 import { useDocumentStore } from '../store/document-store';
 import { toastSuccess } from '@/lib/toast-helpers';
@@ -133,17 +134,15 @@ function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
           ))}
         </div>
       ) : documents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 space-y-4">
-          <div className="rounded-full bg-muted p-6">
-            <FileText className="h-12 w-12 text-muted-foreground" />
-          </div>
-          <div className="text-center space-y-2">
-            <h3 className="text-lg font-semibold">No documents found</h3>
-            <p className="text-muted-foreground text-sm max-w-md">
-              Get started by uploading your first document. Supported formats include PDF, DOCX, TXT, and more.
-            </p>
-          </div>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No documents yet"
+          description="Get started by uploading your first document. Supported formats include PDF, DOCX, TXT, and more."
+          action={{
+            label: 'Upload Document',
+            onClick: () => setUploadOpen(true),
+          }}
+        />
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

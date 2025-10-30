@@ -1,51 +1,74 @@
-import { ReactNode } from 'react';
-import { LucideIcon } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+"use client";
+
+import { memo, ReactNode } from "react";
+import { motion } from "framer-motion";
+import { Button } from "./button";
+import { LucideIcon } from "lucide-react";
 
 interface EmptyStateProps {
-  icon?: LucideIcon;
+  icon: LucideIcon;
   title: string;
-  description?: string;
+  description: string;
   action?: {
     label: string;
     onClick: () => void;
     icon?: LucideIcon;
   };
+  illustration?: ReactNode;
   children?: ReactNode;
   className?: string;
 }
 
 /**
- * EmptyState component for displaying empty states across the app
- * Shows an icon, title, description, and optional action button
+ * Enhanced EmptyState component for displaying empty states across the app
+ * Shows an icon with gradient background, title, description, and optional action button
  */
-export function EmptyState({
+export const EmptyState = memo(function EmptyState({
   icon: Icon,
   title,
   description,
   action,
+  illustration,
   children,
-  className = '',
+  className = "",
 }: EmptyStateProps) {
   return (
-    <Card className={`flex flex-col items-center justify-center p-12 text-center ${className}`}>
-      {Icon && (
-        <div className="mb-4 rounded-full bg-muted p-4">
-          <Icon className="h-8 w-8 text-muted-foreground" />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex flex-col items-center justify-center py-16 px-4 text-center ${className}`}
+    >
+      {illustration || (
+        <div className="relative mb-6">
+          {/* Gradient background glow */}
+          <div className="absolute inset-0 gradient-mesh opacity-30 blur-2xl" />
+
+          {/* Icon container */}
+          <div className="relative rounded-2xl bg-muted/50 p-6 border border-border/50">
+            <Icon className="h-12 w-12 text-muted-foreground" />
+          </div>
         </div>
       )}
-      <h3 className="mb-2 text-lg font-semibold">{title}</h3>
-      {description && (
-        <p className="mb-6 max-w-md text-sm text-muted-foreground">{description}</p>
-      )}
+
+      <div className="space-y-2 max-w-md">
+        <h3 className="text-xl font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {description}
+        </p>
+      </div>
+
       {action && (
-        <Button onClick={action.onClick}>
+        <Button
+          onClick={action.onClick}
+          className="mt-6 rounded-full gradient-accent text-white hover:shadow-lg transition-shadow"
+          size="lg"
+        >
           {action.icon && <action.icon className="mr-2 h-4 w-4" />}
           {action.label}
         </Button>
       )}
+
       {children}
-    </Card>
+    </motion.div>
   );
-}
+});

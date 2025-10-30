@@ -14,6 +14,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { OnboardingManager } from "@/components/OnboardingManager";
 import { KeyboardShortcutsHint } from "@/components/KeyboardShortcutsHint";
 import { GlobalModals } from "@/components/GlobalModals";
+import { PageTransition } from "@/components/page-transition";
+import { KeyboardNavProvider } from "@/components/keyboard-nav-provider";
+import { SpotlightCursor } from "@/components/spotlight-cursor";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -47,17 +50,22 @@ export default function RootLayout({
               <SettingsProvider>
                 <LanguageProvider>
                   <TooltipProvider delayDuration={300}>
-                    <AuthProvider>
+                    <KeyboardNavProvider>
+                      <AuthProvider>
+                      <SpotlightCursor />
                       <LoginDialog />
                       <OnboardingManager />
                       <KeyboardShortcutsHint />
                       <GlobalModals />
                       <div className="flex h-screen bg-background">
                         <Sidebar />
-                        <main id="main-content" className="flex-1 overflow-auto md:pl-0">{children}</main>
+                        <main id="main-content" className="flex-1 overflow-auto md:pl-0">
+                          <PageTransition>{children}</PageTransition>
+                        </main>
                       </div>
                       <Toaster />
-                    </AuthProvider>
+                      </AuthProvider>
+                    </KeyboardNavProvider>
                   </TooltipProvider>
                 </LanguageProvider>
               </SettingsProvider>

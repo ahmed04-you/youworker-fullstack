@@ -30,38 +30,44 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 px-4 py-6 lg:px-8">
-      {/* Hero Section */}
-      <div className="rounded-3xl border border-border bg-card/70 p-6 shadow-xl backdrop-blur">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8 lg:px-8">
+      {/* Hero Section with better hierarchy */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <h1 className="h1">Settings</h1>
+            <p className="text-body text-muted-foreground">
               Manage your preferences and account
             </p>
           </div>
-          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
-            <Badge variant={statusBadge.variant} className="rounded-full px-3 py-1">
+          <div className="flex flex-col items-end gap-2 sm:flex-row sm:items-center">
+            <Badge variant={statusBadge.variant} className="rounded-full px-4 py-1.5">
               {statusBadge.label}
             </Badge>
-            {isAuthenticated && username ? (
-              <Badge variant="outline" className="rounded-full px-3 py-1">
+            {isAuthenticated && username && (
+              <Badge variant="outline" className="rounded-full px-4 py-1.5">
                 {username}
               </Badge>
-            ) : null}
+            )}
           </div>
         </div>
       </div>
 
+      {/* Content sections with clear separation */}
       <div className="space-y-6">
-        {/* Theme Settings */}
-        <Card className="rounded-3xl border border-border bg-card/70 shadow-xl backdrop-blur">
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Palette className="h-5 w-5 text-primary" />
-              Appearance
-            </CardTitle>
-            <CardDescription>Customize the look and feel</CardDescription>
+            <div className="flex items-center gap-3">
+              <div className="rounded-lg bg-primary/10 p-2">
+                <Palette className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="h4">Appearance</CardTitle>
+                <CardDescription className="text-body-sm">
+                  Customize the look and feel of your workspace
+                </CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">

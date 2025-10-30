@@ -38,8 +38,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const attemptAuthentikLogin = async (): Promise<boolean> => {
     try {
+      // Send the API key as the Authentik header for simulated SSO in development
+      const apiKey = process.env.NEXT_PUBLIC_API_KEY;
+      const headers: Record<string, string> = {};
+
+      if (apiKey) {
+        headers["x-authentik-api-key"] = apiKey;
+      }
+
       const data = await apiPost<{ username: string; expires_in: number }>(
-        "/v1/auth/auto-login"
+        "/v1/auth/auto-login",
+        undefined,
+        { headers }
       );
       setIsAuthenticated(true);
       setUsername(data.username);

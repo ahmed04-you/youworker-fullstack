@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Document } from '../types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -86,14 +87,19 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
   };
 
   return (
-    <div
-      className={`relative rounded-lg border p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow ${
+    <motion.div
+      whileHover={{ y: -4, scale: 1.02 }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className={`group relative rounded-xl border border-border bg-card p-4 hover:border-primary/50 hover:shadow-xl transition-all cursor-pointer ${
         isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
       }`}
       onClick={onSelect ? () => onSelect(document) : undefined}
     >
+      {/* Gradient glow on hover */}
+      <div className="absolute inset-0 rounded-xl gradient-accent opacity-0 group-hover:opacity-10 transition-opacity blur-xl pointer-events-none" />
+
       {showActions && (
-        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
           <Button
             variant="ghost"
             size="sm"
@@ -133,8 +139,9 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="relative space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-md bg-muted">
             <FileText className="h-5 w-5 text-muted-foreground" />
           </div>
@@ -189,6 +196,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
         Created: {document.createdAt.toLocaleDateString()}
         {document.chunksCount > 0 && ` | ${document.chunksCount} chunks`}
       </div>
-    </div>
+      </div>
+    </motion.div>
   );
 });
