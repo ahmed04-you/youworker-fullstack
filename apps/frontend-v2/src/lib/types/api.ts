@@ -39,5 +39,16 @@ export interface User {
   email: string
   name: string
   avatar?: string
-  created_at: string
+  initials: string
+  created_at?: string
+}
+
+export interface UserSettings {
+  theme: 'light' | 'dark'
+  fontSize: 'small' | 'medium' | 'large'
+  language: string
+  defaultModelId: string
+  messageHistoryLength: number
+  autoScroll: boolean
+  soundNotifications: boolean
 }

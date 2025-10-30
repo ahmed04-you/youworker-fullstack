@@ -87,6 +87,70 @@
   --background: 262 20% 16%;
 }
 
+[data-theme="light"] {
+  /* Light theme base colors */
+  --background: 0 0% 98%;
+  --foreground: 262 20% 16%;
+
+  /* Brand colors remain the same */
+  --brand-red: #E32D21;
+  --brand-red-light: #F04438;
+  --brand-red-dark: #C41E14;
+  --brand-red-hover: #FF4136;
+
+  /* Light theme slate colors */
+  --deep-slate: #f5f5f7;
+  --deep-slate-light: #ffffff;
+  --deep-slate-dark: #e8e8ed;
+  --deep-slate-darker: #d1d1d6;
+
+  /* Glass effects for light mode */
+  --glass-tint-white: rgba(0, 0, 0, 0.05);
+  --glass-tint-slate: rgba(69, 64, 85, 0.1);
+  --glass-tint-red: rgba(227, 45, 33, 0.08);
+  --glass-border: rgba(0, 0, 0, 0.12);
+  --glass-border-red: rgba(227, 45, 33, 0.25);
+
+  /* Shadows for light mode */
+  --glass-shadow-sm: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --glass-shadow-md: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --glass-shadow-lg: 0 12px 48px rgba(0, 0, 0, 0.15);
+  --glass-shadow-red: 0 8px 24px rgba(227, 45, 33, 0.2);
+
+  /* Update theme colors for tailwind */
+  --color-glass-white: rgba(0, 0, 0, 0.05);
+  --color-glass-slate: rgba(69, 64, 85, 0.1);
+  --color-glass-red: rgba(227, 45, 33, 0.08);
+  --color-glass: rgba(0, 0, 0, 0.12);
+  --color-glass-dark: rgba(0, 0, 0, 0.18);
+  --color-glass-red-border: rgba(227, 45, 33, 0.25);
+
+  --color-slate-deep: #f5f5f7;
+  --color-slate-deep-light: #ffffff;
+  --color-slate-deep-dark: #e8e8ed;
+  --color-slate-deep-darker: #d1d1d6;
+
+  /* Box shadows for light mode */
+  --shadow-glass-sm: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-glass-md: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --shadow-glass-lg: 0 12px 48px rgba(0, 0, 0, 0.15);
+  --shadow-glass-red: 0 8px 24px rgba(227, 45, 33, 0.2);
+  --shadow-glass-red-lg: 0 12px 32px rgba(227, 45, 33, 0.25);
+  --shadow-glass-inner: inset 0 0 20px -5px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .scrollbar-thumb-glass {
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
 * {
   border-color: var(--glass-border);
 }
@@ -157,4 +221,84 @@ body {
 
 .bg-gradient-glass-slate {
   background: linear-gradient(135deg, rgba(69, 64, 85, 0.6) 0%, rgba(45, 41, 56, 0.8) 100%);
+}
+
+/* Syntax highlighting for code blocks */
+.hljs {
+  display: block;
+  overflow-x: auto;
+  color: #e6e1dc;
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #bc9458;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag {
+  color: #E32D21;
+  font-weight: 600;
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-template-variable,
+.hljs-variable {
+  color: #a5c261;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-regexp,
+.hljs-type {
+  color: #da4939;
+}
+
+.hljs-function,
+.hljs-title,
+.hljs-section {
+  color: #ffc66d;
+}
+
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-class .hljs-title {
+  color: #6d9cbe;
+}
+
+.hljs-meta {
+  color: #9b859d;
+}
+
+.hljs-deletion {
+  background: #b3555e;
+}
+
+.hljs-addition {
+  background: #69a563;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: bold;
+}
+
+/* Markdown content styles */
+.markdown-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.markdown-content > *:first-child {
+  margin-top: 0 !important;
+}
+
+.markdown-content > *:last-child {
+  margin-bottom: 0 !important;
 }

@@ -184,33 +184,77 @@ class QdrantStore:
         top_k: int = 5,
         collection_name: str | None = None,
         tags: list[str] | None = None,
+        user_id: int | None = None,
+        user_group_ids: list[int] | None = None,
     ) -> list[SearchResult]:
         """
-        Semantic search for similar documents.
+        Semantic search for similar documents with group-based access control.
 
         Args:
             query_embedding: Query vector
             top_k: Number of results to return
             collection_name: Collection to search
             tags: Optional tags to filter by
+            user_id: User ID for access control filtering
+            user_group_ids: List of group IDs the user belongs to
 
         Returns:
-            List of SearchResult objects
+            List of SearchResult objects filtered by user's access rights
         """
         collection_name = collection_name or self.default_collection
 
-        # Build filter if tags provided
-        query_filter = None
+        # Build filter conditions
+        must_conditions = []
+
+        # Add tag filters if provided
         if tags:
-            query_filter = Filter(
-                must=[
+            for tag in tags:
+                must_conditions.append(
                     FieldCondition(
                         key="tags",
                         match=MatchValue(value=tag),
                     )
-                    for tag in tags
-                ]
-            )
+                )
+
+        # Add group-based access control if user_id provided
+        if user_id is not None:
+            # User can access:
+            # 1. Documents they own (user_id matches), OR
+            # 2. Documents in their groups that are NOT private
+            access_conditions = [
+                # Own documents
+                FieldCondition(
+                    key="user_id",
+                    match=MatchValue(value=user_id),
+                )
+            ]
+
+            # If user belongs to groups, add group access conditions
+            if user_group_ids:
+                # For each group, user can access non-private documents
+                for group_id in user_group_ids:
+                    access_conditions.append(
+                        Filter(
+                            must=[
+                                FieldCondition(
+                                    key="group_id",
+                                    match=MatchValue(value=group_id),
+                                ),
+                                FieldCondition(
+                                    key="is_private",
+                                    match=MatchValue(value=False),
+                                ),
+                            ]
+                        )
+                    )
+
+            # Wrap access conditions in a should (OR) clause
+            must_conditions.append(Filter(should=access_conditions))
+
+        # Build final filter
+        query_filter = None
+        if must_conditions:
+            query_filter = Filter(must=must_conditions)
 
         try:
             search_result = await self.client.search(
@@ -237,7 +281,9 @@ class QdrantStore:
                     "collection_name": collection_name,
                     "result_count": len(results),
                     "top_k": top_k,
-                    "has_filter": query_filter is not None
+                    "has_filter": query_filter is not None,
+                    "user_id": user_id,
+                    "group_count": len(user_group_ids) if user_group_ids else 0
                 }
             )
             return results

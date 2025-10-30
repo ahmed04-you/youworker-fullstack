@@ -7,6 +7,7 @@ import { GlassButton } from '@/src/components/ui/glass/GlassButton'
 import { GlassInput } from '@/src/components/ui/glass/GlassInput'
 import { Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
+import { register } from '@/src/lib/api/auth'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -43,12 +44,9 @@ export default function RegisterPage() {
     setIsLoading(true)
 
     try {
-      // TODO: Implement registration API call
-      // await register(name, email, password)
-
-      // For now, simulate success and redirect to login
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      router.push('/login')
+      await register(name, email, password)
+      // Registration successful, redirect to chat
+      router.push('/chat')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed. Please try again.')
     } finally {

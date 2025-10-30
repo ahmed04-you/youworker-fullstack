@@ -21,7 +21,7 @@ export interface ChatRequest {
   context_documents?: string[]
 }
 
-export interface Model {
+export interface ChatModel {
   id: string
   name: string
   description?: string

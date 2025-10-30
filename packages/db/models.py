@@ -109,6 +109,50 @@ class User(AsyncAttrs, Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     sessions: Mapped[list["ChatSession"]] = relationship(back_populates="user")
+    group_memberships: Mapped[list["UserGroupMembership"]] = relationship(back_populates="user")
+
+
+class Group(AsyncAttrs, Base):
+    """User group for multi-tenancy and team collaboration."""
+    __tablename__ = "groups"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships
+    members: Mapped[list["UserGroupMembership"]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+    documents: Mapped[list["Document"]] = relationship(back_populates="group")
+
+
+class UserGroupMembership(AsyncAttrs, Base):
+    """Many-to-many relationship between users and groups with roles."""
+    __tablename__ = "user_group_memberships"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("groups.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(32), default="member")  # "member" or "admin"
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships
+    user: Mapped[User] = relationship(back_populates="group_memberships")
+    group: Mapped[Group] = relationship(back_populates="members")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "group_id", name="uq_user_group_membership"),
+        Index("idx_user_group_memberships_user_group", "user_id", "group_id"),
+    )
 
 
 class ChatSession(AsyncAttrs, Base):
@@ -275,6 +319,10 @@ class Document(AsyncAttrs, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    is_private: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     uri: Mapped[str | None] = mapped_column(Text)
     path: Mapped[str | None] = mapped_column(Text)
     mime: Mapped[str | None] = mapped_column(String(128))
@@ -289,6 +337,7 @@ class Document(AsyncAttrs, Base):
     last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship("User")
+    group: Mapped[Group | None] = relationship("Group", back_populates="documents")
 
     @validates("tags")
     def validate_tags(self, key, value):
@@ -303,6 +352,7 @@ class Document(AsyncAttrs, Base):
     __table_args__ = (
         Index("idx_documents_collection_created", "collection", created_at.desc()),
         Index("idx_documents_user_created", "user_id", created_at.desc()),
+        Index("idx_documents_group_private", "group_id", "is_private"),
         # path_hash is unique per user, not globally
         UniqueConstraint("user_id", "path_hash", name="uq_user_document_path"),
     )

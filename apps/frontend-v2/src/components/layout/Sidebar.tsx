@@ -3,10 +3,12 @@
 import { cn } from '@/src/lib/utils'
 import { GlassCard } from '@/src/components/ui/glass/GlassCard'
 import { GlassButton } from '@/src/components/ui/glass/GlassButton'
+import { UserProfileMenu } from '@/src/components/layout/UserProfileMenu'
 import { MessageSquare, FileText, Settings, Plus, ChevronLeft } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useChatSessions } from '@/src/lib/hooks/useChatSessions'
+import { useUser } from '@/src/lib/hooks/useUser'
 
 interface SidebarProps {
   open: boolean
@@ -16,6 +18,7 @@ interface SidebarProps {
 export function Sidebar({ open, onToggle }: SidebarProps) {
   const pathname = usePathname()
   const { sessions, createSession } = useChatSessions()
+  const { user, logout } = useUser()
 
   const navItems = [
     { href: '/chat', icon: MessageSquare, label: 'Chat' },
@@ -119,15 +122,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
         {/* Footer */}
         {open && (
           <div className="p-4 border-t border-[var(--color-glass-dark)]/50">
-            <div className="flex items-center gap-3 p-2 rounded-lg bg-[#454055]/30 hover:bg-[#454055]/40 transition-colors cursor-pointer">
-              <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center font-bold text-white text-xs">
-                UN
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-white truncate">User Name</p>
-                <p className="text-xs text-white/50">user@email.com</p>
-              </div>
-            </div>
+            <UserProfileMenu user={user} onLogout={logout} />
           </div>
         )}
       </GlassCard>

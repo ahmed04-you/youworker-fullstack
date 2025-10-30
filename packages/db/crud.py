@@ -28,6 +28,8 @@ from .models import (
     DocumentCollection,
     UserCollectionAccess,
     UserDocumentAccess,
+    Group,
+    UserGroupMembership,
 )
 
 logger = logging.getLogger(__name__)
@@ -726,3 +728,518 @@ async def update_session_title(
     chat_session.updated_at = datetime.now(timezone.utc)
     await session.flush()
     return True
+
+
+# ==================== GROUP OPERATIONS ====================
+
+
+async def create_group(
+    session: AsyncSession, name: str, description: str | None, creator_user_id: int
+) -> Group:
+    """Create a new group and add the creator as an admin."""
+    # Check if group with this name already exists
+    existing_group_result = await session.execute(select(Group).where(Group.name == name))
+    existing_group = existing_group_result.scalar_one_or_none()
+
+    if existing_group:
+        raise ValidationError(
+            f"Group with name '{name}' already exists",
+            code="GROUP_NAME_EXISTS",
+            details={"name": name}
+        )
+
+    try:
+        # Create the group
+        group = Group(
+            name=name,
+            description=description,
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        )
+        session.add(group)
+        await session.flush()
+
+        # Add creator as admin
+        membership = UserGroupMembership(
+            user_id=creator_user_id,
+            group_id=group.id,
+            role="admin",
+            joined_at=datetime.now(timezone.utc)
+        )
+        session.add(membership)
+        await session.flush()
+
+        logger.info(
+            "Group created successfully",
+            extra={
+                "group_id": group.id,
+                "group_name": name,
+                "creator_user_id": creator_user_id,
+                "operation": "create_group"
+            }
+        )
+
+        return group
+    except (ValidationError, ResourceNotFoundError):
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to create group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "group_name": name,
+                "creator_user_id": creator_user_id,
+                "operation": "create_group"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to create group: {str(e)}",
+            details={"operation": "create_group", "name": name}
+        ) from e
+
+
+async def get_group_by_id(session: AsyncSession, group_id: int) -> Group | None:
+    """Get a group by its ID."""
+    try:
+        result = await session.execute(
+            select(Group)
+            .options(selectinload(Group.members))
+            .where(Group.id == group_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(
+            "Failed to fetch group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "group_id": group_id,
+                "operation": "get_group_by_id"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to fetch group: {str(e)}",
+            details={"operation": "get_group_by_id", "group_id": group_id}
+        ) from e
+
+
+async def update_group(
+    session: AsyncSession, group_id: int, name: str | None, description: str | None
+) -> Group:
+    """Update a group's name and/or description."""
+    group = await session.get(Group, group_id)
+    if not group:
+        raise ResourceNotFoundError(
+            f"Group not found: {group_id}",
+            code="GROUP_NOT_FOUND",
+            details={"group_id": group_id}
+        )
+
+    try:
+        if name is not None:
+            # Check if another group with this name exists
+            existing_group_result = await session.execute(
+                select(Group).where(Group.name == name, Group.id != group_id)
+            )
+            existing_group = existing_group_result.scalar_one_or_none()
+            if existing_group:
+                raise ValidationError(
+                    f"Group with name '{name}' already exists",
+                    code="GROUP_NAME_EXISTS",
+                    details={"name": name}
+                )
+            group.name = name
+
+        if description is not None:
+            group.description = description
+
+        group.updated_at = datetime.now(timezone.utc)
+        await session.flush()
+
+        logger.info(
+            "Group updated successfully",
+            extra={
+                "group_id": group_id,
+                "operation": "update_group"
+            }
+        )
+
+        return group
+    except (ValidationError, ResourceNotFoundError):
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to update group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "group_id": group_id,
+                "operation": "update_group"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to update group: {str(e)}",
+            details={"operation": "update_group", "group_id": group_id}
+        ) from e
+
+
+async def delete_group(session: AsyncSession, group_id: int) -> bool:
+    """Delete a group."""
+    try:
+        delete_result = await session.execute(delete(Group).where(Group.id == group_id))
+        await session.flush()
+
+        if delete_result.rowcount:
+            logger.info(
+                "Group deleted successfully",
+                extra={"group_id": group_id, "operation": "delete_group"}
+            )
+
+        return bool(delete_result.rowcount)
+    except Exception as e:
+        logger.error(
+            "Failed to delete group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "group_id": group_id,
+                "operation": "delete_group"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to delete group: {str(e)}",
+            details={"operation": "delete_group", "group_id": group_id}
+        ) from e
+
+
+async def add_user_to_group(
+    session: AsyncSession, user_id: int, group_id: int, role: str = "member"
+) -> UserGroupMembership:
+    """Add a user to a group with a specified role."""
+    # Validate role
+    if role not in ("member", "admin"):
+        raise ValidationError(
+            f"Invalid role: {role}. Must be 'member' or 'admin'",
+            code="INVALID_ROLE",
+            details={"role": role}
+        )
+
+    # Check if membership already exists
+    existing_membership_result = await session.execute(
+        select(UserGroupMembership).where(
+            UserGroupMembership.user_id == user_id,
+            UserGroupMembership.group_id == group_id
+        )
+    )
+    existing_membership = existing_membership_result.scalar_one_or_none()
+
+    if existing_membership:
+        raise ValidationError(
+            f"User {user_id} is already a member of group {group_id}",
+            code="MEMBERSHIP_EXISTS",
+            details={"user_id": user_id, "group_id": group_id}
+        )
+
+    try:
+        membership = UserGroupMembership(
+            user_id=user_id,
+            group_id=group_id,
+            role=role,
+            joined_at=datetime.now(timezone.utc)
+        )
+        session.add(membership)
+        await session.flush()
+
+        logger.info(
+            "User added to group",
+            extra={
+                "user_id": user_id,
+                "group_id": group_id,
+                "role": role,
+                "operation": "add_user_to_group"
+            }
+        )
+
+        return membership
+    except (ValidationError, ResourceNotFoundError):
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to add user to group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "group_id": group_id,
+                "operation": "add_user_to_group"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to add user to group: {str(e)}",
+            details={"operation": "add_user_to_group", "user_id": user_id, "group_id": group_id}
+        ) from e
+
+
+async def remove_user_from_group(session: AsyncSession, user_id: int, group_id: int) -> bool:
+    """Remove a user from a group."""
+    try:
+        delete_result = await session.execute(
+            delete(UserGroupMembership).where(
+                UserGroupMembership.user_id == user_id,
+                UserGroupMembership.group_id == group_id
+            )
+        )
+        await session.flush()
+
+        if delete_result.rowcount:
+            logger.info(
+                "User removed from group",
+                extra={
+                    "user_id": user_id,
+                    "group_id": group_id,
+                    "operation": "remove_user_from_group"
+                }
+            )
+
+        return bool(delete_result.rowcount)
+    except Exception as e:
+        logger.error(
+            "Failed to remove user from group",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "group_id": group_id,
+                "operation": "remove_user_from_group"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to remove user from group: {str(e)}",
+            details={"operation": "remove_user_from_group", "user_id": user_id, "group_id": group_id}
+        ) from e
+
+
+async def get_user_groups(session: AsyncSession, user_id: int) -> list[Group]:
+    """Get all groups a user belongs to."""
+    try:
+        result = await session.execute(
+            select(Group)
+            .join(UserGroupMembership)
+            .where(UserGroupMembership.user_id == user_id)
+            .order_by(Group.created_at.desc())
+        )
+        return list(result.scalars().all())
+    except Exception as e:
+        logger.error(
+            "Failed to fetch user groups",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "operation": "get_user_groups"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to fetch user groups: {str(e)}",
+            details={"operation": "get_user_groups", "user_id": user_id}
+        ) from e
+
+
+async def get_group_members(session: AsyncSession, group_id: int) -> list[UserGroupMembership]:
+    """Get all members of a group."""
+    try:
+        result = await session.execute(
+            select(UserGroupMembership)
+            .options(selectinload(UserGroupMembership.user))
+            .where(UserGroupMembership.group_id == group_id)
+            .order_by(UserGroupMembership.joined_at.asc())
+        )
+        return list(result.scalars().all())
+    except Exception as e:
+        logger.error(
+            "Failed to fetch group members",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "group_id": group_id,
+                "operation": "get_group_members"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to fetch group members: {str(e)}",
+            details={"operation": "get_group_members", "group_id": group_id}
+        ) from e
+
+
+async def is_group_admin(session: AsyncSession, user_id: int, group_id: int) -> bool:
+    """Check if a user is an admin of a group."""
+    try:
+        result = await session.execute(
+            select(UserGroupMembership).where(
+                UserGroupMembership.user_id == user_id,
+                UserGroupMembership.group_id == group_id,
+                UserGroupMembership.role == "admin"
+            )
+        )
+        return result.scalar_one_or_none() is not None
+    except Exception as e:
+        logger.error(
+            "Failed to check group admin status",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "group_id": group_id,
+                "operation": "is_group_admin"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to check admin status: {str(e)}",
+            details={"operation": "is_group_admin", "user_id": user_id, "group_id": group_id}
+        ) from e
+
+
+async def update_member_role(
+    session: AsyncSession, user_id: int, group_id: int, role: str
+) -> UserGroupMembership:
+    """Update a member's role in a group."""
+    # Validate role
+    if role not in ("member", "admin"):
+        raise ValidationError(
+            f"Invalid role: {role}. Must be 'member' or 'admin'",
+            code="INVALID_ROLE",
+            details={"role": role}
+        )
+
+    try:
+        result = await session.execute(
+            select(UserGroupMembership).where(
+                UserGroupMembership.user_id == user_id,
+                UserGroupMembership.group_id == group_id
+            )
+        )
+        membership = result.scalar_one_or_none()
+
+        if not membership:
+            raise ResourceNotFoundError(
+                f"Membership not found for user {user_id} in group {group_id}",
+                code="MEMBERSHIP_NOT_FOUND",
+                details={"user_id": user_id, "group_id": group_id}
+            )
+
+        membership.role = role
+        await session.flush()
+
+        logger.info(
+            "Member role updated",
+            extra={
+                "user_id": user_id,
+                "group_id": group_id,
+                "role": role,
+                "operation": "update_member_role"
+            }
+        )
+
+        return membership
+    except (ValidationError, ResourceNotFoundError):
+        raise
+    except Exception as e:
+        logger.error(
+            "Failed to update member role",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "group_id": group_id,
+                "operation": "update_member_role"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to update member role: {str(e)}",
+            details={"operation": "update_member_role", "user_id": user_id, "group_id": group_id}
+        ) from e
+
+
+async def get_user_group_ids(session: AsyncSession, user_id: int) -> list[int]:
+    """Get all group IDs a user belongs to (for efficient filtering)."""
+    try:
+        result = await session.execute(
+            select(UserGroupMembership.group_id).where(UserGroupMembership.user_id == user_id)
+        )
+        return list(result.scalars().all())
+    except Exception as e:
+        logger.error(
+            "Failed to fetch user group IDs",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "operation": "get_user_group_ids"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to fetch user group IDs: {str(e)}",
+            details={"operation": "get_user_group_ids", "user_id": user_id}
+        ) from e
+
+
+async def can_user_access_document(session: AsyncSession, user_id: int, document_id: int) -> bool:
+    """Check if a user can access a document based on ownership or group membership."""
+    try:
+        # Get the document
+        result = await session.execute(
+            select(Document).where(Document.id == document_id)
+        )
+        document = result.scalar_one_or_none()
+
+        if not document:
+            return False
+
+        # User owns the document
+        if document.user_id == user_id:
+            return True
+
+        # Document is private - only owner can access
+        if document.is_private:
+            return False
+
+        # Document belongs to a group - check if user is a member
+        if document.group_id:
+            membership_result = await session.execute(
+                select(UserGroupMembership).where(
+                    UserGroupMembership.user_id == user_id,
+                    UserGroupMembership.group_id == document.group_id
+                )
+            )
+            return membership_result.scalar_one_or_none() is not None
+
+        # Document has no group and is not private - not accessible
+        return False
+    except Exception as e:
+        logger.error(
+            "Failed to check document access",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "user_id": user_id,
+                "document_id": document_id,
+                "operation": "can_user_access_document"
+            },
+            exc_info=True
+        )
+        raise DatabaseError(
+            f"Failed to check document access: {str(e)}",
+            details={"operation": "can_user_access_document", "user_id": user_id, "document_id": document_id}
+        ) from e

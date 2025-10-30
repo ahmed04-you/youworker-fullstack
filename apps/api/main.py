@@ -48,6 +48,7 @@ from apps.api.routes.websocket import router as websocket_router
 from apps.api.routes.analytics import router as analytics_router
 from apps.api.routes.auth import router as auth_router
 from apps.api.routes.account import router as account_router
+from apps.api.routes.groups import router as groups_router
 from apps.api.routes import ingestion, crud, health
 
 from .services.startup import StartupService
@@ -329,6 +330,7 @@ app.include_router(ingestion.router)
 app.include_router(crud.router)
 app.include_router(analytics_router)
 app.include_router(account_router)
+app.include_router(groups_router)  # Group management endpoints
 
 
 if __name__ == "__main__":

@@ -21,6 +21,19 @@ export async function login(email: string, password: string): Promise<LoginRespo
   })
 }
 
+export async function register(name: string, email: string, password: string): Promise<LoginResponse> {
+  // First, get CSRF token
+  const csrfToken = await getCsrfToken()
+
+  // Then perform registration
+  return apiRequest<LoginResponse>('/v1/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ name, email, password }),
+    authenticated: false,
+    csrfToken,
+  })
+}
+
 export async function logout(): Promise<void> {
   const csrfToken = await getCsrfToken()
 

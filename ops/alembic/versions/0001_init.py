@@ -133,11 +133,66 @@ def upgrade() -> None:
     )
     op.create_index('ix_ingestion_runs_user_started', 'ingestion_runs', ['user_id', 'started_at'])
 
+    # Groups table
+    op.create_table(
+        'groups',
+        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column('name', sa.String(length=128), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
+    )
+    op.create_index('ix_groups_name', 'groups', ['name'], unique=True)
+    op.create_index('ix_groups_created_at', 'groups', ['created_at'])
+
+    # User group memberships table
+    op.create_table(
+        'user_group_memberships',
+        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('group_id', sa.Integer(), sa.ForeignKey('groups.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('role', sa.String(length=32), nullable=False, server_default='member'),
+        sa.Column('joined_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
+    )
+    op.create_index('idx_user_group_memberships_user_id', 'user_group_memberships', ['user_id'])
+    op.create_index('idx_user_group_memberships_group_id', 'user_group_memberships', ['group_id'])
+    op.create_index('idx_user_group_memberships_user_group', 'user_group_memberships', ['user_id', 'group_id'])
+    op.create_unique_constraint('uq_user_group_membership', 'user_group_memberships', ['user_id', 'group_id'])
+
+    # Audit logs table
+    op.create_table(
+        'audit_logs',
+        sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='SET NULL'), nullable=True),
+        sa.Column('action', sa.String(length=128), nullable=False),
+        sa.Column('resource_type', sa.String(length=64), nullable=True),
+        sa.Column('resource_id', sa.String(length=128), nullable=True),
+        sa.Column('changes', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('ip_address', sa.String(length=45), nullable=True),
+        sa.Column('user_agent', sa.Text(), nullable=True),
+        sa.Column('correlation_id', sa.String(length=36), nullable=True),
+        sa.Column('success', sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column('error_message', sa.Text(), nullable=True),
+        sa.Column('timestamp', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
+    )
+    op.create_index('ix_audit_logs_user_id', 'audit_logs', ['user_id'])
+    op.create_index('ix_audit_logs_action', 'audit_logs', ['action'])
+    op.create_index('ix_audit_logs_resource_type', 'audit_logs', ['resource_type'])
+    op.create_index('ix_audit_logs_resource_id', 'audit_logs', ['resource_id'])
+    op.create_index('ix_audit_logs_correlation_id', 'audit_logs', ['correlation_id'])
+    op.create_index('ix_audit_logs_success', 'audit_logs', ['success'])
+    op.create_index('ix_audit_logs_timestamp', 'audit_logs', ['timestamp'])
+    op.create_index('idx_audit_logs_user_timestamp', 'audit_logs', ['user_id', 'timestamp'])
+    op.create_index('idx_audit_logs_action_timestamp', 'audit_logs', ['action', 'timestamp'])
+    op.create_index('idx_audit_logs_resource', 'audit_logs', ['resource_type', 'resource_id'])
+
     # Documents table
     op.create_table(
         'documents',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
+        sa.Column('group_id', sa.Integer(), sa.ForeignKey('groups.id', ondelete='SET NULL'), nullable=True),
+        sa.Column('is_private', sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column('uri', sa.Text(), nullable=True),
         sa.Column('path', sa.Text(), nullable=True),
         sa.Column('mime', sa.String(length=128), nullable=True),
@@ -152,6 +207,9 @@ def upgrade() -> None:
     op.create_index('ix_documents_collection_created', 'documents', ['collection', 'created_at'])
     op.create_index('ix_documents_user_created', 'documents', ['user_id', 'created_at'])
     op.create_index('ix_documents_path_hash', 'documents', ['path_hash'])
+    op.create_index('idx_documents_group_id', 'documents', ['group_id'])
+    op.create_index('idx_documents_is_private', 'documents', ['is_private'])
+    op.create_index('idx_documents_group_private', 'documents', ['group_id', 'is_private'])
     op.create_unique_constraint('uq_user_document_path', 'documents', ['user_id', 'path_hash'])
 
     # User tool access table
@@ -196,11 +254,41 @@ def downgrade() -> None:
     op.drop_table('user_collection_access')
     op.drop_table('document_collections')
     op.drop_table('user_tool_access')
+
+    # Drop documents table with new indexes
     op.drop_constraint('uq_user_document_path', 'documents', type_='unique')
+    op.drop_index('idx_documents_group_private', table_name='documents')
+    op.drop_index('idx_documents_is_private', table_name='documents')
+    op.drop_index('idx_documents_group_id', table_name='documents')
     op.drop_index('ix_documents_path_hash', table_name='documents')
     op.drop_index('ix_documents_user_created', table_name='documents')
     op.drop_index('ix_documents_collection_created', table_name='documents')
     op.drop_table('documents')
+
+    # Drop audit logs
+    op.drop_index('idx_audit_logs_resource', table_name='audit_logs')
+    op.drop_index('idx_audit_logs_action_timestamp', table_name='audit_logs')
+    op.drop_index('idx_audit_logs_user_timestamp', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_timestamp', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_success', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_correlation_id', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_resource_id', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_resource_type', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_action', table_name='audit_logs')
+    op.drop_index('ix_audit_logs_user_id', table_name='audit_logs')
+    op.drop_table('audit_logs')
+
+    # Drop user_group_memberships
+    op.drop_constraint('uq_user_group_membership', 'user_group_memberships', type_='unique')
+    op.drop_index('idx_user_group_memberships_user_group', table_name='user_group_memberships')
+    op.drop_index('idx_user_group_memberships_group_id', table_name='user_group_memberships')
+    op.drop_index('idx_user_group_memberships_user_id', table_name='user_group_memberships')
+    op.drop_table('user_group_memberships')
+
+    # Drop groups
+    op.drop_index('ix_groups_created_at', table_name='groups')
+    op.drop_index('ix_groups_name', table_name='groups')
+    op.drop_table('groups')
     op.drop_index('ix_ingestion_runs_user_started', table_name='ingestion_runs')
     op.drop_table('ingestion_runs')
     op.drop_index('ix_tool_runs_message', table_name='tool_runs')
