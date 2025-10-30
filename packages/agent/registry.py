@@ -51,7 +51,10 @@ class MCPRegistry:
 
     async def connect_all(self) -> None:
         """Connect to all MCP servers and discover tools."""
-        logger.info(f"Connecting to {len(self.server_configs)} MCP servers...")
+        logger.info(
+            "Connecting to MCP servers",
+            extra={"server_count": len(self.server_configs)}
+        )
 
         # Create clients
         for config in self.server_configs:
@@ -80,7 +83,12 @@ class MCPRegistry:
             # Rebuild exposure map
             self._rebuild_exposure_map()
             logger.info(
-                f"Registry now has {len(self.tools)} tools from {len(self.clients)} servers (exposed: {len(self._exposed_to_qualified)})"
+                "Registry tools refreshed",
+                extra={
+                    "tool_count": len(self.tools),
+                    "server_count": len(self.clients),
+                    "exposed_count": len(self._exposed_to_qualified)
+                }
             )
             # Invoke callback
             if self._on_refreshed:
@@ -89,7 +97,10 @@ class MCPRegistry:
                     if asyncio.iscoroutine(maybe):
                         await maybe
                 except Exception as e:
-                    logger.error(f"on_refreshed callback failed: {e}")
+                    logger.error(
+                        "on_refreshed callback failed",
+                        extra={"error": str(e), "error_type": type(e).__name__}
+                    )
 
     async def _discover_from_server(
         self, client: MCPClient, tools_dict: dict[str, MCPTool]
@@ -100,7 +111,14 @@ class MCPRegistry:
             for tool in tools:
                 tools_dict[tool.name] = tool
         except Exception as e:
-            logger.error(f"Failed to discover tools from {client.server_id}: {e}")
+            logger.error(
+                "Failed to discover tools from server",
+                extra={
+                    "server_id": client.server_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
 
     def to_llm_tools(self) -> list[dict[str, Any]]:
         """
@@ -158,20 +176,32 @@ class MCPRegistry:
         if not client.is_healthy:
             raise RuntimeError(f"MCP server {tool.server_id} is unhealthy")
 
-        logger.info(f"Calling tool {tool_name} on server {tool.server_id}")
+        logger.info(
+            "Calling tool on MCP server",
+            extra={"tool_name": tool_name, "server_id": tool.server_id}
+        )
 
         try:
             # Always call with the qualified name to preserve server namespace
             result = await client.call_tool(tool.name, arguments)
             return result
         except (ConnectionError, TimeoutError, OSError) as e:
-            logger.error(f"Network error in tool {tool_name}: {e}")
+            logger.error(
+                "Network error in tool execution",
+                extra={"tool_name": tool_name, "error": str(e), "error_type": type(e).__name__}
+            )
             raise ConnectionError(f"Tool {tool_name} unavailable due to network issue: {e}")
         except ValueError as e:
-            logger.error(f"Invalid arguments for tool {tool_name}: {e}")
+            logger.error(
+                "Invalid arguments for tool",
+                extra={"tool_name": tool_name, "error": str(e), "error_type": type(e).__name__}
+            )
             raise ValueError(f"Invalid arguments for tool {tool_name}: {e}")
         except Exception as e:
-            logger.error(f"Unexpected error in tool {tool_name}: {e}")
+            logger.error(
+                "Unexpected error in tool execution",
+                extra={"tool_name": tool_name, "error": str(e), "error_type": type(e).__name__}
+            )
             raise RuntimeError(f"Tool {tool_name} execution failed: {e}")
 
     async def close_all(self) -> None:
@@ -229,7 +259,10 @@ class MCPRegistry:
                 except asyncio.CancelledError:
                     break
                 except Exception as e:
-                    logger.warning(f"Periodic refresh failed: {e}")
+                    logger.warning(
+                        "Periodic refresh failed",
+                        extra={"error": str(e), "error_type": type(e).__name__}
+                    )
 
         self._refresh_task = asyncio.create_task(_loop())
 

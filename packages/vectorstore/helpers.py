@@ -45,7 +45,10 @@ def ensure_collections(
         existing_names = {c.name for c in collections.collections}
 
         if collection_name not in existing_names:
-            logger.info(f"Creating Qdrant collection: {collection_name}")
+            logger.info(
+                "Creating Qdrant collection",
+                extra={"collection_name": collection_name, "embedding_dim": embedding_dim}
+            )
             client.create_collection(
                 collection_name=collection_name,
                 vectors_config=VectorParams(
@@ -53,12 +56,25 @@ def ensure_collections(
                     distance=Distance.COSINE,
                 ),
             )
-            logger.info(f"Created collection: {collection_name}")
+            logger.info(
+                "Created Qdrant collection",
+                extra={"collection_name": collection_name}
+            )
         else:
-            logger.debug(f"Collection {collection_name} already exists")
+            logger.debug(
+                "Collection already exists",
+                extra={"collection_name": collection_name, "status": "already_exists"}
+            )
 
     except Exception as e:
-        logger.error(f"Failed to ensure collection {collection_name}: {e}")
+        logger.error(
+            "Failed to ensure collection",
+            extra={
+                "collection_name": collection_name,
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+        )
         raise
 
 
@@ -87,8 +103,14 @@ def upsert_points(
             collection_name=collection_name,
             points=points,
         )
-        logger.info(f"Upserted {len(points)} points to {collection_name}")
+        logger.info(
+            "Upserted points to Qdrant collection",
+            extra={"point_count": len(points), "collection_name": collection_name}
+        )
 
     except Exception as e:
-        logger.error(f"Failed to upsert points: {e}")
+        logger.error(
+            "Failed to upsert points",
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
         raise

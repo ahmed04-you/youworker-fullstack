@@ -130,7 +130,10 @@ class MCPClient:
                 if not self._initialized:
                     await self._initialize()
             return
-        logger.info(f"Connecting to MCP server {self.server_id} at {self.ws_url}")
+        logger.info(
+            "Connecting to MCP server",
+            extra={"server_id": self.server_id, "ws_url": self.ws_url}
+        )
         self._ws = await websockets.connect(self.ws_url, open_timeout=self.timeout)  # type: ignore
         async with self._init_lock:
             if not self._initialized:
@@ -201,10 +204,16 @@ class MCPClient:
             tools_data = result.get("tools", [])
             tools = self._parse_tools(tools_data)
             self._healthy = True
-            logger.info(f"Discovered {len(tools)} tools from {self.server_id}")
+            logger.info(
+                "Discovered tools from MCP server",
+                extra={"server_id": self.server_id, "tools_count": len(tools)}
+            )
             return tools
         except Exception as e:
-            logger.error(f"Failed to list tools from {self.server_id}: {e}")
+            logger.error(
+                "Failed to list tools from MCP server",
+                extra={"server_id": self.server_id, "error": str(e), "error_type": type(e).__name__}
+            )
             self._healthy = False
             raise
 

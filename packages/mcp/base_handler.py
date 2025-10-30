@@ -63,7 +63,7 @@ class MCPProtocolHandler:
             handler=handler
         )
         self._tools[name] = tool
-        self.logger.info(f"Registered tool: {name}")
+        self.logger.info("Registered tool", extra={"tool_name": name})
 
     def get_tools_schema(self) -> list[dict[str, Any]]:
         """Return tool definitions in MCP schema format."""
@@ -116,7 +116,7 @@ class MCPProtocolHandler:
             raise ValueError(f"Unknown tool: {name}")
 
         tool = self._tools[name]
-        self.logger.info(f"Executing tool: {name}")
+        self.logger.info("Executing tool", extra={"tool_name": name})
 
         try:
             result = await tool.handler(**arguments)
@@ -129,7 +129,11 @@ class MCPProtocolHandler:
                 ]
             }
         except Exception as e:
-            self.logger.error(f"Tool execution failed: {name}", exc_info=True)
+            self.logger.error(
+                "Tool execution failed",
+                extra={"tool_name": name},
+                exc_info=True
+            )
             raise
 
     def create_jsonrpc_response(
@@ -245,7 +249,11 @@ class MCPProtocolHandler:
             )
         except Exception as e:
             # Unexpected errors
-            self.logger.error(f"Error handling request: {e}", exc_info=True)
+            self.logger.error(
+                "Error handling request",
+                extra={"error": str(e), "error_type": type(e).__name__},
+                exc_info=True
+            )
             return self.create_error_response(
                 request_id,
                 -32000,  # Server error
@@ -271,7 +279,7 @@ async def mcp_websocket_handler(
             await mcp_websocket_handler(ws, my_handler)
     """
     await websocket.accept()
-    handler.logger.info("MCP WebSocket connected")
+    handler.logger.info("MCP WebSocket connected", extra={"status": "connected"})
 
     try:
         while True:
@@ -280,5 +288,8 @@ async def mcp_websocket_handler(
             await websocket.send_text(response)
 
     except Exception as e:
-        handler.logger.info(f"MCP WebSocket disconnected: {e}")
+        handler.logger.info(
+            "MCP WebSocket disconnected",
+            extra={"reason": str(e), "error_type": type(e).__name__}
+        )
         # WebSocket disconnection is normal, no need to raise

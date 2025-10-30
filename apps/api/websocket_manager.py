@@ -89,7 +89,14 @@ class ConnectionManager:
             # Initialize heartbeat
             self.last_heartbeat[connection_id] = datetime.now(timezone.utc)
 
-        logger.info(f"WebSocket connected: {connection_id} for user {user_id}")
+        logger.info(
+            "WebSocket connected",
+            extra={
+                "connection_id": connection_id,
+                "user_id": user_id,
+                "session_id": session_id
+            }
+        )
         return connection_id
 
     async def disconnect(self, connection_id: str):
@@ -125,7 +132,14 @@ class ConnectionManager:
                 if not self.user_sessions[user_id]:
                     del self.user_sessions[user_id]
 
-        logger.info(f"WebSocket disconnected: {connection_id}")
+        logger.info(
+            "WebSocket disconnected",
+            extra={
+                "connection_id": connection_id,
+                "user_id": user_id,
+                "session_id": session_id
+            }
+        )
 
     async def send_message(self, connection_id: str, message: dict[str, Any]):
         """
@@ -147,7 +161,14 @@ class ConnectionManager:
                 if connection_id in self.connection_metadata:
                     self.connection_metadata[connection_id]["last_activity"] = datetime.now(timezone.utc)
         except Exception as e:
-            logger.error(f"Error sending message to {connection_id}: {e}")
+            logger.error(
+                "Error sending message to connection",
+                extra={
+                    "connection_id": connection_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             # Connection might be dead, schedule cleanup
             asyncio.create_task(self.disconnect(connection_id))
 
@@ -219,7 +240,10 @@ class ConnectionManager:
 
         # Disconnect stale connections
         for conn_id in stale_connections:
-            logger.info(f"Cleaning up stale connection: {conn_id}")
+            logger.info(
+                "Cleaning up stale connection",
+                extra={"connection_id": conn_id, "reason": "stale_connection"}
+            )
             await self.disconnect(conn_id)
 
     def get_connection_info(self, connection_id: str) -> dict[str, Any] | None:
@@ -267,7 +291,10 @@ async def heartbeat_monitor(interval_seconds: int = 30):
             await manager.check_stale_connections()
             await asyncio.sleep(interval_seconds)
         except Exception as e:
-            logger.error(f"Error in heartbeat monitor: {e}")
+            logger.error(
+                "Error in heartbeat monitor",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
             await asyncio.sleep(interval_seconds)
 
 

@@ -35,9 +35,15 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
         self.enabled = enabled and settings.app_env == "production"
 
         if self.enabled:
-            logger.info(f"IP Whitelist ENABLED - Allowed IPs: {self.whitelisted_ips}")
+            logger.info(
+                "IP Whitelist ENABLED",
+                extra={"whitelisted_ips": self.whitelisted_ips, "enabled": True}
+            )
         else:
-            logger.info("IP Whitelist DISABLED - Development mode")
+            logger.info(
+                "IP Whitelist DISABLED - Development mode",
+                extra={"enabled": False, "reason": "development_mode"}
+            )
 
     async def dispatch(self, request: Request, call_next):
         """Process the request and check IP whitelist."""
@@ -52,8 +58,12 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
         # Check if IP is whitelisted
         if not self._is_ip_allowed(client_ip):
             logger.warning(
-                f"Access denied from non-whitelisted IP: {client_ip} "
-                f"(Allowed: {self.whitelisted_ips})"
+                "Access denied from non-whitelisted IP",
+                extra={
+                    "client_ip": client_ip,
+                    "whitelisted_ips": self.whitelisted_ips,
+                    "action": "denied"
+                }
             )
             return JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -64,7 +74,10 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
             )
 
         # IP is allowed, proceed with request
-        logger.debug(f"Request from whitelisted IP: {client_ip}")
+        logger.debug(
+            "Request from whitelisted IP",
+            extra={"client_ip": client_ip, "action": "allowed"}
+        )
         response = await call_next(request)
         return response
 

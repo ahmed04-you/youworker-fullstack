@@ -75,7 +75,11 @@ async def get_user_by_api_key(session: AsyncSession, api_key: str) -> User:
     except (ResourceNotFoundError, ValidationError):
         raise  # Re-raise business errors
     except Exception as e:
-        logger.error(f"Database error in get_user_by_api_key: {e}", exc_info=True)
+        logger.error(
+            "Database error in get_user_by_api_key",
+            extra={"error": str(e), "error_type": type(e).__name__, "operation": "get_user_by_api_key"},
+            exc_info=True
+        )
         raise DatabaseError(
             f"Failed to fetch user: {str(e)}",
             details={"operation": "get_user_by_api_key"}

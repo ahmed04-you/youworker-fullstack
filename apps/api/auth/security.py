@@ -76,10 +76,16 @@ async def get_current_user(
                     if user:
                         return user
             except JWTError as e:
-                logger.warning(f"JWT authentication failed: {e}")
+                logger.warning(
+                    "JWT authentication failed",
+                    extra={"error": str(e), "error_type": type(e).__name__}
+                )
                 # Fall through to Authentik header check
             except ValueError as e:
-                logger.warning(f"Token parsing failed: {e}")
+                logger.warning(
+                    "Token parsing failed",
+                    extra={"error": str(e), "error_type": type(e).__name__}
+                )
                 # Fall through to Authentik header check
 
         # If JWT not present or invalid, check for Authentik headers (for direct API access)
@@ -135,9 +141,15 @@ async def get_current_user_optional(
                     if user:
                         return user
             except JWTError as e:
-                logger.debug(f"JWT authentication failed: {e}")
+                logger.debug(
+                    "JWT authentication failed",
+                    extra={"error": str(e), "error_type": type(e).__name__}
+                )
             except ValueError as e:
-                logger.debug(f"Token parsing failed: {e}")
+                logger.debug(
+                    "Token parsing failed",
+                    extra={"error": str(e), "error_type": type(e).__name__}
+                )
 
         # Try Authentik headers
         if authentik_api_key:
@@ -172,18 +184,27 @@ async def _verify_api_key_with_session(session: AsyncSession, api_key: str) -> b
     if not api_key:
         return False
 
-    user = await get_user_by_api_key(session, api_key)
-    if user:
-        return True
+    # Try to find user by API key in database
+    try:
+        user = await get_user_by_api_key(session, api_key)
+        if user:
+            return True
+    except Exception:
+        # User not found in database, continue to fallback logic
+        pass
 
+    # Check if there's a root user with a stored hash
     stored_hash_result = await session.execute(
         select(User.api_key_hash).where(User.is_root.is_(True)).limit(1)
     )
     stored_hash = stored_hash_result.scalar_one_or_none()
 
     if stored_hash:
+        # Root user exists with a hash, so don't allow plaintext fallback
         return False
 
+    # No users in DB with this key, and no root user with hash
+    # Fall back to comparing with ROOT_API_KEY from settings
     return bool(settings.root_api_key and secrets.compare_digest(api_key, settings.root_api_key))
 
 

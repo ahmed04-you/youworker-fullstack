@@ -118,14 +118,28 @@ class Embedder:
             embedding = data.get("embedding", [])
 
             if not embedding:
-                logger.warning(f"Empty embedding received for text: {text[:100]}...")
+                logger.warning(
+                    "Empty embedding received from Ollama",
+                    extra={"text_preview": text[:100], "model": self.model}
+                )
                 return []
 
             return embedding
 
         except httpx.HTTPStatusError as e:
-            logger.error(f"Ollama API error: {e.response.status_code} - {e.response.text}")
+            logger.error(
+                "Ollama API error",
+                extra={
+                    "status_code": e.response.status_code,
+                    "response_text": e.response.text,
+                    "model": self.model,
+                    "base_url": self.base_url
+                }
+            )
             raise
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+            logger.error(
+                "Failed to generate embedding",
+                extra={"error": str(e), "error_type": type(e).__name__, "model": self.model}
+            )
             raise

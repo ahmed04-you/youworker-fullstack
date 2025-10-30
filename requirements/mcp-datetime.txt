@@ -1,6 +1,14 @@
 fastapi==0.115.0
 uvicorn[standard]==0.32.0
 pydantic==2.9.2
+pydantic-settings
 python-dateutil==2.9.0
 pytz==2024.2
 dateparser==1.2.0
+tenacity
+websockets
+httpx
+qdrant-client
+SQLAlchemy
+asyncpg
+cryptography
