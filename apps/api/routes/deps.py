@@ -109,3 +109,31 @@ async def get_chat_service(
             db_session=db,
             agent_loop=agent_loop,
         )
+
+
+async def get_ingestion_service(
+    request: Request,
+    ingestion_pipeline: IngestionPipeline = Depends(get_ingestion_pipeline),
+):
+    """
+    Dependency injection for IngestionService.
+
+    Creates an IngestionService instance with all required dependencies.
+    Note: Database session is managed by the service internally using get_async_session().
+
+    Args:
+        request: FastAPI request (for accessing settings)
+        ingestion_pipeline: Document ingestion pipeline
+
+    Returns:
+        IngestionService instance
+    """
+    from packages.db import get_async_session
+    from apps.api.services import IngestionService
+
+    # Get a database session
+    async with get_async_session() as db:
+        yield IngestionService(
+            db_session=db,
+            ingestion_pipeline=ingestion_pipeline,
+        )

@@ -1,7 +1,7 @@
 'use client'
 
 import { forwardRef, ButtonHTMLAttributes } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/src/lib/utils'
 import { Loader2 } from 'lucide-react'
 
 export interface GlassButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {

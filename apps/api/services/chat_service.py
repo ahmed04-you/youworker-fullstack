@@ -425,3 +425,161 @@ class ChatService(BaseService):
             tool_events=tool_events,
             logs=logs,
         )
+
+    async def send_message_streaming(
+        self,
+        user: Any,
+        text_input: str | None = None,
+        audio_b64: str | None = None,
+        sample_rate: int = 16000,
+        session_id: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        enable_tools: bool = True,
+        expect_audio: bool = False,
+        max_iterations: int | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """
+        Send a message and stream agent response events.
+
+        This method orchestrates the same flow as send_message() but streams
+        events in real-time. It yields raw events that should be formatted
+        by the presentation layer (e.g., as SSE).
+
+        Events yielded:
+        - {"event": "tool", "data": {...}}
+        - {"event": "token", "data": {"text": "..."}}
+        - {"event": "log", "data": {"level": "...", "msg": "..."}}
+        - {"event": "done", "data": ChatResponse}
+
+        Args:
+            user: Authenticated user object
+            text_input: Optional text input
+            audio_b64: Optional base64-encoded audio
+            sample_rate: Audio sample rate
+            session_id: Optional session identifier
+            messages: Previous message history
+            model: Model to use (defaults to settings)
+            enable_tools: Whether to enable tool usage
+            expect_audio: Whether to synthesize audio response
+            max_iterations: Maximum agent iterations (defaults to settings)
+
+        Yields:
+            Event dictionaries with "event" and "data" keys
+
+        Raises:
+            ValueError: Invalid input
+            RuntimeError: Processing errors
+        """
+        # Process input
+        input_result = await self.process_text_or_audio_input(
+            text_input=text_input,
+            audio_b64=audio_b64,
+            sample_rate=sample_rate,
+        )
+
+        # Get user ID
+        user_id = get_user_id(user)
+
+        # Determine model and iterations
+        request_model = model or self.settings.chat_model
+        max_iters = max_iterations or self.settings.max_agent_iterations
+
+        # Get or create session
+        chat_session = await self.get_or_create_session(
+            user_id=user_id,
+            external_id=session_id or "default",
+            model=request_model,
+            enable_tools=enable_tools,
+        )
+
+        # Prepare conversation
+        conversation = await self.prepare_conversation(
+            messages=messages or [],
+            user_message=input_result.text_content,
+        )
+
+        # Persist user message
+        await self.persist_user_message(chat_session, conversation)
+
+        # Execute agent (streaming)
+        collected_chunks: list[str] = []
+        final_text = ""
+        metadata: dict[str, Any] = {}
+        tool_events: list[dict[str, Any]] = []
+        logs: list[dict[str, str]] = []
+        tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session.id)
+
+        async for event in self.execute_agent(
+            conversation=conversation,
+            enable_tools=enable_tools,
+            max_iterations=max_iters,
+            model=request_model,
+        ):
+            etype = event.get("event")
+            data = event.get("data", {}) or {}
+
+            if etype == "tool":
+                data = await tool_recorder.record(data)
+                tool_events.append(data)
+                yield {"event": "tool", "data": data}
+            elif etype == "token":
+                text = data.get("text", "")
+                collected_chunks.append(text)
+                yield {"event": "token", "data": data}
+            elif etype == "log":
+                log_entry = {
+                    "level": data.get("level", "info"),
+                    "msg": data.get("msg", ""),
+                }
+                logs.append(log_entry)
+                yield {"event": "log", "data": log_entry}
+            elif etype == "done":
+                meta = data.get("metadata", {}) or {}
+                if isinstance(meta, dict):
+                    metadata.update(meta)
+                # Prefer final_text from done event, fallback to collected chunks
+                final_text = data.get("final_text", "") or "".join(collected_chunks)
+                break
+
+        final_text = (final_text or "").strip()
+
+        # Persist assistant response
+        await self.persist_assistant_message(chat_session.id, final_text)
+
+        # Synthesize audio if requested
+        audio_b64_result = None
+        audio_sample_rate_result = None
+        if expect_audio and final_text:
+            audio_result = await self.synthesize_audio(final_text, fallback=True)
+            if audio_result:
+                audio_b64_result, audio_sample_rate_result = audio_result
+
+        # Yield final done event with complete response
+        response = ChatResponse(
+            content=final_text,
+            metadata=metadata,
+            audio_b64=audio_b64_result,
+            audio_sample_rate=audio_sample_rate_result,
+            transcript=input_result.transcript,
+            stt_confidence=input_result.stt_confidence,
+            stt_language=input_result.stt_language,
+            tool_events=tool_events,
+            logs=logs,
+        )
+
+        # Convert response to dict for JSON serialization
+        yield {
+            "event": "done",
+            "data": {
+                "content": response.content,
+                "metadata": response.metadata,
+                "audio_b64": response.audio_b64,
+                "audio_sample_rate": response.audio_sample_rate,
+                "transcript": response.transcript,
+                "stt_confidence": response.stt_confidence,
+                "stt_language": response.stt_language,
+                "tool_events": response.tool_events,
+                "logs": response.logs,
+            },
+        }

@@ -1,6 +1,6 @@
 import { apiRequest } from './client'
 import { getCsrfToken } from './auth'
-import type { Message, Session, ChatRequest } from '@/lib/types'
+import type { Message, Session, ChatRequest } from '@/src/lib/types'
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 

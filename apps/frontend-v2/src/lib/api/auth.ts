@@ -1,5 +1,5 @@
 import { apiRequest } from './client'
-import type { LoginResponse, CSRFTokenResponse } from '@/lib/types'
+import type { LoginResponse, CSRFTokenResponse } from '@/src/lib/types'
 
 export async function getCsrfToken(): Promise<string> {
   const response = await apiRequest<CSRFTokenResponse>('/v1/auth/csrf-token', {

@@ -1,6 +1,6 @@
 import { apiRequest } from './client'
 import { getCsrfToken } from './auth'
-import type { Document, DocumentSearchRequest, DocumentSearchResult } from '@/lib/types'
+import type { Document, DocumentSearchRequest, DocumentSearchResult } from '@/src/lib/types'
 
 export async function getDocuments(): Promise<Document[]> {
   return apiRequest<Document[]>('/v1/documents')

@@ -7,6 +7,7 @@ They can be unit tested in isolation and reused across different interfaces.
 
 from .base import BaseService
 from .chat_service import ChatService, ChatResponse, InputProcessingResult
+from .ingestion_service import IngestionService, IngestPathResult, FileUploadResult
 from .startup import StartupService
 
 __all__ = [
@@ -14,5 +15,8 @@ __all__ = [
     "ChatService",
     "ChatResponse",
     "InputProcessingResult",
+    "IngestionService",
+    "IngestPathResult",
+    "FileUploadResult",
     "StartupService",
 ]

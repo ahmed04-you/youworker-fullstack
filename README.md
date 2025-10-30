@@ -349,10 +349,7 @@ youworker-fullstack/
 │   ├── compose/              # Docker Compose
 │   ├── docker/               # Dockerfile
 │   ├── alembic/              # Migrazioni DB
-│   ├── scripts/              # Script utilità
-│   └── cron/                 # Task schedulati
-├── docs/                      # Documentazione
-├── tests/                     # Test Python
+│   └── scripts/              # Script utilità
 └── data/                      # Dati persistenti (gitignored)
 ```
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { forwardRef, HTMLAttributes } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '@/src/lib/utils'
 
 export interface GlassCardProps extends HTMLAttributes<HTMLDivElement> {
   variant?: 'default' | 'heavy' | 'light' | 'card'

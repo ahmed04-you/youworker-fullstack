@@ -2,7 +2,7 @@ COMPOSE_FILE ?= ops/compose/docker-compose.yml
 COMPOSE_BIN ?= docker compose
 COMPOSE_CMD ?= $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 
-.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup verify-backup restore list-backups setup-backup
+.PHONY: help compose-up compose-down compose-logs compose-restart build clean test lint format ssl-setup start-ssl backup verify-backup restore list-backups
 
 # Default target
 help:
@@ -13,8 +13,6 @@ help:
 	@echo "  compose-restart  - Restart all services"
 	@echo "  build            - Build all Docker images"
 	@echo "  clean            - Remove containers, volumes, and images"
-	@echo "  test             - Run tests"
-	@echo "  setup-tests      - Install all dependencies required for tests"
 	@echo "  lint             - Run linters"
 	@echo "  format           - Format code with black"
 	@echo "  pull-models      - Pull Ollama models"
@@ -25,7 +23,6 @@ help:
 	@echo "  verify-backup    - Verify backup integrity (BACKUP_FILE=<file>)"
 	@echo "  restore          - Restore from backups (POSTGRES_BACKUP=<file> QDRANT_BACKUP=<file>)"
 	@echo "  list-backups     - List all available backups"
-	@echo "  setup-backup     - Setup automated daily backups (cron)"
 
 # Start all services (GPU auto-detected and used if available)
 compose-up:
@@ -86,13 +83,6 @@ pull-models:
 	$(COMPOSE_CMD) exec ollama ollama pull gpt-oss:20b
 	$(COMPOSE_CMD) exec ollama ollama pull embeddinggemma:300m
 	@echo "Models pulled successfully"
-
-# Run tests
-test:
-	./scripts/run-tests.sh
-
-setup-tests:
-	./scripts/setup-tests.sh
 
 # Lint code
 lint:
@@ -213,19 +203,3 @@ list-backups:
 	@chmod +x ops/scripts/restore-backup.sh
 	@./ops/scripts/restore-backup.sh --list
 
-# Setup automated backups
-setup-backup:
-	@echo "Setting up automated encrypted backups..."
-	@mkdir -p data/backups
-	@chmod +x ops/scripts/backup-database.sh
-	@if [ -z "$$BACKUP_ENCRYPTION_KEY" ]; then \
-		echo "⚠️  WARNING: BACKUP_ENCRYPTION_KEY not set in .env"; \
-		echo "Generate one with: openssl rand -base64 32"; \
-		exit 1; \
-	fi
-	@echo "Adding cron job for daily backups at 2:00 AM..."
-	@(crontab -l 2>/dev/null || true; echo "0 2 * * * cd $(shell pwd) && ./ops/scripts/backup-database.sh >> data/backups/backup.log 2>&1") | crontab -
-	@echo "✓ Automated backups configured"
-	@echo "  Schedule: Daily at 2:00 AM"
-	@echo "  Backup directory: $(shell pwd)/data/backups"
-	@echo "  Log file: $(shell pwd)/data/backups/backup.log"

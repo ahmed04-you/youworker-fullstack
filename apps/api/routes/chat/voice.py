@@ -2,33 +2,13 @@
 Voice turn endpoint for audio-based interactions.
 """
 
-import base64
 import logging
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Depends, Request
 
-from apps.api.config import settings
-from apps.api.auth.security import sanitize_input
-
-from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
-from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
-from packages.agent import AgentLoop
-from packages.db import get_async_session
-from packages.llm import ChatMessage
-
-from .helpers import (
-    ToolEventRecorder,
-    prepare_chat_messages,
-    get_user_id,
-)
+from apps.api.routes.deps import get_current_user_with_collection_access, get_chat_service
 
 from .models import VoiceTurnRequest, VoiceTurnResponse
-from .persistence import (
-    persist_last_user_message,
-    persist_final_assistant_message,
-    get_or_create_chat_session,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -40,123 +20,56 @@ async def voice_turn_endpoint(
     request: Request,
     voice_request: VoiceTurnRequest,
     current_user=Depends(get_current_user_with_collection_access),
-    agent_loop: AgentLoop = Depends(get_agent_loop),
+    chat_service=Depends(get_chat_service),
 ):
     """
     Turn-based voice endpoint that handles audio transcription, agent reasoning,
     and optional TTS synthesis.
     """
-    # Decode audio
     try:
-        audio_bytes = base64.b64decode(voice_request.audio_b64)
-    except (ValueError, Exception):
-        # Standardize error message to satisfy integration tests
-        raise HTTPException(status_code=400, detail="Invalid audio payload")
-
-    # Transcribe audio
-    try:
-        stt_result = await transcribe_audio_pcm16(audio_bytes, voice_request.sample_rate)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:
-        logger.error("Voice transcription failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Transcription failed")
-
-    # Sanitize transcript
-    transcript_raw = (stt_result.get("text") or "").strip()
-    transcript = sanitize_input(transcript_raw)
-    if not transcript:
-        raise HTTPException(status_code=400, detail="Transcription produced empty text")
-
-    # Build conversation history
-    conversation: list[ChatMessage] = await prepare_chat_messages(voice_request.messages or [])
-    conversation.append(ChatMessage(role="user", content=transcript))
-
-    request_model = voice_request.model or settings.chat_model
-    user_id = get_user_id(current_user)
-
-    # Persist user turn
-    chat_session_id: int | None = None
-    async with get_async_session() as db:
-        chat_session = await get_or_create_chat_session(
-            db,
-            user_id=user_id,
-            external_id=voice_request.session_id,
-            model=request_model,
+        # Use ChatService for all business logic
+        response = await chat_service.send_message(
+            user=current_user,
+            audio_b64=voice_request.audio_b64,
+            sample_rate=voice_request.sample_rate,
+            session_id=voice_request.session_id or "default",
+            messages=voice_request.messages,
+            model=voice_request.model,
             enable_tools=voice_request.enable_tools,
+            expect_audio=voice_request.expect_audio,
         )
-        chat_session_id = chat_session.id
-        await persist_last_user_message(db, chat_session, conversation)
 
-    # Process with agent
-    final_text = ""
-    metadata: dict[str, Any] = {}
-    tool_events: list[dict[str, Any]] = []
-    logs: list[dict[str, str]] = []
-    tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
+        return VoiceTurnResponse(
+            transcript=response.transcript or "",
+            assistant_text=response.content,
+            metadata=response.metadata,
+            audio_b64=response.audio_b64,
+            audio_sample_rate=response.audio_sample_rate,
+            stt_confidence=response.stt_confidence,
+            stt_language=response.stt_language,
+            tool_events=response.tool_events,
+            logs=response.logs,
+        )
 
-    try:
-        async for event in agent_loop.run_until_completion(
-            messages=conversation,
-            enable_tools=voice_request.enable_tools,
-            max_iterations=settings.max_agent_iterations,
-            model=request_model,
-        ):
-            etype = event.get("event")
-            data = event.get("data", {}) or {}
+    except ValueError as e:
+        # Handle input validation errors
+        error_msg = str(e)
+        if "Invalid" in error_msg or "base64" in error_msg:
+            raise HTTPException(status_code=400, detail="Invalid audio payload")
+        elif "empty" in error_msg:
+            raise HTTPException(status_code=400, detail="Transcription produced empty text")
+        else:
+            raise HTTPException(status_code=400, detail=error_msg)
 
-            if etype == "tool":
-                data = await tool_recorder.record(data)
-                tool_events.append(data)
-            elif etype == "token":
-                final_text += data.get("text", "")
-            elif etype == "log":
-                logs.append(
-                    {
-                        "level": data.get("level", "info"),
-                        "msg": data.get("msg", ""),
-                    }
-                )
-            elif etype == "done":
-                meta = data.get("metadata", {}) or {}
-                if isinstance(meta, dict):
-                    metadata.update(meta)
-                if not final_text:
-                    final_text = data.get("final_text", "") or ""
-    except Exception as exc:
-        # Degrade gracefully when LLM is unavailable or errors occur
-        logger.error("Voice pipeline failed: %s", exc, exc_info=True)
+    except RuntimeError as e:
+        # Handle transcription service errors
+        raise HTTPException(status_code=503, detail=str(e))
 
-    metadata = metadata or {}
-    final_text = (final_text or "").strip()
-
-    # Persist assistant response
-    if chat_session_id is not None and final_text:
-        async with get_async_session() as db:
-            await persist_final_assistant_message(db, chat_session_id, final_text)
-
-    # Synthesize speech if requested
-    audio_b64: str | None = None
-    audio_sample_rate: int | None = None
-
-    if voice_request.expect_audio and final_text:
-        try:
-            synth_result = await synthesize_speech(final_text)
-            if synth_result:
-                wav_bytes, sr = synth_result
-                audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
-                audio_sample_rate = sr
-        except Exception as exc:
-            logger.error("Voice synthesis failed: %s", exc, exc_info=True)
-
-    return VoiceTurnResponse(
-        transcript=transcript,
-        assistant_text=final_text,
-        metadata=metadata,
-        audio_b64=audio_b64,
-        audio_sample_rate=audio_sample_rate,
-        stt_confidence=stt_result.get("confidence"),
-        stt_language=stt_result.get("language"),
-        tool_events=tool_events,
-        logs=logs,
-    )
+    except Exception as e:
+        # Handle unexpected errors
+        logger.error(
+            "Voice turn endpoint error",
+            extra={"error": str(e), "error_type": type(e).__name__},
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail="Voice processing failed")

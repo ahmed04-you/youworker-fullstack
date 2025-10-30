@@ -89,7 +89,10 @@ class EncryptedContent(TypeDecorator):
                 # Try to decode as plaintext for migration purposes only
                 # This allows reading old unencrypted data during migration
                 logger = logging.getLogger(__name__)
-                logger.warning("Found unencrypted message data - run migration to encrypt")
+                logger.warning(
+                    "Found unencrypted message data - migration required",
+                    extra={"data_length": len(data), "migration_needed": True}
+                )
                 return data.decode("utf-8", errors="ignore")
             except Exception as e:
                 raise ValueError(f"Decryption failed: {e}") from e

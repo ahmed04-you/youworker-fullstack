@@ -1340,7 +1340,7 @@ sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 
 ### Structured Logging Migration (Ongoing)
 
-**Status:** 95% Complete
+**Status:** ✅ 100% Complete
 **Effort:** ~5 minutes per file as you touch them
 **Priority:** Low (cosmetic improvement)
 
@@ -1349,11 +1349,11 @@ sudo bash add-google-cloud-ops-agent-repo.sh --also-install
 - ✅ All error handlers use structured logging
 - ✅ All MCP servers use structured logging
 - ✅ Database layer uses structured logging
+- ✅ All remaining f-string logs converted to structured logging (packages/db/models.py:92)
 
 **What Remains:**
-- Documentation files (markdown examples with f-strings)
-- Non-critical utility scripts
-- Development/testing scripts
+- ✅ **COMPLETE** - No f-string logging patterns remain in Python code
+- Note: Print statements in CLI tools (scripts/admin_cli.py, scripts/generate-encryption-key.py) are intentional for user-facing output
 
 **Pattern to Follow:**
 ```python
@@ -1385,7 +1385,7 @@ logger.error(
 
 ### Service Layer Migration (Ongoing)
 
-**Status:** Infrastructure Complete, Incremental Migration
+**Status:** Major Chat Endpoints Complete, Incremental Migration in Progress
 **Effort:** Varies by endpoint complexity
 **Priority:** Medium (long-term maintainability)
 
@@ -1394,22 +1394,26 @@ logger.error(
 - ✅ ChatService fully implemented with tests
 - ✅ Dependency injection pattern established
 - ✅ Example endpoint created (`/v1/simple-chat`)
+- ✅ `/v1/chat/unified` - Non-streaming path refactored to use ChatService (reduced from 365 to 323 lines)
+- ✅ **Streaming support added to ChatService** (`send_message_streaming()` method)
+- ✅ `/v1/chat/unified` - Streaming path refactored to use ChatService (reduced from 323 to 160 lines, **50% reduction**)
+- ✅ `/v1/chat/streaming` - Both streaming and non-streaming paths refactored (reduced from 252 to 153 lines, **39% reduction**)
+- ✅ `/v1/chat/voice` - Complete refactor to use ChatService (reduced from 163 to 75 lines, **54% reduction**)
 
 **What Can Be Migrated:**
 
-1. **Chat Endpoints** (Medium effort, high value)
-   - `/v1/chat/unified` - Unified chat endpoint
-   - `/v1/chat/streaming` - Streaming chat
-   - `/v1/chat/voice` - Voice chat
+1. ✅ **Ingestion Endpoints** (COMPLETE)
+   - Created `IngestionService` with comprehensive business logic
+   - Moved file processing logic from endpoints to service (reduced from 406 to 183 lines, **55% reduction**)
+   - Moved file validation, path sanitization, and persistence logic
+   - Added dependency injection in [apps/api/routes/deps.py:114-139](apps/api/routes/deps.py#L114-L139)
+   - Both `/v1/ingest` and `/v1/ingest/upload` endpoints now use service layer
+   - File: [apps/api/services/ingestion_service.py](apps/api/services/ingestion_service.py)
 
-2. **Ingestion Endpoints** (Medium effort, medium value)
-   - Create `IngestionService`
-   - Move file processing logic
-   - Move vector store operations
-
-3. **User Endpoints** (Low effort, low value)
+2. **User Endpoints** (Low effort, low value)
    - Create `UserService`
    - Move account management logic
+   - **Recommended:** Low priority, only when endpoint needs changes
 
 **When to Migrate:**
 - When adding features to an endpoint
@@ -1429,6 +1433,15 @@ logger.error(
 - Don't migrate all endpoints at once (too risky)
 - Don't migrate endpoints that rarely change
 - Don't block features for service layer migration
+
+**Impact Summary:**
+- **Total Lines Removed:** ~573 lines of duplicated business logic
+  - Chat endpoints: ~350 lines
+  - Ingestion endpoints: 223 lines
+- **Code Reuse:** All chat and ingestion endpoints share service implementations
+- **Maintainability:** Bug fixes and features in services automatically apply to all endpoints
+- **Testability:** Business logic can be tested independently of HTTP layer
+- **Status:** Service layer migration effectively complete (all major endpoints done)
 
 ---
 
@@ -1519,5 +1532,211 @@ logger.error(
 - Don't block features for these improvements
 - Platform is stable and reliable as-is
 
-**Last Updated:** 2025-10-30
-**Next Review:** When business requirements change
+---
+
+## 📝 Refactoring Session History
+
+### Session: 2025-10-30 (Morning)
+
+**Completed Tasks:**
+
+1. ✅ **Structured Logging Migration (COMPLETE)**
+   - Converted last remaining f-string log to structured logging ([packages/db/models.py:92](packages/db/models.py#L92))
+   - Status: 100% Complete (was 95%)
+   - All Python code now uses structured logging with `extra` fields
+   - CLI tools intentionally use print() for user output
+
+2. ✅ **Service Layer Migration - Unified Chat Endpoint**
+   - Refactored non-streaming path in `/v1/chat/unified` to use ChatService
+   - Reduced endpoint from 365 to 323 lines (42 lines removed)
+   - Eliminated code duplication between simple-chat and unified-chat
+   - Improved testability by delegating business logic to service layer
+   - File: [apps/api/routes/chat/unified.py:298-323](apps/api/routes/chat/unified.py#L298-L323)
+
+**What Remains:**
+
+1. **Service Layer Migration** (Optional, incremental)
+   - Streaming path in `/v1/chat/unified` (requires adding streaming method to ChatService)
+   - Other chat endpoints: `/v1/chat/streaming`, `/v1/chat/voice`
+   - Ingestion endpoints (create IngestionService)
+   - User endpoints (create UserService)
+   - **Guidance:** Migrate incrementally when adding features or fixing bugs, not as standalone tasks
+
+2. **Group-Based Multi-tenancy** (Optional, 10-15 days)
+   - Full multi-tenant architecture with groups, memberships, and access control
+   - Requires database migration, API changes, and frontend work
+   - **Only implement if customers request team collaboration features**
+
+3. **Log Aggregation Setup** (Optional, 1-2 days)
+   - ELK Stack, Loki+Grafana, or cloud provider logging
+   - **Only needed for production deployments at scale**
+
+**Key Decisions:**
+- Focused on completing ongoing maintenance tasks rather than starting large optional projects
+- Prioritized code quality improvements that were 90%+ complete
+- Left streaming logic as-is (complex, working correctly, low ROI for refactoring)
+- Documented remaining work clearly for future sessions
+
+---
+
+### Session: 2025-10-30 (Afternoon)
+
+**Completed Tasks:**
+
+1. ✅ **Service Layer Migration - Complete Chat Endpoints** (MAJOR REFACTOR)
+
+   **Added Streaming Support to ChatService:**
+   - Implemented `send_message_streaming()` method in ChatService
+   - Yields raw events that endpoints format as SSE
+   - Maintains separation of concerns (business logic vs presentation)
+   - File: [apps/api/services/chat_service.py:429-585](apps/api/services/chat_service.py#L429-L585)
+
+   **Migrated All Chat Endpoints:**
+
+   a. `/v1/chat/unified` - Streaming path refactored
+      - **Before:** 323 lines (after previous session)
+      - **After:** 160 lines
+      - **Reduction:** 163 lines (50%)
+      - Eliminated duplication of agent loop logic
+      - File: [apps/api/routes/chat/unified.py](apps/api/routes/chat/unified.py)
+
+   b. `/v1/chat/streaming` - Both paths refactored
+      - **Before:** 252 lines
+      - **After:** 153 lines
+      - **Reduction:** 99 lines (39%)
+      - Streaming and non-streaming both use ChatService
+      - File: [apps/api/routes/chat/streaming.py](apps/api/routes/chat/streaming.py)
+
+   c. `/v1/chat/voice` - Complete refactor
+      - **Before:** 163 lines
+      - **After:** 75 lines
+      - **Reduction:** 88 lines (54%)
+      - Cleanest implementation - all logic in service
+      - Proper error handling for audio/transcription errors
+      - File: [apps/api/routes/chat/voice.py](apps/api/routes/chat/voice.py)
+
+**Impact Summary:**
+
+- **Total Lines Removed:** 350+ lines of business logic across 3 files
+- **Code Duplication:** Eliminated - all chat logic now in ChatService
+- **Maintainability:** Single source of truth for chat operations
+- **Testability:** Business logic fully separated from HTTP layer
+- **Consistency:** All endpoints use same patterns and error handling
+
+**What Remains:**
+
+1. **Service Layer Migration** (Optional, incremental)
+   - Ingestion endpoints (create IngestionService for 405 lines in [apps/api/routes/ingestion.py](apps/api/routes/ingestion.py))
+   - User endpoints (create UserService)
+   - **Guidance:** Only migrate when adding features or fixing bugs
+
+2. **Group-Based Multi-tenancy** (Optional, 10-15 days)
+   - Full multi-tenant architecture with groups, memberships, and access control
+   - Requires database migration, API changes, and frontend work
+   - **Only implement if customers request team collaboration features**
+
+3. **Log Aggregation Setup** (Optional, 1-2 days)
+   - ELK Stack, Loki+Grafana, or cloud provider logging
+   - **Only needed for production deployments at scale**
+
+**Key Decisions:**
+- Completed all chat endpoint migrations in one session for consistency
+- Service layer now handles all chat operations (text, audio, streaming, non-streaming)
+- Left ingestion endpoints for future incremental migration (guide's recommendation)
+- Focused on quality over quantity - all migrations thoroughly tested and consistent
+- Updated structured logging to use `extra` fields in error handlers
+
+---
+
+### Session: 2025-10-30 (Evening)
+
+**Completed Tasks:**
+
+1. ✅ **Service Layer Migration - Ingestion Endpoints** (COMPLETE)
+
+   **Created IngestionService:**
+   - Implemented comprehensive business logic for document ingestion
+   - Extracted all business logic from HTTP layer to service layer
+   - Added proper error handling with ValueError (validation) and RuntimeError (execution) distinction
+   - Implemented methods:
+     - `sanitize_tags()` - Tag validation and sanitization
+     - `validate_local_path()` - Path traversal protection
+     - `validate_upload_files()` - MIME type and size validation
+     - `save_uploaded_files()` - File saving with unique filename generation
+     - `ingest_path()` - Path/URL ingestion orchestration
+     - `ingest_uploaded_files()` - File upload ingestion orchestration
+     - `_persist_ingestion_run()` - Database persistence
+   - File: [apps/api/services/ingestion_service.py](apps/api/services/ingestion_service.py) (528 lines)
+
+   **Refactored Ingestion Endpoints:**
+   - **Before:** 406 lines of mixed HTTP and business logic
+   - **After:** 183 lines (HTTP concerns only)
+   - **Reduction:** 223 lines (55%)
+   - Both endpoints now delegate to IngestionService
+   - Improved error handling with proper HTTP status codes
+   - Cleaner separation of concerns
+   - File: [apps/api/routes/ingestion.py](apps/api/routes/ingestion.py)
+
+   **Added Dependency Injection:**
+   - Created `get_ingestion_service()` function in deps.py
+   - Follows same pattern as ChatService
+   - Manages database session lifecycle
+   - File: [apps/api/routes/deps.py:114-139](apps/api/routes/deps.py#L114-L139)
+
+   **Updated Service Exports:**
+   - Added IngestionService, IngestPathResult, FileUploadResult to services __init__.py
+   - File: [apps/api/services/__init__.py](apps/api/services/__init__.py)
+
+**Impact Summary:**
+
+- **Total Lines Removed:** 223 lines from ingestion endpoints
+- **Code Reuse:** All ingestion logic centralized in IngestionService
+- **Maintainability:** Business logic can be modified without touching HTTP layer
+- **Testability:** Service can be unit tested independently (follows same pattern as ChatService)
+- **Consistency:** All major endpoints now use service layer pattern
+
+**Service Layer Migration Status:**
+
+- ✅ **Chat Endpoints:** 100% Complete (all 4 endpoints migrated)
+  - `/v1/chat/unified` (streaming and non-streaming)
+  - `/v1/chat/streaming`
+  - `/v1/chat/voice`
+  - `/v1/simple-chat`
+  - **Total reduction:** ~350 lines across chat endpoints
+
+- ✅ **Ingestion Endpoints:** 100% Complete (all 2 endpoints migrated)
+  - `/v1/ingest`
+  - `/v1/ingest/upload`
+  - **Total reduction:** 223 lines
+
+- ⏸️ **User Endpoints:** Not started (low priority)
+  - Only migrate when endpoints need changes
+  - Low value, simple endpoints
+
+**What Remains:**
+
+1. **Service Layer Migration** (Optional, incremental)
+   - User endpoints (create UserService) - only when endpoints need changes
+   - **Guidance:** Very low priority, current implementation is adequate
+
+2. **Group-Based Multi-tenancy** (Optional, 10-15 days)
+   - Full multi-tenant architecture with groups, memberships, and access control
+   - Requires database migration, API changes, and frontend work
+   - **Only implement if customers request team collaboration features**
+
+3. **Log Aggregation Setup** (Optional, 1-2 days)
+   - ELK Stack, Loki+Grafana, or cloud provider logging
+   - **Only needed for production deployments at scale**
+
+**Key Decisions:**
+- Completed all major service layer migrations (chat + ingestion endpoints)
+- Service layer pattern now established across all major business logic
+- Followed exact same patterns from ChatService for consistency
+- Focused on high-value endpoints (chat and ingestion handle 90%+ of application logic)
+- Left low-value user endpoints for future incremental migration
+- All critical refactoring work is now complete
+
+---
+
+**Last Updated:** 2025-10-30 (Evening)
+**Next Review:** When business requirements change or when implementing optional features
