@@ -233,7 +233,13 @@ class AgentLoop:
         tool_calls_buffer: list[ToolCall] = []
 
         logger.info(
-            f"Starting agent turn with {len(messages)} messages, tools_enabled={enable_tools}"
+            "Starting agent turn",
+            extra={
+                "message_count": len(messages),
+                "tools_enabled": enable_tools,
+                "language": selected_language,
+                "model": model or self.model
+            }
         )
 
         # Stream chat completion
@@ -263,11 +269,18 @@ class AgentLoop:
 
         # SINGLE-TOOL ENFORCEMENT
         if tool_calls_buffer:
-            logger.info(f"Agent emitted {len(tool_calls_buffer)} tool call(s)")
+            logger.info(
+                "Agent emitted tool calls",
+                extra={"tool_call_count": len(tool_calls_buffer)}
+            )
 
             if len(tool_calls_buffer) > 1:
                 logger.warning(
-                    f"Agent emitted {len(tool_calls_buffer)} tool calls; keeping only first"
+                    "Agent emitted multiple tool calls; keeping only first",
+                    extra={
+                        "tool_call_count": len(tool_calls_buffer),
+                        "first_tool": tool_calls_buffer[0].name
+                    }
                 )
                 tool_calls_buffer = tool_calls_buffer[:1]
 
@@ -307,7 +320,14 @@ class AgentLoop:
         Returns:
             Tool result as string (JSON if structured)
         """
-        logger.info(f"Executing tool: {tool_call.name} with args: {tool_call.arguments}")
+        logger.info(
+            "Executing tool",
+            extra={
+                "tool_name": tool_call.name,
+                "tool_args": tool_call.arguments,
+                "tool_call_id": tool_call.id
+            }
+        )
 
         try:
             result = await self.registry.call_tool(tool_call.name, tool_call.arguments)
@@ -320,17 +340,38 @@ class AgentLoop:
 
         except (ConnectionError, TimeoutError, OSError) as e:
             error_msg = f"Network error in tool execution: {str(e)}"
-            logger.error(error_msg)
+            logger.error(
+                "Network error in tool execution",
+                extra={
+                    "tool_name": tool_call.name,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             return json.dumps({"error": error_msg, "type": "network_error"})
 
         except ValueError as e:
             error_msg = f"Invalid arguments for tool: {str(e)}"
-            logger.error(error_msg)
+            logger.error(
+                "Invalid arguments for tool",
+                extra={
+                    "tool_name": tool_call.name,
+                    "error": str(e),
+                    "tool_args": tool_call.arguments
+                }
+            )
             return json.dumps({"error": error_msg, "type": "invalid_args"})
 
         except Exception as e:
             error_msg = f"Unexpected error in tool execution: {str(e)}"
-            logger.error(error_msg)
+            logger.error(
+                "Unexpected error in tool execution",
+                extra={
+                    "tool_name": tool_call.name,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             return json.dumps({"error": error_msg, "type": "unexpected_error"})
 
     async def run_until_completion(
@@ -433,7 +474,14 @@ class AgentLoop:
                     )
                 )
 
-                logger.info(f"Tool completed, continuing to iteration {iterations + 1}")
+                logger.info(
+                    "Tool completed, continuing",
+                    extra={
+                        "tool_name": tool_call.name,
+                        "next_iteration": iterations + 1,
+                        "duration_ms": duration_ms
+                    }
+                )
                 tool_calls_executed += 1
 
                 # Include a small result preview to allow persistence without huge payloads
@@ -470,7 +518,13 @@ class AgentLoop:
 
             else:
                 # No tool calls - final answer reached
-                logger.info(f"Agent completed after {iterations} iterations")
+                logger.info(
+                    "Agent completed",
+                    extra={
+                        "iterations": iterations,
+                        "tool_calls_executed": tool_calls_executed
+                    }
+                )
 
                 # Content was already streamed in real-time, just send done event
                 yield {
@@ -488,7 +542,13 @@ class AgentLoop:
                 break
 
         if iterations >= max_iterations:
-            logger.warning(f"Agent hit max iterations ({max_iterations})")
+            logger.warning(
+                "Agent hit max iterations",
+                extra={
+                    "max_iterations": max_iterations,
+                    "tool_calls_executed": tool_calls_executed
+                }
+            )
             warning_text = f"Agent hit max iterations ({max_iterations})"
             yield {"event": "log", "data": {"level": "warn", "msg": warning_text}}
             yield {

@@ -78,7 +78,15 @@ class QdrantStore:
             existing = [c.name for c in collections.collections]
 
             if collection_name not in existing:
-                logger.info(f"Creating collection: {collection_name}")
+                logger.info(
+                    "Creating Qdrant collection",
+                    extra={
+                        "collection_name": collection_name,
+                        "embedding_dim": self.embedding_dim,
+                        "shard_number": 4,
+                        "replication_factor": 2
+                    }
+                )
                 await self.client.create_collection(
                     collection_name=collection_name,
                     vectors_config=VectorParams(
@@ -89,10 +97,20 @@ class QdrantStore:
                     replication_factor=2,  # For high availability
                 )
             else:
-                logger.debug(f"Collection {collection_name} already exists")
+                logger.debug(
+                    "Qdrant collection already exists",
+                    extra={"collection_name": collection_name}
+                )
 
         except Exception as e:
-            logger.error(f"Failed to ensure collection {collection_name}: {e}")
+            logger.error(
+                "Failed to ensure Qdrant collection",
+                extra={
+                    "collection_name": collection_name,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             raise
 
     @async_retry(max_attempts=3, min_wait=1.0, max_wait=10.0)
@@ -138,11 +156,25 @@ class QdrantStore:
                 collection_name=collection_name,
                 points=points,
             )
-            logger.info(f"Upserted {len(points)} chunks to {collection_name}")
+            logger.info(
+                "Upserted chunks to Qdrant collection",
+                extra={
+                    "collection_name": collection_name,
+                    "chunk_count": len(points)
+                }
+            )
             return len(points)
 
         except Exception as e:
-            logger.error(f"Failed to upsert chunks: {e}")
+            logger.error(
+                "Failed to upsert chunks to Qdrant",
+                extra={
+                    "collection_name": collection_name,
+                    "chunk_count": len(points),
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             raise
 
     @async_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
@@ -199,11 +231,27 @@ class QdrantStore:
                     )
                 )
 
-            logger.info(f"Found {len(results)} results for query")
+            logger.info(
+                "Qdrant search completed",
+                extra={
+                    "collection_name": collection_name,
+                    "result_count": len(results),
+                    "top_k": top_k,
+                    "has_filter": query_filter is not None
+                }
+            )
             return results
 
         except Exception as e:
-            logger.error(f"Search failed: {e}")
+            logger.error(
+                "Qdrant search failed",
+                extra={
+                    "collection_name": collection_name,
+                    "top_k": top_k,
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
             raise
 
     async def list_collections(self) -> list[dict[str, Any]]:
@@ -222,7 +270,10 @@ class QdrantStore:
                 for c in collections.collections
             ]
         except Exception as e:
-            logger.error(f"Failed to list collections: {e}")
+            logger.error(
+                "Failed to list Qdrant collections",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
             raise
 
     async def close(self):

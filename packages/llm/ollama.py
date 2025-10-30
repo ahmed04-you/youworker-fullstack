@@ -162,7 +162,10 @@ class OllamaClient:
                     try:
                         data = json.loads(line)
                     except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse JSON: {line}")
+                        logger.warning(
+                            "Failed to parse JSON from Ollama stream",
+                            extra={"line": line[:200], "model": model}
+                        )
                         continue
 
                     chunk = self._parse_chunk(data, tool_calls_accumulator)
@@ -184,10 +187,25 @@ class OllamaClient:
             except Exception:
                 # Fall back to reason phrase if body is unavailable
                 body_snippet = getattr(e.response, "reason_phrase", "") or str(e)
-            logger.error("Ollama API error: %s - %s", e.response.status_code, body_snippet)
+            logger.error(
+                "Ollama API error",
+                extra={
+                    "status_code": e.response.status_code,
+                    "response_body": body_snippet,
+                    "model": model,
+                    "error_type": type(e).__name__
+                }
+            )
             raise
         except Exception as e:
-            logger.error(f"Unexpected error during chat stream: {e}")
+            logger.error(
+                "Unexpected error during chat stream",
+                extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "model": model
+                }
+            )
             raise
 
     async def _ensure_model_available(self, model: str) -> None:
@@ -213,7 +231,10 @@ class OllamaClient:
                     "Install it with `ollama pull {model}` or enable auto-pull."
                 )
 
-            logger.info("Pulling Ollama model '%s' (this may take some time)...", model)
+            logger.info(
+                "Pulling Ollama model (this may take some time)",
+                extra={"model": model, "base_url": self.base_url}
+            )
             try:
                 pull_resp = await self.client.post(
                     f"{self.base_url}/api/pull",
@@ -222,10 +243,21 @@ class OllamaClient:
                 )
                 pull_resp.raise_for_status()
             except httpx.HTTPError as exc:
-                logger.error("Failed to pull Ollama model '%s': %s", model, exc)
+                logger.error(
+                    "Failed to pull Ollama model",
+                    extra={
+                        "model": model,
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "base_url": self.base_url
+                    }
+                )
                 raise
 
-            logger.info("Model '%s' downloaded successfully", model)
+            logger.info(
+                "Model downloaded successfully",
+                extra={"model": model}
+            )
             self._ensured_models.add(model)
 
     @async_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
@@ -239,7 +271,15 @@ class OllamaClient:
                 json={"name": model},
             )
         except httpx.HTTPError as exc:
-            logger.error("Failed to query Ollama model '%s': %s", model, exc)
+            logger.error(
+                "Failed to query Ollama model",
+                extra={
+                    "model": model,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "base_url": self.base_url
+                }
+            )
             raise
 
         if response.status_code == 200:
@@ -318,7 +358,14 @@ class OllamaClient:
             try:
                 args = json.loads(tc_data["arguments"]) if tc_data["arguments"] else {}
             except json.JSONDecodeError:
-                logger.warning(f"Failed to parse tool arguments: {tc_data['arguments']}")
+                logger.warning(
+                    "Failed to parse tool arguments",
+                    extra={
+                        "arguments": tc_data["arguments"][:200],
+                        "tool_name": tc_data.get("name"),
+                        "tool_id": tc_data.get("id")
+                    }
+                )
                 args = {}
 
             tool_calls.append(
@@ -351,5 +398,13 @@ class OllamaClient:
             data = response.json()
             return data.get("embedding", [])
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {e}")
+            logger.error(
+                "Failed to generate embedding",
+                extra={
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "model": model,
+                    "text_length": len(text)
+                }
+            )
             raise

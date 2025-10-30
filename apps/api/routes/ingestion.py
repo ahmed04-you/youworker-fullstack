@@ -80,7 +80,16 @@ async def ingest_endpoint(
             if cleaned:
                 sanitized_tags.append(cleaned)
 
-        logger.info("Ingestion request: path=%s, tags=%s", target, sanitized_tags)
+        logger.info(
+            "Ingestion request",
+            extra={
+                "path": target,
+                "tags": sanitized_tags,
+                "from_web": from_web,
+                "recursive": recursive,
+                "user_id": _get_user_id(current_user)
+            }
+        )
 
         if not from_web:
             # Validate local paths to prevent path traversal attacks
@@ -152,7 +161,15 @@ async def ingest_endpoint(
                         collection=None,
                     )
         except (ValueError, TypeError, OSError) as persist_exc:
-            logger.error(f"Failed to persist ingestion run: {persist_exc}")
+            logger.error(
+                "Failed to persist ingestion run",
+                extra={
+                    "error": str(persist_exc),
+                    "error_type": type(persist_exc).__name__,
+                    "user_id": _get_user_id(current_user),
+                    "target": ingest_request.path_or_url
+                }
+            )
 
         return {
             "success": not error_messages,
@@ -168,7 +185,14 @@ async def ingest_endpoint(
         }
 
     except Exception as e:
-        logger.error(f"Ingestion failed: {e}")
+        logger.error(
+            "Ingestion failed",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "path": ingest_request.path_or_url
+            }
+        )
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -207,12 +231,26 @@ async def ingest_upload_endpoint(
     valid_files = []
     for f in files:
         if f.content_type not in allowed_mimes:
-            logger.warning(f"Rejected file {f.filename} with invalid MIME type: {f.content_type}")
+            logger.warning(
+                "Rejected file with invalid MIME type",
+                extra={
+                    "filename": f.filename,
+                    "mime_type": f.content_type,
+                    "allowed_mimes": list(allowed_mimes)
+                }
+            )
             continue
 
         # Check size if available
         if f.size and f.size > max_size_bytes:
-            logger.warning(f"Rejected file {f.filename}: size {f.size} exceeds {max_size_bytes}")
+            logger.warning(
+                "Rejected file: size exceeds limit",
+                extra={
+                    "filename": f.filename,
+                    "size_bytes": f.size,
+                    "max_size_bytes": max_size_bytes
+                }
+            )
             continue
 
         valid_files.append(f)
@@ -333,7 +371,15 @@ async def ingest_upload_endpoint(
                         collection=None,
                     )
         except (ValueError, TypeError, OSError) as persist_exc:
-            logger.error(f"Failed to persist upload ingestion run: {persist_exc}")
+            logger.error(
+                "Failed to persist upload ingestion run",
+                extra={
+                    "error": str(persist_exc),
+                    "error_type": type(persist_exc).__name__,
+                    "user_id": _get_user_id(current_user),
+                    "run_dir": str(run_dir)
+                }
+            )
 
         return {
             "success": not error_messages,
@@ -348,5 +394,12 @@ async def ingest_upload_endpoint(
             "errors": error_messages or [],
         }
     except Exception as e:
-        logger.error(f"Upload ingestion failed: {e}")
+        logger.error(
+            "Upload ingestion failed",
+            extra={
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "file_count": len(valid_files)
+            }
+        )
         raise HTTPException(status_code=500, detail=str(e))

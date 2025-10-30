@@ -104,7 +104,16 @@ class IngestionPipeline:
             else:
                 items = self._enumerate_local(Path(path_or_url), recursive=recursive)
         except Exception as exc:
-            logger.error(f"ingestion-enumeration-error: {str(exc)}")
+            logger.error(
+                "ingestion-enumeration-error",
+                extra={
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                    "path_or_url": path_or_url,
+                    "from_web": from_web,
+                    "user_id": user_id
+                }
+            )
             return IngestionReport(
                 total_files=0,
                 total_chunks=0,
@@ -186,7 +195,16 @@ class IngestionPipeline:
                 )
                 return (index, item, chunk_count, None)
             except Exception as exc:
-                logger.error(f"ingestion-item-error: {str(exc)}")
+                logger.error(
+                    "ingestion-item-error",
+                    extra={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "item_path": str(item.path),
+                        "item_uri": item.uri,
+                        "user_id": user_id
+                    }
+                )
                 return (index, item, 0, exc)
 
     async def _process_item(
@@ -343,7 +361,14 @@ class IngestionPipeline:
                 try:
                     items.append(self._make_item(file_path, uri=file_path.as_uri()))
                 except OSError as exc:
-                    logger.warning(f"ingestion-enumerate-error: {str(exc)}")
+                    logger.warning(
+                        "ingestion-enumerate-error",
+                        extra={
+                            "error": str(exc),
+                            "error_type": type(exc).__name__,
+                            "file_path": str(file_path)
+                        }
+                    )
         return items
 
     @staticmethod
@@ -408,7 +433,14 @@ class IngestionPipeline:
             try:
                 shutil.rmtree(directory, ignore_errors=True)
             except Exception as exc:
-                logger.warning(f"ingestion-temp-cleanup-error: {str(exc)}")
+                logger.warning(
+                    "ingestion-temp-cleanup-error",
+                    extra={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "directory": str(directory)
+                    }
+                )
         self._temp_dirs.clear()
 
     def _effective_concurrency(self) -> int:

@@ -147,24 +147,62 @@ async function parseJson<T>(response: Response): Promise<T> {
   }
 }
 
+/**
+ * Standardized error response format from backend (P1-2)
+ */
+interface StandardizedErrorResponse {
+  error: {
+    message: string;
+    code: string;
+    details?: Record<string, any>;
+  };
+}
+
+function isStandardizedError(data: unknown): data is StandardizedErrorResponse {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'error' in data &&
+    typeof (data as any).error === 'object' &&
+    'message' in (data as any).error &&
+    'code' in (data as any).error
+  );
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let detail: unknown = undefined;
+    let errorMessage = `API request failed with status ${response.status}`;
+
     try {
       detail = await parseJson(response);
+
+      // Handle standardized error response format (P1-2)
+      if (isStandardizedError(detail)) {
+        errorMessage = detail.error.message;
+        // Store the full error object including code and details
+        detail = {
+          message: detail.error.message,
+          code: detail.error.code,
+          details: detail.error.details,
+        };
+      }
     } catch {
       /* ignore parse error */
     }
 
     // Create error with appropriate message based on status
     const error = new ApiError(
-      `API request failed with status ${response.status}`,
+      errorMessage,
       response.status,
       detail
     );
 
-    // Use the user-friendly message for better error reporting
-    error.message = ApiError.getUserFriendlyMessage(error);
+    // Use the user-friendly message for better error reporting if no standardized message
+    if (!isStandardizedError(detail)) {
+      error.message = ApiError.getUserFriendlyMessage(error);
+    }
+
     throw error;
   }
   if (response.status === 204) {
@@ -447,10 +485,24 @@ export function postEventStream<T = unknown>(
 
       if (!response.ok) {
         const errorPayload = await parseJson(response).catch(() => undefined);
+
+        // Handle standardized error response format (P1-2)
+        let errorMessage = `Streaming request failed with status ${response.status}`;
+        let detail = errorPayload;
+
+        if (isStandardizedError(errorPayload)) {
+          errorMessage = errorPayload.error.message;
+          detail = {
+            message: errorPayload.error.message,
+            code: errorPayload.error.code,
+            details: errorPayload.error.details,
+          };
+        }
+
         throw new ApiError(
-          `Streaming request failed with status ${response.status}`,
+          errorMessage,
           response.status,
-          errorPayload
+          detail
         );
       }
 
