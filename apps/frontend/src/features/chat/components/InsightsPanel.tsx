@@ -1,11 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { memo } from "react";
-import {
-  Sparkles,
-  ChevronRight,
-} from "lucide-react";
+import { memo, useEffect, useState } from "react";
+import { Sparkles } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,24 +27,24 @@ function InsightsContent({
   toolTimeline,
 }: Pick<InsightsProps, 'toolTimeline'>) {
   return (
-    <Card className="rounded-3xl border border-border bg-card/70 shadow-lg h-full flex flex-col">
-      <CardHeader className="pb-3 flex-shrink-0">
+    <Card className="rounded-lg border border-border bg-card/70 shadow-lg h-full flex flex-col">
+      <CardHeader className="pb-2 flex-shrink-0">
         <CardTitle className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="h-4 w-4 text-primary" />
           Tool timeline
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto space-y-3">
+      <CardContent className="flex-1 min-h-0 overflow-y-auto space-y-2">
         {toolTimeline.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Tools spring into action while you chat. You&apos;ll see them here in real time.
           </p>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {toolTimeline.map((event, index) => (
               <div
                 key={`${event.tool}-${event.status}-${index}`}
-                className="rounded-2xl border border-border/60 bg-background/80 px-3 py-2 text-xs"
+                className="rounded-lg border border-border/60 bg-background/80 px-2 py-1.5 text-xs"
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-foreground">{event.tool}</span>
@@ -74,12 +70,6 @@ function InsightsContent({
             ))}
           </div>
         )}
-        <Link
-          href="/analytics"
-          className="inline-flex items-center gap-2 text-xs font-medium text-primary hover:underline mt-3"
-        >
-          View analytics <ChevronRight className="h-3 w-3" />
-        </Link>
       </CardContent>
     </Card>
   );
@@ -98,7 +88,6 @@ function InsightsContent({
  *
  * Features:
  * - Tool timeline showing recent tool executions with status badges
- * - Link to full analytics dashboard
  * - Auto-displays last 6 tool events
  * - Status-based color coding (success, error, in-progress)
  * - Desktop only (hidden on mobile via xl:flex)
@@ -147,6 +136,16 @@ export const MobileInsightsDrawer = memo(function MobileInsightsDrawer({
   onOpenChange,
   toolTimeline,
 }: MobileInsightsDrawerProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return null;
+  }
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetTrigger asChild>

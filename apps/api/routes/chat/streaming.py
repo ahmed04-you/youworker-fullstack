@@ -19,7 +19,7 @@ from packages.agent import AgentLoop
 from packages.db import get_async_session
 
 from .models import ChatRequest
-from .helpers import ToolEventRecorder, prepare_chat_messages, resolve_assistant_language, get_user_id
+from .helpers import ToolEventRecorder, prepare_chat_messages, get_user_id
 from .persistence import (
     persist_last_user_message,
     persist_final_assistant_message,
@@ -51,15 +51,13 @@ async def chat_endpoint(
     - Thinking traces are captured but NOT streamed
     """
     messages = await prepare_chat_messages(chat_request.messages)
-    assistant_language = resolve_assistant_language(chat_request.assistant_language)
     request_model = chat_request.model or settings.chat_model
     user_id = get_user_id(current_user)
 
     logger.info(
-        "Chat request: %s messages, tools=%s, language=%s",
+        "Chat request: %s messages, tools=%s",
         len(messages),
         chat_request.enable_tools,
-        assistant_language,
     )
 
     if chat_request.stream:
@@ -86,7 +84,6 @@ async def chat_endpoint(
                     messages=messages,
                     enable_tools=chat_request.enable_tools,
                     max_iterations=settings.max_agent_iterations,
-                    language=assistant_language,
                     model=request_model,
                 ).__aiter__()
 
@@ -130,7 +127,6 @@ async def chat_endpoint(
                         metadata = payload.get("metadata") or {}
                         if not isinstance(metadata, dict):
                             metadata = {}
-                        metadata["assistant_language"] = assistant_language
                         payload["metadata"] = metadata
 
                         final = payload.get("final_text") or ""
@@ -140,8 +136,6 @@ async def chat_endpoint(
                     # Handle log event
                     elif event_type == "log":
                         payload = event.setdefault("data", {})
-                        if isinstance(payload, dict):
-                            payload.setdefault("assistant_language", assistant_language)
 
                     yield sse_format(event, pad=pad)
                     await asyncio.sleep(0)
@@ -154,7 +148,6 @@ async def chat_endpoint(
                     "data": {
                         "level": "error",
                         "msg": error_msg,
-                        "assistant_language": assistant_language,
                     },
                 }
                 yield sse_format(log_frame, pad=pad_pending)
@@ -165,7 +158,6 @@ async def chat_endpoint(
                         "metadata": {
                             "status": "error",
                             "error": error_msg,
-                            "assistant_language": assistant_language,
                         },
                         "final_text": f"Errore: {error_msg}",
                     },
@@ -179,7 +171,6 @@ async def chat_endpoint(
                     "data": {
                         "level": "error",
                         "msg": error_msg,
-                        "assistant_language": assistant_language,
                     },
                 }
                 yield sse_format(log_frame, pad=pad_pending)
@@ -190,7 +181,6 @@ async def chat_endpoint(
                         "metadata": {
                             "status": "error",
                             "error": error_msg,
-                            "assistant_language": assistant_language,
                         },
                         "final_text": f"Errore: {error_msg}",
                     },
@@ -210,7 +200,7 @@ async def chat_endpoint(
     # Non-streaming response
     collected_chunks: list[str] = []
     final_text: str | None = None
-    metadata: dict[str, Any] = {"assistant_language": assistant_language}
+    metadata: dict[str, Any] = {}
 
     async with get_async_session() as db:
         session = await get_or_create_chat_session(
@@ -229,7 +219,6 @@ async def chat_endpoint(
         messages=messages,
         enable_tools=chat_request.enable_tools,
         max_iterations=settings.max_agent_iterations,
-        language=assistant_language,
         model=request_model,
     ):
         event_type = event.get("event")
@@ -249,7 +238,6 @@ async def chat_endpoint(
             meta = data.get("metadata") or {}
             if isinstance(meta, dict):
                 metadata.update(meta)
-            metadata["assistant_language"] = assistant_language
             final_text = data.get("final_text", final_text)
             continue
 

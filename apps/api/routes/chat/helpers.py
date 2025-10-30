@@ -157,15 +157,6 @@ async def prepare_chat_messages(history: List[dict]) -> List[LLMChatMessage]:
     return messages
 
 
-def resolve_assistant_language(language: Optional[str], *, default: Optional[str] = None) -> str:
-    """Resolve assistant language from request, falling back to configured defaults."""
-    chosen = (language or "").strip().lower()
-    if chosen:
-        return chosen
-    fallback = (default or getattr(api_settings, "agent_default_language", None) or "").strip()
-    return fallback.lower() or "en"
-
-
 async def process_tracked_agent_events(
     agent_loop,
     conversation: List[LLMChatMessage],

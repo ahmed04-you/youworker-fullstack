@@ -22,7 +22,6 @@ from packages.llm import ChatMessage
 from .helpers import (
     ToolEventRecorder,
     prepare_chat_messages,
-    resolve_assistant_language,
     get_user_id,
 )
 
@@ -77,7 +76,6 @@ async def voice_turn_endpoint(
     conversation: list[ChatMessage] = await prepare_chat_messages(voice_request.messages or [])
     conversation.append(ChatMessage(role="user", content=transcript))
 
-    assistant_language = resolve_assistant_language(voice_request.assistant_language)
     request_model = voice_request.model or settings.chat_model
     user_id = get_user_id(current_user)
 
@@ -96,7 +94,7 @@ async def voice_turn_endpoint(
 
     # Process with agent
     final_text = ""
-    metadata: dict[str, Any] = {"assistant_language": assistant_language}
+    metadata: dict[str, Any] = {}
     tool_events: list[dict[str, Any]] = []
     logs: list[dict[str, str]] = []
     tool_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
@@ -106,7 +104,6 @@ async def voice_turn_endpoint(
             messages=conversation,
             enable_tools=voice_request.enable_tools,
             max_iterations=settings.max_agent_iterations,
-            language=assistant_language,
             model=request_model,
         ):
             etype = event.get("event")
@@ -122,13 +119,11 @@ async def voice_turn_endpoint(
                     {
                         "level": data.get("level", "info"),
                         "msg": data.get("msg", ""),
-                        "assistant_language": assistant_language,
                     }
                 )
             elif etype == "done":
                 meta = data.get("metadata", {}) or {}
                 if isinstance(meta, dict):
-                    metadata.setdefault("assistant_language", assistant_language)
                     metadata.update(meta)
                 if not final_text:
                     final_text = data.get("final_text", "") or ""
@@ -137,8 +132,6 @@ async def voice_turn_endpoint(
         logger.error("Voice pipeline failed: %s", exc, exc_info=True)
 
     metadata = metadata or {}
-    if isinstance(metadata, dict):
-        metadata.setdefault("assistant_language", assistant_language)
     final_text = (final_text or "").strip()
 
     # Persist assistant response
@@ -170,5 +163,4 @@ async def voice_turn_endpoint(
         stt_language=stt_result.get("language"),
         tool_events=tool_events,
         logs=logs,
-        assistant_language=assistant_language,
     )

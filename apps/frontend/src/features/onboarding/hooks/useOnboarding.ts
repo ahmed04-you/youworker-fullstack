@@ -22,7 +22,7 @@ interface OnboardingState {
 }
 
 const ONBOARDING_KEY = 'onboarding-state';
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 5;
 
 const DEFAULT_STEPS = [
   'welcome',
@@ -30,7 +30,6 @@ const DEFAULT_STEPS = [
   'voice-features',
   'tools-mcp',
   'documents',
-  'analytics',
 ];
 
 /**
@@ -159,12 +158,6 @@ export const useOnboarding = create<OnboardingState>((set, get) => ({
         description: 'Upload, manage, and query your documents. The AI can reference your files for more relevant responses.',
         image: '/api/placeholder/400/300?text=Documents',
         cta: 'Upload Documents',
-      },
-      {
-        title: 'Analytics Dashboard',
-        description: 'Monitor usage, performance, and insights. Track token consumption, tool effectiveness, and ingestion stats.',
-        image: '/api/placeholder/400/300?text=Analytics',
-        cta: 'View Analytics',
       },
     ];
 

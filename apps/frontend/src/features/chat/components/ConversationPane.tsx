@@ -179,12 +179,15 @@ function ConversationPaneComponent({
         </div>
       )}
 
-      <MessageList
-        ref={messageListRef}
-        messages={messageViews}
-        onStartNewSession={onStartNewSession}
-        onSamplePromptClick={onInputChange}
-      />
+      {/* Message list - takes all available space */}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        <MessageList
+          ref={messageListRef}
+          messages={messageViews}
+          onStartNewSession={onStartNewSession}
+          onSamplePromptClick={onInputChange}
+        />
+      </div>
 
       {hasNewMessages && (
         <Button
@@ -198,7 +201,7 @@ function ConversationPaneComponent({
       )}
 
       {/* Compose bar */}
-      <div className="flex-shrink-0 mt-4">
+      <div className="flex-shrink-0 mt-1">
         <ChatComposer
           input={input}
           isStreaming={isStreaming}

@@ -26,7 +26,7 @@ const tutorials: Tutorial[] = [
   {
     id: "advanced-features",
     title: "Advanced Features",
-    description: "Discover tools, analytics, and keyboard shortcuts to supercharge your productivity.",
+    description: "Discover tools and keyboard shortcuts to supercharge your productivity.",
     duration: "5:20",
     thumbnail: "/tutorials/advanced-features.png",
   },

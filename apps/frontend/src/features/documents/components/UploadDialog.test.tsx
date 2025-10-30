@@ -37,25 +37,12 @@ describe('UploadDialog', () => {
     mockGetProgress.mockReturnValue(0);
   });
 
-  it('renders upload dialog with trigger button', () => {
+  it('does not render when closed', () => {
     vi.mocked(useDocumentUpload).mockReturnValue(defaultHookReturn);
 
     render(<UploadDialog open={false} onOpenChange={mockOnOpenChange} onUploadComplete={mockOnUploadComplete} />);
 
-    expect(screen.getByRole('button', { name: /upload documents/i })).toBeInTheDocument();
-  });
-
-  it('displays tooltip on trigger button', () => {
-    vi.mocked(useDocumentUpload).mockReturnValue(defaultHookReturn);
-
-    render(<UploadDialog open={false} onOpenChange={mockOnOpenChange} onUploadComplete={mockOnUploadComplete} />);
-
-    const button = screen.getByRole('button', { name: /upload documents/i });
-    fireEvent.mouseOver(button);
-
-    waitFor(() => {
-      expect(screen.getByText(/Upload documents to use in chat/i)).toBeInTheDocument();
-    });
+    expect(screen.queryByText('Upload Documents')).not.toBeInTheDocument();
   });
 
   it('displays dialog content when open', () => {

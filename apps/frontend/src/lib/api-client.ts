@@ -85,6 +85,10 @@ export class ApiError extends Error {
         }
         return 'A server error occurred. Our team has been notified. Please try again later.';
       case ErrorType.NETWORK:
+        // Check if it might be an SSL certificate issue
+        if (error.message?.includes('SSL') || error.message?.includes('certificate') || error.message?.includes('HTTPS')) {
+          return 'Unable to connect: SSL certificate error. If using a development server, try using HTTP instead of HTTPS.';
+        }
         return 'Unable to connect to the server. Please check your internet connection and try again.';
       case ErrorType.API:
         if (detailMessage) {
@@ -108,7 +112,7 @@ export interface SseEvent<T = unknown> {
 }
 
 export interface StreamHandlers<T = unknown> {
-  onEvent: (event: SseEvent<T>) => void | Promise<void>;
+  onEvent: (event: SseEvent<T>) => void;
   onError?: (error: Error) => void;
   onClose?: () => void;
 }
@@ -354,8 +358,19 @@ export async function apiPostMultipart<T = unknown>(
       credentials: options?.credentials || "include",
     });
   } catch (error) {
+    // Enhanced error message with more context
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    const detailedMessage = `Network error: Unable to connect to ${url}. ${errorMessage}`;
+
+    // Log the error for debugging
+    console.error('API Network Error:', {
+      url,
+      error,
+      timestamp: new Date().toISOString()
+    });
+
     throw new ApiError(
-      'Network error: Unable to connect to the server',
+      detailedMessage,
       0,
       error,
       ErrorType.NETWORK
@@ -461,7 +476,8 @@ export function postEventStream<T = unknown>(
           buffer = buffer.slice(boundary + 2);
           if (rawChunk) {
             const event = parseSseChunk<T>(rawChunk);
-            await handlers.onEvent(event);
+            // Fire and forget - don't block stream reading
+            handlers.onEvent(event);
           }
           boundary = buffer.indexOf("\n\n");
         }

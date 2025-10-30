@@ -1,9 +1,8 @@
 "use client";
 
 import React from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Upload, X, File, Loader2 } from 'lucide-react';
 import { UploadDialogProps } from '../types';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
@@ -35,19 +34,6 @@ export function UploadDialog({ open, onOpenChange, onUploadComplete }: UploadDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger asChild>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload Documents
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Upload documents to use in chat (Cmd+U)</p>
-          </TooltipContent>
-        </Tooltip>
-      </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Upload Documents</DialogTitle>

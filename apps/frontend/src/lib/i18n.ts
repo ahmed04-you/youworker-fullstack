@@ -15,7 +15,6 @@ export const translations: Record<Language, TranslationTree> = {
         chat: "Chat",
         documents: "Documents",
         sessions: "Sessions",
-        analytics: "Analytics",
         settings: "Settings",
       },
       logout: "Logout",
@@ -72,7 +71,7 @@ export const translations: Record<Language, TranslationTree> = {
             "JWT tokens are stored in HttpOnly cookies. Client-side code never sees raw keys.",
           continuousRefreshTitle: "Continuous refresh",
           continuousRefreshBody:
-            "Tokens refresh a minute before expiry so long-running chats and analytics stay authorized.",
+            "Tokens refresh a minute before expiry so long-running chats stay authorized.",
           logoutButton: "Sign out",
           logoutWorking: "Signing out…",
           logoutSuccess: "Signed out successfully.",
@@ -99,11 +98,6 @@ export const translations: Record<Language, TranslationTree> = {
           description:
             "Microphone controls live in the chat composer whenever you need push-to-talk.",
         },
-        analytics: {
-          title: "Analytics clarity",
-          description:
-            "Dashboards adopt cream + crimson, adapting to theme for easier scanning.",
-        },
         sessions: {
           title: "Session insights",
           description:
@@ -122,7 +116,6 @@ export const translations: Record<Language, TranslationTree> = {
         chat: "Chat",
         documents: "Documenti",
         sessions: "Sessioni",
-        analytics: "Analisi",
         settings: "Impostazioni",
       },
       logout: "Esci",
@@ -179,7 +172,7 @@ export const translations: Record<Language, TranslationTree> = {
             "I token JWT sono conservati in cookie HttpOnly. Il codice client non vede mai le chiavi raw.",
           continuousRefreshTitle: "Aggiornamento continuo",
           continuousRefreshBody:
-            "I token si rinnovano un minuto prima della scadenza così chat e analisi restano autorizzate.",
+            "I token si rinnovano un minuto prima della scadenza così le chat restano autorizzate.",
           logoutButton: "Esci",
           logoutWorking: "Uscita in corso…",
           logoutSuccess: "Disconnessione completata.",
@@ -206,11 +199,6 @@ export const translations: Record<Language, TranslationTree> = {
           title: "Interfaccia pronta per la voce",
           description:
             "I controlli del microfono sono sempre nel composer della chat per il push-to-talk.",
-        },
-        analytics: {
-          title: "Analisi leggibili",
-          description:
-            "Le dashboard usano crema e cremisi adattandosi al tema per facilitare la lettura.",
         },
         sessions: {
           title: "Insight sulle sessioni",

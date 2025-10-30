@@ -543,6 +543,19 @@ async def get_session_with_messages(
     return chat_session
 
 
+async def get_session_tool_runs(
+    session: AsyncSession, session_id: int, user_id: int
+) -> list[ToolRun]:
+    """Get all tool runs for a specific session."""
+    q = (
+        select(ToolRun)
+        .where(ToolRun.session_id == session_id, ToolRun.user_id == user_id)
+        .order_by(ToolRun.start_ts)
+    )
+    result = await session.execute(q)
+    return list(result.scalars().all())
+
+
 async def get_user_documents(
     session: AsyncSession,
     user_id: int | None = None,

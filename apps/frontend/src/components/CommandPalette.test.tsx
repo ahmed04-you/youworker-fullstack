@@ -189,23 +189,6 @@ describe('CommandPalette', () => {
     }
   });
 
-  it('should navigate to analytics when Analytics item is selected', async () => {
-    const user = userEvent.setup();
-    render(<CommandPalette open={true} onOpenChange={mockOnOpenChange} />);
-
-    const items = screen.getAllByTestId('command-item');
-    const analyticsItem = items.find((item) => item.textContent?.includes('Analytics'));
-
-    if (analyticsItem) {
-      await user.click(analyticsItem);
-
-      await waitFor(() => {
-        expect(mockPush).toHaveBeenCalledWith('/analytics');
-        expect(mockOnOpenChange).toHaveBeenCalledWith(false);
-      });
-    }
-  });
-
   it('should navigate to settings when Settings item is selected', async () => {
     const user = userEvent.setup();
     render(<CommandPalette open={true} onOpenChange={mockOnOpenChange} />);

@@ -22,6 +22,7 @@ export interface SessionMessage {
 export interface SessionDetail {
   session: SessionSummary & {
     messages: SessionMessage[];
+    tool_events?: ChatToolEvent[];
   };
 }
 
@@ -194,7 +195,6 @@ export interface UnifiedChatStreamPayload {
   stt_language?: string | null;
   tool_events?: Record<string, unknown>[] | null;
   logs?: Record<string, string>[] | null;
-  assistant_language?: string | null;
   final_text?: string;
 }
 
@@ -210,5 +210,4 @@ export interface ChatToolEvent {
 export interface ChatLogEntry {
   level: string;
   msg: string;
-  assistant_language?: string;
 }

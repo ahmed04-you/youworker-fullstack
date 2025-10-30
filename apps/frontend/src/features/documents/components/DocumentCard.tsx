@@ -87,7 +87,7 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
 
   return (
     <div
-      className={`relative rounded-lg border p-4 space-y-3 cursor-pointer hover:shadow-md transition-shadow ${
+      className={`relative rounded-lg border p-3 space-y-2 cursor-pointer hover:shadow-md transition-shadow ${
         isSelected ? 'ring-2 ring-primary ring-offset-2' : ''
       }`}
       onClick={onSelect ? () => onSelect(document) : undefined}
@@ -173,12 +173,12 @@ export const DocumentCard = React.memo(function DocumentCard({ document, onSelec
         {document.source !== 'upload' && (
           <Badge variant="outline" className="text-xs">{document.source}</Badge>
         )}
-        {document.tags.slice(0, 3).map((tag) => (
+        {Array.isArray(document.tags) && document.tags.slice(0, 3).map((tag) => (
           <Badge key={tag} variant="outline" className="text-xs">
             {tag}
           </Badge>
         ))}
-        {document.tags.length > 3 && (
+        {Array.isArray(document.tags) && document.tags.length > 3 && (
           <Badge variant="outline" className="text-xs">
             +{document.tags.length - 3} more
           </Badge>

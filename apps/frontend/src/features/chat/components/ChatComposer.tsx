@@ -32,8 +32,6 @@ interface ChatComposerProps {
   onStartRecording: () => void;
   onStopRecording: () => void;
   onStopStreaming: () => void;
-  assistantLanguage: string;
-  onAssistantLanguageChange: (value: string) => void;
   selectedModel: string;
   onSelectedModelChange: (value: string) => void;
   enableTools: boolean;
@@ -61,8 +59,6 @@ interface ChatComposerProps {
  * @param {function} props.onStartRecording - Handler to start voice recording
  * @param {function} props.onStopRecording - Handler to stop voice recording
  * @param {function} props.onStopStreaming - Handler to stop AI response streaming
- * @param {string} props.assistantLanguage - Selected assistant response language
- * @param {function} props.onAssistantLanguageChange - Handler for language selection
  * @param {string} props.selectedModel - Currently selected AI model
  * @param {function} props.onSelectedModelChange - Handler for model selection
  * @param {boolean} props.enableTools - Whether tools are enabled
@@ -82,8 +78,6 @@ interface ChatComposerProps {
  *   onStartRecording={startRecording}
  *   onStopRecording={stopRecording}
  *   onStopStreaming={stopStreaming}
- *   assistantLanguage="en"
- *   onAssistantLanguageChange={setLanguage}
  *   selectedModel="gpt-oss:20b"
  *   onSelectedModelChange={setModel}
  *   enableTools={true}
@@ -119,8 +113,6 @@ export const ChatComposer = memo(function ChatComposer({
   onStartRecording,
   onStopRecording,
   onStopStreaming,
-  assistantLanguage,
-  onAssistantLanguageChange,
   selectedModel,
   onSelectedModelChange,
   enableTools,
@@ -151,13 +143,9 @@ export const ChatComposer = memo(function ChatComposer({
     onSendText();
   };
 
-  const handleMicPress = () => {
+  const handleStartRecording = () => {
     triggerHaptic(12);
-    if (isRecording) {
-      onStopRecording();
-    } else {
-      onStartRecording();
-    }
+    onStartRecording();
   };
 
   const handleStopStreaming = () => {
@@ -166,8 +154,8 @@ export const ChatComposer = memo(function ChatComposer({
   };
 
   return (
-    <div className="mt-6 rounded-3xl border border-border bg-card/80 p-5 shadow-xl" data-testid="chat-composer">
-      <div className="flex flex-col gap-3">
+    <div className="mt-4 rounded-lg border border-border bg-card/80 p-3 shadow-xl" data-testid="chat-composer">
+      <div className="flex flex-col gap-2">
         <textarea
           value={input}
           onChange={(event) => onInputChange(event.target.value)}
@@ -185,7 +173,7 @@ export const ChatComposer = memo(function ChatComposer({
             }
           }}
           placeholder="Ask anything… Request a plan, run a tool, or brainstorm in crimson style."
-          className="min-h-[80px] md:min-h-[110px] w-full resize-none rounded-2xl border border-border/70 bg-background/70 p-3 md:p-4 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
+          className="min-h-[80px] md:min-h-[110px] w-full resize-none rounded-lg border border-border/70 bg-background/70 p-2 md:p-3 text-sm leading-relaxed shadow-inner focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/30"
           rows={3}
           aria-label="Message input"
           data-testid="input"
@@ -228,7 +216,9 @@ export const ChatComposer = memo(function ChatComposer({
                     variant="outline"
                     size="icon"
                     className={`rounded-full ${isRecording ? "border-destructive text-destructive" : ""}`}
-                    onClick={handleMicPress}
+                    onPointerDown={handleStartRecording}
+                    onPointerUp={onStopRecording}
+                    onPointerLeave={isRecording ? onStopRecording : undefined}
                     disabled={isStreaming}
                     data-testid="mic-button"
                   >
@@ -236,7 +226,7 @@ export const ChatComposer = memo(function ChatComposer({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isRecording ? "Stop recording" : "Start voice recording"}</p>
+                  <p>{isRecording ? "Release to send" : "Hold to record"}</p>
                 </TooltipContent>
               </Tooltip>
             )}

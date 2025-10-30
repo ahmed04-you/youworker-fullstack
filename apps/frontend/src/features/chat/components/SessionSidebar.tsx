@@ -130,7 +130,7 @@ export const SessionSidebar = memo(function SessionSidebar({
     <aside className="hidden w-[280px] flex-col border-r border-border/60 bg-card/70 p-4 lg:flex">
       <Button
         variant="secondary"
-        className="mb-4 w-full gap-2 rounded-2xl bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
+        className="mb-3 w-full gap-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground"
         onClick={onNewSession}
         data-testid="new-session"
       >
@@ -138,11 +138,11 @@ export const SessionSidebar = memo(function SessionSidebar({
         New Conversation
       </Button>
 
-      <div className="flex-1 space-y-3 overflow-auto pr-2">
+      <div className="flex-1 space-y-2 overflow-auto pr-2">
         {sessionsLoading ? (
           <>
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="rounded-2xl border border-border/60 bg-background/60 p-3">
+              <div key={i} className="rounded-lg border border-border/60 bg-background/60 p-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1">
                     <Skeleton className="h-4 w-3/4 mb-2" />
@@ -154,7 +154,7 @@ export const SessionSidebar = memo(function SessionSidebar({
             ))}
           </>
         ) : sessions.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-border/60 bg-background/40 p-6 text-center text-sm text-muted-foreground">
+          <div className="rounded-lg border border-dashed border-border/60 bg-background/40 p-4 text-center text-sm text-muted-foreground">
             No sessions yet. Start chatting to create your first conversation.
           </div>
         ) : (
@@ -163,7 +163,7 @@ export const SessionSidebar = memo(function SessionSidebar({
             return (
               <div
                 key={session.id}
-                className={`w-full rounded-2xl border px-3 py-2 text-left transition group ${
+                className={`w-full rounded-lg border px-2 py-1.5 text-left transition group ${
                   isActive
                     ? "border-primary/60 bg-primary/10 shadow-sm"
                     : "border-transparent bg-background/60 hover:border-border/80 hover:bg-background"

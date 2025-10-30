@@ -12,7 +12,6 @@ import type {
 } from "../types";
 
 const DEFAULT_MODEL = "gpt-oss:20b";
-const DEFAULT_LANGUAGE = "auto";
 const MAX_HISTORY = 6_000;
 
 type MessageUpdater =
@@ -49,7 +48,6 @@ export interface ChatStoreState {
 
   enableTools: boolean;
   expectAudio: boolean;
-  assistantLanguage: string;
   selectedModel: string;
 
   health: HealthStatus | null;
@@ -99,7 +97,6 @@ export interface ChatStoreActions {
   toggleEnableTools: () => void;
   setExpectAudio: (expect: boolean) => void;
   toggleExpectAudio: () => void;
-  setAssistantLanguage: (language: string) => void;
   setSelectedModel: (model: string) => void;
 
   setHealth: (health: HealthStatus | null) => void;
@@ -138,7 +135,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   enableTools: true,
   expectAudio: false,
-  assistantLanguage: DEFAULT_LANGUAGE,
   selectedModel: DEFAULT_MODEL,
 
   health: null,
@@ -223,7 +219,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setExpectAudio: (expectAudio) => set({ expectAudio }),
   toggleExpectAudio: () =>
     set((state) => ({ expectAudio: !state.expectAudio })),
-  setAssistantLanguage: (assistantLanguage) => set({ assistantLanguage }),
   setSelectedModel: (selectedModel) => set({ selectedModel }),
 
   setHealth: (health) => set({ health }),

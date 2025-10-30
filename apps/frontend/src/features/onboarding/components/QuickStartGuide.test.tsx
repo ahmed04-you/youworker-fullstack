@@ -18,14 +18,13 @@ describe('QuickStartGuide', () => {
     expect(screen.getByText(/Get started with YouWorker.AI/i)).toBeInTheDocument();
   });
 
-  it('renders all 8 quick start items', () => {
+  it('renders all 7 quick start items', () => {
     render(<QuickStartGuide />);
 
     // Check that all items are rendered
     expect(screen.getByText('Start a Conversation')).toBeInTheDocument();
     expect(screen.getByText('Upload Documents')).toBeInTheDocument();
     expect(screen.getByText('Enable Tools')).toBeInTheDocument();
-    expect(screen.getByText('Track Your Usage')).toBeInTheDocument();
     expect(screen.getByText('Learn Keyboard Shortcuts')).toBeInTheDocument();
     expect(screen.getByText('Command Palette')).toBeInTheDocument();
     expect(screen.getByText('Manage Documents')).toBeInTheDocument();
@@ -38,7 +37,6 @@ describe('QuickStartGuide', () => {
     expect(screen.getByText(/Begin chatting with the AI assistant/i)).toBeInTheDocument();
     expect(screen.getByText(/Upload PDFs, text files, images, and audio/i)).toBeInTheDocument();
     expect(screen.getByText(/Activate tools like web search/i)).toBeInTheDocument();
-    expect(screen.getByText(/Monitor your conversation history/i)).toBeInTheDocument();
   });
 
   it('renders action buttons with correct links', () => {
@@ -51,9 +49,6 @@ describe('QuickStartGuide', () => {
     const uploadFiles = screen.getByRole('link', { name: /Upload Files/i });
     expect(uploadFiles).toHaveAttribute('href', '/documents');
 
-    const viewAnalytics = screen.getByRole('link', { name: /View Analytics/i });
-    expect(viewAnalytics).toHaveAttribute('href', '/analytics');
-
     const viewDocuments = screen.getByRole('link', { name: /View Documents/i });
     expect(viewDocuments).toHaveAttribute('href', '/documents');
 
@@ -65,9 +60,9 @@ describe('QuickStartGuide', () => {
     render(<QuickStartGuide />);
 
     // Enable Tools and Learn Keyboard Shortcuts don't have action buttons
-    // We should only have 5 action buttons total
+    // We should only have 4 action buttons total
     const actionButtons = screen.getAllByRole('link');
-    expect(actionButtons).toHaveLength(5);
+    expect(actionButtons).toHaveLength(4);
   });
 
   it('renders the Pro Tip card', () => {
@@ -80,9 +75,9 @@ describe('QuickStartGuide', () => {
   it('renders cards with proper structure', () => {
     const { container } = render(<QuickStartGuide />);
 
-    // Check that cards are rendered (should be 8 quick start items + 1 pro tip = 9 cards total)
+    // Check that cards are rendered (should be 7 quick start items + 1 pro tip = 8 cards total)
     const cards = container.querySelectorAll('[class*="Card"]');
-    expect(cards.length).toBeGreaterThanOrEqual(8);
+    expect(cards.length).toBeGreaterThanOrEqual(7);
   });
 
   it('renders icons for all items', () => {
@@ -90,8 +85,8 @@ describe('QuickStartGuide', () => {
 
     // Check that SVG icons are rendered
     const icons = container.querySelectorAll('svg');
-    // Should have at least 8 icons for the items + 1 for pro tip
-    expect(icons.length).toBeGreaterThanOrEqual(9);
+    // Should have at least 7 icons for the items + 1 for pro tip
+    expect(icons.length).toBeGreaterThanOrEqual(8);
   });
 
   it('uses grid layout for responsive design', () => {
@@ -125,7 +120,6 @@ describe('QuickStartGuide', () => {
       'Start a Conversation',
       'Upload Documents',
       'Enable Tools',
-      'Track Your Usage',
       'Learn Keyboard Shortcuts',
       'Command Palette',
       'Manage Documents',

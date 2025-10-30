@@ -1,9 +1,8 @@
 "use client";
 
-import { forwardRef, memo } from "react";
-import { BrainCircuit, Sparkles, Plus, Loader2 } from "lucide-react";
+import { forwardRef, memo, useEffect, useState } from "react";
+import { BrainCircuit, Loader2, User, Bot } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
@@ -16,103 +15,156 @@ interface MessageListProps {
   onSamplePromptClick?: (prompt: string) => void;
 }
 
-const MessageBubble = memo(({ message }: { message: ChatMessageView }) => {
-  const isUser = message.role === "user";
-  const isAssistant = message.role === "assistant";
+const StreamingCursor = memo(() => (
+  <span className="inline-block w-0.5 h-4 ml-0.5 bg-primary animate-pulse" aria-hidden="true" />
+));
+StreamingCursor.displayName = "StreamingCursor";
 
-  const bubbleStyles = isUser
-    ? "ml-auto bg-primary text-primary-foreground shadow-lg"
-    : isAssistant
-      ? "mr-auto border border-border/70 bg-card/80 text-card-foreground shadow-sm"
-      : "mx-auto bg-secondary text-secondary-foreground";
+const MessageBubble = memo(
+  ({ message }: { message: ChatMessageView }) => {
+    const isUser = message.role === "user";
+    const isAssistant = message.role === "assistant";
+    const [isVisible, setIsVisible] = useState(false);
 
-  return (
-    <div
-      className={`flex max-w-3xl flex-col gap-2 rounded-3xl px-5 py-4 ${bubbleStyles}`}
-      data-testid="messages"
-      role="article"
-      aria-label={`Message from ${isUser ? "you" : isAssistant ? "assistant" : "system"}`}
-    >
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide">
-        <span className="font-medium">
-          {isUser ? "You" : isAssistant ? "assistant" : "System"}
-        </span>
-        <time dateTime={message.createdAt}>{message.createdAt}</time>
-      </div>
-      <div className="text-sm leading-relaxed">
-        {isAssistant ? (
-          <MarkdownRenderer content={message.content} />
-        ) : (
+    useEffect(() => {
+      // Trigger fade-in animation
+      const timer = setTimeout(() => setIsVisible(true), 10);
+      return () => clearTimeout(timer);
+    }, []);
+
+    if (isUser) {
+      // User message: bubble with background, icon on top right
+      return (
+        <div
+          className={`flex items-start gap-2 justify-end transition-all duration-300 ease-out ${
+            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+          }`}
+          data-testid="messages"
+          role="article"
+          aria-label="Message from you"
+        >
+          <div className="flex flex-col items-end gap-0.5 max-w-4xl">
+            <div className="rounded-full bg-primary/10 p-1">
+              <User className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div className="rounded-2xl px-2.5 py-1.5 bg-primary text-primary-foreground shadow-lg">
+              <p className="text-sm leading-snug whitespace-pre-wrap">{message.content}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (isAssistant) {
+      // Assistant message: full width, transparent background, icon on top left
+      return (
+        <div
+          className={`flex items-start gap-2 transition-all duration-300 ease-out ${
+            isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+          }`}
+          data-testid="messages"
+          role="article"
+          aria-label="Message from assistant"
+        >
+          <div className="flex flex-col items-start gap-0.5 w-full">
+            <div className="rounded-full bg-primary/10 p-1">
+              <Bot className="h-3.5 w-3.5 text-primary" />
+            </div>
+            <div className="w-full">
+              <div className="text-sm leading-snug">
+                <div className="relative">
+                  <MarkdownRenderer content={message.content} />
+                  {message.streaming && message.content && <StreamingCursor />}
+                </div>
+              </div>
+              {message.toolCallName && (
+                <div className="flex items-center gap-1.5 text-xs mt-1">
+                  <Badge variant="secondary" className="rounded-full bg-background/40">
+                    Tool
+                  </Badge>
+                  <span>{message.toolCallName}</span>
+                </div>
+              )}
+              {message.streaming && (
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground animate-fade-in mt-1">
+                  <div className="relative flex items-center">
+                    <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
+                    <span className="absolute inset-0 h-3 w-3 rounded-full bg-primary/20 animate-ping" />
+                  </div>
+                  <span className="animate-pulse">Streaming insight…</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // System message (fallback)
+    return (
+      <div
+        className={`flex items-center justify-center transition-all duration-300 ease-out ${
+          isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
+        }`}
+        data-testid="messages"
+        role="article"
+        aria-label="System message"
+      >
+        <div className="rounded-lg px-2.5 py-1.5 bg-secondary text-secondary-foreground text-sm">
           <p className="whitespace-pre-wrap">{message.content}</p>
-        )}
+        </div>
       </div>
-      {message.toolCallName && (
-        <div className="flex items-center gap-2 text-xs">
-          <Badge variant="secondary" className="rounded-full bg-background/40">
-            Tool
-          </Badge>
-          <span>{message.toolCallName}</span>
-        </div>
-      )}
-      {message.streaming && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
-          Streaming insight…
-        </div>
-      )}
-      {isAssistant && (
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground" data-testid="response">
-          assistant
-        </span>
-      )}
-    </div>
-  );
-});
+    );
+  },
+  (prevProps, nextProps) => {
+    // Custom comparison: only re-render if message content, streaming status, or tool info changes
+    return (
+      prevProps.message.id === nextProps.message.id &&
+      prevProps.message.content === nextProps.message.content &&
+      prevProps.message.streaming === nextProps.message.streaming &&
+      prevProps.message.toolCallName === nextProps.message.toolCallName
+    );
+  }
+);
 MessageBubble.displayName = "MessageBubble";
 
 export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
   ({ messages, onStartNewSession, emptyActionLabel = "Start fresh", onSamplePromptClick }, ref) => {
     const samplePrompts = [
-      "Explain quantum computing in simple terms",
-      "Write a Python function to sort a list",
-      "What are the latest trends in AI?",
-      "Help me draft a professional email",
-      "Summarize the key points from my documents",
-      "Create a project timeline for a web app",
+      "Explain quantum computing",
+      "Write a Python sort function",
+      "Draft a professional email",
     ];
 
     if (messages.length === 0) {
       return (
         <div
           ref={ref}
-          className="flex flex-1 flex-col gap-6 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
+          className="flex h-full flex-col gap-3 overflow-y-auto rounded-lg bg-background/70 p-3 shadow-inner animate-fade-in"
           role="region"
           aria-label="Empty chat conversation"
         >
-          <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
-            <div className="rounded-full bg-primary/10 p-4 text-primary" aria-hidden="true">
-              <BrainCircuit className="h-6 w-6" />
+          <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+            <div className="rounded-full bg-primary/10 p-3 text-primary animate-slide-in-up" aria-hidden="true">
+              <BrainCircuit className="h-5 w-5" />
             </div>
-            <h2 className="text-xl font-semibold text-foreground">Welcome to YouWorker.AI</h2>
+            <h2 className="text-lg font-semibold text-foreground">YouWorker.AI</h2>
             <p className="max-w-md text-sm text-muted-foreground">
-              Start a conversation with crimson-fueled intelligence. Ask questions, request research, orchestrate tool workflows,
-              or ingest knowledge on the fly.
+              Ask questions, research, or run tools.
             </p>
 
             {onSamplePromptClick && (
-              <div className="w-full max-w-2xl">
-                <p className="mb-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Try these prompts
-                </p>
-                <div className="grid gap-2 sm:grid-cols-2">
+              <div className="w-full max-w-xl">
+                <div className="grid gap-1.5 grid-cols-3">
                   {samplePrompts.map((prompt, index) => (
                     <button
                       key={index}
                       onClick={() => onSamplePromptClick(prompt)}
-                      className="group rounded-xl border border-border/50 bg-card/50 p-3 text-left text-sm transition-all hover:border-primary/50 hover:bg-card hover:shadow-md"
+                      className="group rounded-lg border border-border/50 bg-card/50 p-1.5 text-center text-xs transition-all duration-200 hover:border-primary/50 hover:bg-card hover:shadow-md hover:-translate-y-0.5 active:translate-y-0"
                       aria-label={`Use sample prompt: ${prompt}`}
+                      style={{ animationDelay: `${index * 50}ms` }}
                     >
-                      <span className="text-foreground/80 group-hover:text-foreground">
+                      <span className="text-foreground/80 group-hover:text-foreground transition-colors">
                         {prompt}
                       </span>
                     </button>
@@ -120,21 +172,6 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
                 </div>
               </div>
             )}
-
-            <div className="flex gap-2 text-sm">
-              <Button variant="secondary" className="rounded-full" aria-label="Explore analytics page">
-                <Sparkles className="mr-2 h-4 w-4" aria-hidden="true" /> Explore analytics
-              </Button>
-              <Button
-                variant="ghost"
-                className="rounded-full"
-                onClick={onStartNewSession}
-                aria-label="Start a new chat session"
-              >
-                <Plus className="mr-2 h-4 w-4" aria-hidden="true" />
-                {emptyActionLabel}
-              </Button>
-            </div>
           </div>
         </div>
       );
@@ -143,13 +180,13 @@ export const MessageList = forwardRef<HTMLDivElement, MessageListProps>(
     return (
       <div
         ref={ref}
-        className="flex flex-1 flex-col gap-4 overflow-y-auto rounded-3xl border border-border/70 bg-background/70 p-6 shadow-inner"
+        className="flex h-full flex-col gap-2 overflow-y-auto rounded-lg bg-background/70 p-2 shadow-inner scroll-smooth"
         role="log"
         aria-label="Chat messages"
         aria-live="polite"
         aria-atomic="false"
       >
-        {messages.map((message) => (
+        {messages.map((message, index) => (
           <MessageBubble key={message.id} message={message} />
         ))}
       </div>

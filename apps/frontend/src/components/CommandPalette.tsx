@@ -13,7 +13,6 @@ import {
 import {
   Home,
   FileText,
-  BarChart3,
   Settings,
   MessageSquare,
   Search,
@@ -114,13 +113,6 @@ function CommandPaletteComponent({ open, onOpenChange }: CommandPaletteProps) {
               >
                 <FileText className="h-4 w-4" />
                 <span>Documents</span>
-              </Command.Item>
-              <Command.Item
-                onSelect={() => runCommand(() => router.push('/analytics'))}
-                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-              >
-                <BarChart3 className="h-4 w-4" />
-                <span>Analytics</span>
               </Command.Item>
               <Command.Item
                 onSelect={() => runCommand(() => router.push('/settings'))}

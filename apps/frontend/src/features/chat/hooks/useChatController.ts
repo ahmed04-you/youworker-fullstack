@@ -194,7 +194,6 @@ export function createStreamFailureHandler(
  *  - isRecording: Whether voice recording is active
  *  - enableTools: Whether tools/MCP is enabled
  *  - expectAudio: Whether to expect audio response
- *  - assistantLanguage: Language for assistant responses
  *  - selectedModel: Currently selected AI model
  *  - health: Health status of backend services
  *  - healthLoading: Whether health check is loading
@@ -203,7 +202,6 @@ export function createStreamFailureHandler(
  *  - setInput: Update text input value
  *  - setEnableTools: Toggle tools/MCP
  *  - setExpectAudio: Toggle audio responses
- *  - setAssistantLanguage: Set response language
  *  - setSelectedModel: Select AI model
  *  - refreshSessions: Refetch sessions list
  *  - fetchHealth: Refetch health status
@@ -246,6 +244,10 @@ export function useChatController() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const recordingStopResolverRef = useRef<(() => void) | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  // Token batching refs for performance optimization
+  const tokenBatchRef = useRef<{ messageId: string; tokens: string[] } | null>(null);
+  const tokenFlushTimerRef = useRef<number | null>(null);
 
   // Memoize selector to prevent infinite loops in useSyncExternalStore
   const selector = useCallback((state: ChatStore): ChatControllerSlice => ({
@@ -311,7 +313,6 @@ export function useChatController() {
     isRecording,
     enableTools,
     expectAudio,
-    assistantLanguage,
     selectedModel,
     health,
     healthLoading,
@@ -403,7 +404,14 @@ export function useChatController() {
             toolCallName: message.tool_call_name,
           }))
         );
-        setToolTimeline([]);
+
+        // Load persisted tool events from the session
+        if (detail.session.tool_events) {
+          setToolTimeline(detail.session.tool_events);
+        } else {
+          setToolTimeline([]);
+        }
+
         setLogEntries([]);
         setTranscript(null);
       } catch (error) {
@@ -509,7 +517,48 @@ export function useChatController() {
     [renameSessionMutation]
   );
 
+  const flushTokenBatch = useCallback(() => {
+    if (tokenBatchRef.current) {
+      const { messageId, tokens } = tokenBatchRef.current;
+      const store = useChatStore.getState();
+      const currentMsg = store.messages.find((msg) => msg.id === messageId);
+      if (currentMsg && tokens.length > 0) {
+        store.updateMessage(messageId, {
+          content: currentMsg.content + tokens.join(""),
+          streaming: true,
+        });
+      }
+      tokenBatchRef.current = null;
+    }
+    tokenFlushTimerRef.current = null;
+  }, []);
+
+  const batchToken = useCallback((messageId: string, tokenText: string) => {
+    if (!tokenBatchRef.current || tokenBatchRef.current.messageId !== messageId) {
+      // Flush previous batch if it's for a different message
+      if (tokenBatchRef.current) {
+        flushTokenBatch();
+      }
+      tokenBatchRef.current = { messageId, tokens: [tokenText] };
+    } else {
+      tokenBatchRef.current.tokens.push(tokenText);
+    }
+
+    // Schedule flush on next animation frame
+    if (tokenFlushTimerRef.current === null) {
+      tokenFlushTimerRef.current = requestAnimationFrame(() => {
+        flushTokenBatch();
+      });
+    }
+  }, [flushTokenBatch]);
+
   const stopStreaming = useCallback(() => {
+    // Flush any pending tokens before stopping
+    if (tokenFlushTimerRef.current !== null) {
+      cancelAnimationFrame(tokenFlushTimerRef.current);
+      flushTokenBatch();
+    }
+
     const { streamController: controller, messages: currentMessages } =
       useChatStore.getState();
     controller?.cancel();
@@ -519,7 +568,7 @@ export function useChatController() {
     if (streamingMsg) {
       updateMessage(streamingMsg.id, { streaming: false });
     }
-  }, [setStreamController, setIsStreaming, updateMessage]);
+  }, [setStreamController, setIsStreaming, updateMessage, flushTokenBatch]);
 
   const finishStreaming = useCallback(async () => {
     setIsStreaming(false);
@@ -601,20 +650,12 @@ export function useChatController() {
       "/v1/unified-chat",
       payload,
       {
-        onEvent: async (event) => {
+        onEvent: (event) => {
           const store = useChatStore.getState();
           if (event.event === "token") {
             const tokenText = getTokenText(event.data);
             if (tokenText) {
-              const currentMsg = store.messages.find(
-                (message) => message.id === assistantMessage.id
-              );
-              if (currentMsg) {
-                store.updateMessage(assistantMessage.id, {
-                  content: currentMsg.content + String(tokenText),
-                  streaming: true,
-                });
-              }
+              batchToken(assistantMessage.id, String(tokenText));
             }
           } else if (event.event === "tool") {
             const [eventData] = normalizeToolEvents([
@@ -629,6 +670,12 @@ export function useChatController() {
               store.addLogEntry(logEntry);
             }
           } else if (event.event === "done") {
+            // Flush any pending tokens first
+            if (tokenFlushTimerRef.current !== null) {
+              cancelAnimationFrame(tokenFlushTimerRef.current);
+              flushTokenBatch();
+            }
+
             const data = event.data as UnifiedChatStreamPayload;
             const currentMsg = store.messages.find(
               (message) => message.id === assistantMessage.id
@@ -651,8 +698,14 @@ export function useChatController() {
               confidence: data.stt_confidence || undefined,
               language: data.stt_language || undefined,
             });
-            playAudio(data.audio_b64);
-            await finishStreaming();
+
+            // Only play audio if expectAudio is enabled and audio is available
+            const currentSnapshot = useChatStore.getState();
+            if (currentSnapshot.expectAudio && data.audio_b64) {
+              playAudio(data.audio_b64);
+            }
+
+            finishStreaming();
           } else if (event.event === "error") {
             const eventMessage =
               typeof event.data === "string" && event.data
@@ -680,6 +733,8 @@ export function useChatController() {
     setStreamController,
     finishStreaming,
     stopStreaming,
+    batchToken,
+    flushTokenBatch,
   ]);
 
   const stopRecording = useCallback(() => {
@@ -801,7 +856,7 @@ export function useChatController() {
         session_id: snapshot.sessionIdentifier,
         enable_tools: snapshot.enableTools,
         model: snapshot.selectedModel,
-        expect_audio: true,
+        expect_audio: snapshot.expectAudio,
         stream: true,
       };
 
@@ -809,20 +864,12 @@ export function useChatController() {
         "/v1/unified-chat",
         payload,
         {
-          onEvent: async (event) => {
+          onEvent: (event) => {
             const store = useChatStore.getState();
             if (event.event === "token") {
               const tokenText = getTokenText(event.data);
               if (tokenText) {
-                const currentMsg = store.messages.find(
-                  (message) => message.id === assistantMessage.id
-                );
-                if (currentMsg) {
-                  store.updateMessage(assistantMessage.id, {
-                    content: currentMsg.content + String(tokenText),
-                    streaming: true,
-                  });
-                }
+                batchToken(assistantMessage.id, String(tokenText));
               }
             } else if (event.event === "tool") {
               const [eventData] = normalizeToolEvents([
@@ -837,6 +884,12 @@ export function useChatController() {
                 store.addLogEntry(logEntry);
               }
             } else if (event.event === "done") {
+              // Flush any pending tokens first
+              if (tokenFlushTimerRef.current !== null) {
+                cancelAnimationFrame(tokenFlushTimerRef.current);
+                flushTokenBatch();
+              }
+
               const data = event.data as UnifiedChatStreamPayload;
               const currentMsg = store.messages.find(
                 (message) => message.id === assistantMessage.id
@@ -855,12 +908,27 @@ export function useChatController() {
               }
               const normalizedLogs = normalizeLogEntries(data.logs);
               normalizedLogs.forEach(store.addLogEntry);
-              store.setTranscript(data.transcript || null, {
+
+              // Update transcript
+              const transcript = data.transcript || null;
+              store.setTranscript(transcript, {
                 confidence: data.stt_confidence || undefined,
                 language: data.stt_language || undefined,
               });
-              playAudio(data.audio_b64);
-              await finishStreaming();
+
+              // Update user message with actual transcript
+              if (transcript) {
+                store.updateMessage(userMessage.id, {
+                  content: transcript,
+                });
+              }
+
+              // Only play audio if expectAudio is enabled and audio is available
+              if (snapshot.expectAudio && data.audio_b64) {
+                playAudio(data.audio_b64);
+              }
+
+              finishStreaming();
             } else if (event.event === "error") {
               const eventMessage =
                 typeof event.data === "string" && event.data
@@ -895,6 +963,8 @@ export function useChatController() {
     setStreamController,
     stopRecording,
     stopStreaming,
+    batchToken,
+    flushTokenBatch,
   ]);
 
   useEffect(() => {
@@ -902,6 +972,15 @@ export function useChatController() {
       router.push("/settings");
     }
   }, [isAuthenticated, authLoading, router]);
+
+  // Cleanup token batch on unmount
+  useEffect(() => {
+    return () => {
+      if (tokenFlushTimerRef.current !== null) {
+        cancelAnimationFrame(tokenFlushTimerRef.current);
+      }
+    };
+  }, []);
 
   return {
     sessions,

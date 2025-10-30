@@ -9,6 +9,7 @@ import { UploadDialog } from './UploadDialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Upload, Trash2, FileText } from 'lucide-react';
 import { useDocumentStore } from '../store/document-store';
 import { toastSuccess } from '@/lib/toast-helpers';
@@ -113,9 +114,16 @@ function DocumentListComponent({ onDocumentSelect }: DocumentListProps) {
             </Button>
           )}
         </div>
-        <Button onClick={() => setUploadOpen(true)}>
-          <Upload className="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={() => setUploadOpen(true)}>
+              <Upload className="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Upload documents</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {isLoading ? (

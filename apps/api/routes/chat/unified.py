@@ -27,7 +27,6 @@ from packages.llm import ChatMessage
 from .helpers import (
     ToolEventRecorder,
     prepare_chat_messages,
-    resolve_assistant_language,
     get_user_id,
 )
 
@@ -119,7 +118,6 @@ async def unified_chat_endpoint(
     conversation: list[ChatMessage] = await prepare_chat_messages(unified_request.messages or [])
     conversation.append(ChatMessage(role="user", content=text_content))
 
-    assistant_language = resolve_assistant_language(unified_request.assistant_language)
     request_model = unified_request.model or settings.chat_model
     user_id = get_user_id(current_user)
 
@@ -146,14 +144,13 @@ async def unified_chat_endpoint(
             pad_pending = True
             collected_chunks: list[str] = []
             local_final_text = ""
-            local_metadata: dict[str, Any] = {"assistant_language": assistant_language}
+            local_metadata: dict[str, Any] = {}
 
             try:
                 async for event in agent_loop.run_until_completion(
                     messages=conversation,
                     enable_tools=unified_request.enable_tools,
                     max_iterations=settings.max_agent_iterations,
-                    language=assistant_language,
                     model=request_model,
                 ):
                     event_type = event.get("event")
@@ -170,7 +167,6 @@ async def unified_chat_endpoint(
 
                     elif event_type == "token":
                         if isinstance(data, dict):
-                            data.setdefault("assistant_language", assistant_language)
                             text = data.get("text", "")
                         else:
                             text = ""
@@ -183,7 +179,6 @@ async def unified_chat_endpoint(
 
                     elif event_type == "log":
                         if isinstance(data, dict):
-                            data.setdefault("assistant_language", assistant_language)
                             logs.append(data.copy())
                         pad = pad_pending
                         pad_pending = False
@@ -199,7 +194,6 @@ async def unified_chat_endpoint(
                         meta = data.get("metadata") or {}
                         if not isinstance(meta, dict):
                             meta = {}
-                        meta["assistant_language"] = assistant_language
                         local_metadata = meta
                         data["metadata"] = meta
 
@@ -241,7 +235,6 @@ async def unified_chat_endpoint(
                             stt_language=stt_language,
                             tool_events=tool_events,
                             logs=logs,
-                            assistant_language=assistant_language,
                         )
                         event["data"] = response.model_dump()
                         pad = pad_pending
@@ -273,7 +266,6 @@ async def unified_chat_endpoint(
                         "data": {
                             "level": "error",
                             "msg": error_msg,
-                            "assistant_language": assistant_language,
                         },
                     },
                     pad=pad_pending,
@@ -285,13 +277,11 @@ async def unified_chat_endpoint(
                     metadata={
                         "status": "error",
                         "error": error_msg,
-                        "assistant_language": assistant_language,
                     },
                     stt_confidence=stt_confidence,
                     stt_language=stt_language,
                     tool_events=tool_events,
                     logs=logs,
-                    assistant_language=assistant_language,
                 )
                 yield sse_format({"event": "done", "data": error_response.model_dump()})
 
@@ -307,14 +297,13 @@ async def unified_chat_endpoint(
 
     # Non-streaming response
     final_text = ""
-    metadata: dict[str, Any] = {"assistant_language": assistant_language}
+    metadata: dict[str, Any] = {}
     non_stream_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
         enable_tools=unified_request.enable_tools,
         max_iterations=settings.max_agent_iterations,
-        language=assistant_language,
         model=request_model,
     ):
         etype = event.get("event")
@@ -330,14 +319,12 @@ async def unified_chat_endpoint(
                 {
                     "level": data.get("level", "info"),
                     "msg": data.get("msg", ""),
-                    "assistant_language": assistant_language,
                 }
             )
         elif etype == "done":
             meta = data.get("metadata", {}) or {}
             if isinstance(meta, dict):
                 metadata.update(meta)
-            metadata["assistant_language"] = assistant_language
             if not final_text:
                 final_text = data.get("final_text", "") or ""
 
@@ -371,5 +358,4 @@ async def unified_chat_endpoint(
         stt_language=stt_language,
         tool_events=tool_events,
         logs=logs,
-        assistant_language=assistant_language,
     )

@@ -36,12 +36,37 @@ export const ingestionKeys = {
   list: (limit = 50) => [...ingestionKeys.lists(), { limit }] as const,
 } as const;
 
+function normalizeDocument(doc: any): Document {
+  return {
+    ...doc,
+    tags: Array.isArray(doc.tags) ? doc.tags : [],
+    createdAt: new Date(doc.createdAt),
+    updatedAt: new Date(doc.updatedAt),
+  };
+}
+
+function normalizeIngestionRun(run: any): IngestionRun {
+  return {
+    ...run,
+    errors: Array.isArray(run.errors) ? run.errors : [],
+    startedAt: new Date(run.startedAt),
+    completedAt: run.completedAt ? new Date(run.completedAt) : undefined,
+  };
+}
+
 export async function fetchDocuments(page = 1, limit = 20, filters?: Record<string, any>): Promise<{ documents: Document[]; total: number; page: number; limit: number }> {
   const params = { ...filters, page, limit };
-  const response = await apiGet<{ documents: Document[]; total: number; page: number; limit: number }>("/v1/documents", {
+  const response = await apiGet<{ documents: any[]; total: number; page: number; limit: number }>("/v1/documents", {
     query: params,
   });
-  return response;
+
+  // Normalize documents to ensure tags is always an array and dates are Date objects
+  const documents = response.documents.map(normalizeDocument);
+
+  return {
+    ...response,
+    documents,
+  };
 }
 
 export async function deleteDocument(documentId: string): Promise<void> {
@@ -55,20 +80,23 @@ export async function uploadDocuments(files: File[]): Promise<Document[]> {
   });
 
   // Use apiPostMultipart to handle CSRF token and credentials properly
-  const data = await apiPostMultipart<{ documents: Document[] }>("/v1/ingest/upload", formData);
-  return data.documents;
+  const data = await apiPostMultipart<{ documents: any[] }>("/v1/ingest/upload", formData);
+
+  // Normalize documents to ensure tags is always an array and dates are Date objects
+  return data.documents.map(normalizeDocument);
 }
 
 export async function ingestFromUrl(url: string, options?: Record<string, any>): Promise<Document> {
-  const response = await apiPost<{ document: Document }>("/v1/ingest", { url, ...options });
-  return response.document;
+  const response = await apiPost<{ document: any }>("/v1/ingest", { url, ...options });
+  return normalizeDocument(response.document);
 }
 
 export async function fetchIngestionRuns(limit = 50): Promise<IngestionRun[]> {
-  const response = await apiGet<{ runs: IngestionRun[] }>("/v1/ingestion-runs", {
+  const response = await apiGet<{ runs: any[] }>("/v1/ingestion-runs", {
     query: { limit },
   });
-  return response.runs;
+  // Normalize ingestion runs to ensure errors is always an array and dates are Date objects
+  return response.runs.map(normalizeIngestionRun);
 }
 
 export async function deleteIngestionRun(runId: string) {

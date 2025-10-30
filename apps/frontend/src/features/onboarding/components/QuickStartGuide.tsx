@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import {
   MessageSquare,
   FileText,
-  BarChart3,
   Settings,
   Sparkles,
   Upload,
@@ -48,15 +47,6 @@ const quickStartItems: QuickStartItem[] = [
     icon: <Sparkles className="h-6 w-6" />,
     title: "Enable Tools",
     description: "Activate tools like web search and code execution to enhance your conversations.",
-  },
-  {
-    icon: <BarChart3 className="h-6 w-6" />,
-    title: "Track Your Usage",
-    description: "Monitor your conversation history, token usage, and analytics over time.",
-    action: {
-      label: "View Analytics",
-      href: "/analytics",
-    },
   },
   {
     icon: <Keyboard className="h-6 w-6" />,

@@ -81,9 +81,6 @@ export function normalizeLogEntries(source: unknown): ChatLogEntry[] {
         return null;
       }
       const normalized: ChatLogEntry = { level, msg };
-      if (value.assistant_language && typeof value.assistant_language === "string") {
-        normalized.assistant_language = value.assistant_language;
-      }
       return normalized;
     })
     .filter((entry): entry is ChatLogEntry => entry !== null);

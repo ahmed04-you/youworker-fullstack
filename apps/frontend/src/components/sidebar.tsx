@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { Menu, FileText, BarChart3, Settings, User, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import { Menu, FileText, Settings, User, Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,7 @@ import { useTranslations } from "@/components/language-provider";
 import { useChatController } from "@/features/chat";
 
 export function Sidebar() {
+  const [mounted, setMounted] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<any>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -47,6 +48,10 @@ export function Sidebar() {
   const router = useRouter();
   const { username, isAuthenticated } = useAuth();
   const { t } = useTranslations("sidebar");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Get chat sessions and controller functions
   const {
@@ -93,12 +98,13 @@ export function Sidebar() {
   return (
     <>
       {/* Mobile trigger */}
-      <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="icon" className="md:hidden">
-            <Menu className="h-6 w-6" aria-label="Open navigation menu" />
-          </Button>
-        </SheetTrigger>
+      {mounted ? (
+        <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" className="md:hidden">
+              <Menu className="h-6 w-6" aria-label="Open navigation menu" />
+            </Button>
+          </SheetTrigger>
         <SheetContent side="left" className="w-72 p-0">
           <div className="flex flex-col h-full">
             <div className="p-4 border-b flex justify-center">
@@ -215,10 +221,6 @@ export function Sidebar() {
                 <FileText className="h-4 w-4" />
                 Documents
               </Link>
-              <Link href="/analytics" className={navLinkClass("/analytics")} aria-current={pathname === "/analytics" ? "page" : undefined}>
-                <BarChart3 className="h-4 w-4" />
-                Analytics
-              </Link>
               <Link href="/settings" className={navLinkClass("/settings")} aria-current={pathname === "/settings" ? "page" : undefined}>
                 <Settings className="h-4 w-4" />
                 Settings
@@ -243,7 +245,12 @@ export function Sidebar() {
             )}
           </div>
         </SheetContent>
-      </Sheet>
+        </Sheet>
+      ) : (
+        <Button variant="ghost" size="icon" className="md:hidden" disabled>
+          <Menu className="h-6 w-6" aria-label="Open navigation menu" />
+        </Button>
+      )}
 
       {/* Desktop sidebar */}
       <div className="hidden md:block w-72 border-r bg-background">
@@ -370,10 +377,6 @@ export function Sidebar() {
               <FileText className="h-4 w-4" />
               {t("links.documents")}
             </Link>
-            <Link href="/analytics" className={navLinkClass("/analytics")} aria-current={pathname === "/analytics" ? "page" : undefined}>
-              <BarChart3 className="h-4 w-4" />
-              {t("links.analytics")}
-            </Link>
             <Link href="/settings" className={navLinkClass("/settings")} aria-current={pathname === "/settings" ? "page" : undefined}>
               <Settings className="h-4 w-4" />
               {t("links.settings")}
@@ -400,64 +403,68 @@ export function Sidebar() {
       </div>
 
       {/* Rename Dialog */}
-      <Dialog open={Boolean(renameTarget)} onOpenChange={(open) => (!open ? closeRenameDialog() : undefined)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename conversation</DialogTitle>
-            <DialogDescription>
-              Choose a concise title so you can recognize this session later.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            value={renameValue}
-            onChange={(e) => setRenameValue(e.target.value)}
-            placeholder="Team sync notes"
-            autoFocus
-          />
-          <DialogFooter>
-            <Button variant="ghost" onClick={closeRenameDialog}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                if (!renameTarget) return;
-                const trimmed = renameValue.trim();
-                if (!trimmed) return;
-                renameSession(renameTarget, trimmed);
-                closeRenameDialog();
-              }}
-              disabled={!renameValue.trim()}
-            >
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {mounted && (
+        <Dialog open={Boolean(renameTarget)} onOpenChange={(open) => (!open ? closeRenameDialog() : undefined)}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Rename conversation</DialogTitle>
+              <DialogDescription>
+                Choose a concise title so you can recognize this session later.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              placeholder="Team sync notes"
+              autoFocus
+            />
+            <DialogFooter>
+              <Button variant="ghost" onClick={closeRenameDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!renameTarget) return;
+                  const trimmed = renameValue.trim();
+                  if (!trimmed) return;
+                  renameSession(renameTarget, trimmed);
+                  closeRenameDialog();
+                }}
+                disabled={!renameValue.trim()}
+              >
+                Save
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       {/* Delete Confirmation Dialog */}
-      <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => (!open ? setDeleteTarget(null) : undefined)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this session?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget ? deriveSessionName(deleteTarget) : ""} will be removed permanently. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (deleteTarget) {
-                  handleDeleteSession(deleteTarget);
-                }
-                setDeleteTarget(null);
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {mounted && (
+        <AlertDialog open={Boolean(deleteTarget)} onOpenChange={(open) => (!open ? setDeleteTarget(null) : undefined)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this session?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {deleteTarget ? deriveSessionName(deleteTarget) : ""} will be removed permanently. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteTarget) {
+                    handleDeleteSession(deleteTarget);
+                  }
+                  setDeleteTarget(null);
+                }}
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }

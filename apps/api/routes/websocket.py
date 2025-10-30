@@ -24,7 +24,7 @@ from packages.db.models import User
 from packages.llm import ChatMessage as LLMChatMessage
 
 from apps.api.routes.chat.models import UnifiedChatRequest, UnifiedChatResponse
-from apps.api.routes.chat.helpers import prepare_chat_messages, resolve_assistant_language
+from apps.api.routes.chat.helpers import prepare_chat_messages
 from apps.api.routes.chat.persistence import (
     persist_last_user_message,
     record_tool_start,
@@ -576,7 +576,6 @@ async def unified_chat_endpoint(
     conversation = await prepare_chat_messages(request.messages or [])
     conversation.append(LLMChatMessage(role="user", content=text_content))
 
-    assistant_language = resolve_assistant_language(request.assistant_language)
     request_model = request.model or "gpt-oss:20b"
 
     # Create/get session
@@ -593,14 +592,13 @@ async def unified_chat_endpoint(
 
     # Process with agent
     final_text = ""
-    metadata = {"assistant_language": assistant_language}
+    metadata = {}
     tool_events = []
 
     async for event in agent_loop.run_until_completion(
         messages=conversation,
         enable_tools=request.enable_tools,
         max_iterations=10,
-        language=assistant_language,
         model=request_model,
     ):
         event_type = event.get("event")
@@ -615,7 +613,6 @@ async def unified_chat_endpoint(
             meta = data.get("metadata", {})
             if isinstance(meta, dict):
                 metadata.update(meta)
-            metadata["assistant_language"] = assistant_language
 
     # Persist final message
     if final_text:
@@ -644,7 +641,6 @@ async def unified_chat_endpoint(
         stt_confidence=stt_confidence,
         stt_language=stt_language,
         tool_events=tool_events,
-        assistant_language=assistant_language,
     )
 
 

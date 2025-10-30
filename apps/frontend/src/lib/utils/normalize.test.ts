@@ -102,7 +102,7 @@ describe('normalizeLogEntries', () => {
   it('should normalize valid log entries', () => {
     const input = [
       { level: 'info', msg: 'Starting process' },
-      { level: 'error', msg: 'Failed to connect', assistant_language: 'en' },
+      { level: 'error', msg: 'Failed to connect' },
     ];
 
     const result = normalizeLogEntries(input);
@@ -115,7 +115,6 @@ describe('normalizeLogEntries', () => {
     expect(result[1]).toEqual({
       level: 'error',
       msg: 'Failed to connect',
-      assistant_language: 'en',
     });
   });
 

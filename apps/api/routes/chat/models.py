@@ -14,7 +14,6 @@ class UnifiedChatRequest(BaseModel):
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
     messages: Optional[list[Dict[str, Any]]] = None
     session_id: Optional[str] = None
-    assistant_language: Optional[str] = None
     enable_tools: bool = True
     model: Optional[str] = None
     expect_audio: bool = False
@@ -33,7 +32,6 @@ class UnifiedChatResponse(BaseModel):
     stt_language: Optional[str] = None
     tool_events: Optional[list[Dict[str, Any]]] = None
     logs: Optional[list[Dict[str, str]]] = None
-    assistant_language: Optional[str] = None
 
 
 class ChatRequest(BaseModel):
@@ -41,7 +39,6 @@ class ChatRequest(BaseModel):
 
     messages: list[Dict[str, Any]]
     session_id: Optional[str] = None
-    assistant_language: Optional[str] = None
     enable_tools: bool = True
     model: Optional[str] = None
     stream: bool = True
@@ -54,7 +51,6 @@ class VoiceTurnRequest(BaseModel):
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
     messages: Optional[list[Dict[str, Any]]] = None
     session_id: Optional[str] = None
-    assistant_language: Optional[str] = None
     enable_tools: bool = True
     model: Optional[str] = None
     expect_audio: bool = False
@@ -72,7 +68,6 @@ class VoiceTurnResponse(BaseModel):
     stt_language: Optional[str] = None
     tool_events: Optional[list[Dict[str, Any]]] = None
     logs: Optional[list[Dict[str, str]]] = None
-    assistant_language: Optional[str] = None
 
 
 class ChatMessage(BaseModel):

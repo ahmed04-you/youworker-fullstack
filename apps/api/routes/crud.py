@@ -60,14 +60,17 @@ async def list_sessions(
 async def get_session(
     session_id: int, current_user=Depends(get_current_user_with_collection_access)
 ):
-    """Get a specific chat session with all messages."""
+    """Get a specific chat session with all messages and tool runs."""
     user_id = _extract_user_id(current_user)
     async with get_async_session() as db:
-        from packages.db.crud import get_session_with_messages
+        from packages.db.crud import get_session_with_messages, get_session_tool_runs
 
         session = await get_session_with_messages(db, session_id=session_id, user_id=user_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+
+        # Get tool runs for this session
+        tool_runs = await get_session_tool_runs(db, session_id=session_id, user_id=user_id)
 
         return {
             "session": {
@@ -88,6 +91,15 @@ async def get_session(
                         "created_at": m.created_at.isoformat(),
                     }
                     for m in session.messages
+                ],
+                "tool_events": [
+                    {
+                        "tool": tr.tool_name,
+                        "status": tr.status,
+                        "ts": tr.start_ts.isoformat(),
+                        "latency_ms": tr.latency_ms,
+                    }
+                    for tr in tool_runs
                 ],
             }
         }
