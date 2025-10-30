@@ -209,7 +209,10 @@ async def ingest_url(
                         collection=collection,
                     )
         except Exception as e:
-            logger.error(f"failed to persist ingestion url run: {e}")
+            logger.error(
+                "Failed to persist ingestion URL run",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
         _history.append(rec)
         return rec
     except Exception as exc:
@@ -302,7 +305,10 @@ async def ingest_path(
                         collection=collection,
                     )
         except Exception as e:
-            logger.error(f"failed to persist ingestion path run: {e}")
+            logger.error(
+                "Failed to persist ingestion path run",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
         _history.append(rec)
         return rec
     except Exception as exc:

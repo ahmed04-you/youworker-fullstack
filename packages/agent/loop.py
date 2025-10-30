@@ -432,7 +432,10 @@ class AgentLoop:
 
             # Log thinking (but don't stream it)
             if turn_result and turn_result.thinking:
-                logger.debug(f"Thinking: {turn_result.thinking[:200]}...")
+                logger.debug(
+                    "Thinking output",
+                    extra={"thinking_preview": turn_result.thinking[:200]}
+                )
 
             # Check if tool call is required
             if turn_result and turn_result.requires_followup and turn_result.tool_calls:

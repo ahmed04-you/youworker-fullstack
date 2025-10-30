@@ -320,7 +320,7 @@ async def websocket_chat_endpoint(
                 raise ValueError("User not found for API key")
 
     except Exception as e:
-        logger.error(f"WebSocket auth error: {e}")
+        logger.error("WebSocket auth error", extra={"error": str(e), "error_type": type(e).__name__})
         auth_error = str(e)
 
     # Accept connection (we'll handle auth errors after accepting)
@@ -366,7 +366,7 @@ async def websocket_chat_endpoint(
                     await handle_audio_message(connection_id, message, user, session_id)
                 elif message.type == "stop":
                     # Handle stop streaming request
-                    logger.info(f"Stop request received for connection: {connection_id}")
+                    logger.info("Stop request received", extra={"connection_id": connection_id})
                     # Cancel any ongoing tasks for this connection
                     # In a production system, you would track and cancel the async task
                     await manager.send_message(
@@ -389,13 +389,13 @@ async def websocket_chat_endpoint(
                         },
                     )
                 else:
-                    logger.warning(f"Unknown message type: {message.type}")
+                    logger.warning("Unknown message type", extra={"message_type": message.type})
 
             except WebSocketDisconnect:
-                logger.info(f"WebSocket disconnected: {connection_id}")
+                logger.info("WebSocket disconnected", extra={"connection_id": connection_id})
                 break
             except Exception as e:
-                logger.error(f"Error processing message: {e}")
+                logger.error("Error processing message", extra={"error": str(e), "error_type": type(e).__name__})
                 await manager.send_message(
                     connection_id,
                     {
@@ -406,7 +406,7 @@ async def websocket_chat_endpoint(
                 )
 
     except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+        logger.error("WebSocket error", extra={"error": str(e), "error_type": type(e).__name__})
     finally:
         await manager.disconnect(connection_id)
 
@@ -533,7 +533,7 @@ async def handle_audio_message(
         await handle_text_message(connection_id, text_message, user, session_id)
 
     except Exception as e:
-        logger.error(f"Error processing audio: {e}")
+        logger.error("Error processing audio", extra={"error": str(e), "error_type": type(e).__name__})
         await manager.send_message(
             connection_id,
             {
@@ -681,7 +681,7 @@ async def stream_agent_response(
                 break
 
     except Exception as e:
-        logger.error(f"Error in agent response: {e}")
+        logger.error("Error in agent response", extra={"error": str(e), "error_type": type(e).__name__})
         await manager.send_message(
             connection_id,
             {
@@ -736,7 +736,7 @@ async def stream_audio_response(connection_id: str, text: str):
         )
 
     except Exception as e:
-        logger.error(f"Error generating audio: {e}")
+        logger.error("Error generating audio", extra={"error": str(e), "error_type": type(e).__name__})
         await manager.send_message(
             connection_id,
             {
@@ -842,7 +842,7 @@ async def unified_chat_endpoint(
                 audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
                 audio_sample_rate = sr
         except Exception as e:
-            logger.error(f"Voice synthesis failed: {e}")
+            logger.error("Voice synthesis failed", extra={"error": str(e), "error_type": type(e).__name__})
 
     return UnifiedChatResponse(
         content=final_text,

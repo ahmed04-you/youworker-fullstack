@@ -89,19 +89,37 @@ def retry_async(
 
                     # Check if we should retry this error
                     if not retry_checker(e):
-                        logger.warning(f"{func.__name__} failed with non-retryable error: {e}")
+                        logger.warning(
+                            "Function failed with non-retryable error",
+                            extra={"function": func.__name__, "error": str(e), "error_type": type(e).__name__}
+                        )
                         raise
 
                     # Don't sleep on the last attempt
                     if attempt < max_attempts - 1:
                         delay = exponential_backoff(attempt, base_delay, max_delay)
                         logger.warning(
-                            f"{func.__name__} failed (attempt {attempt + 1}/{max_attempts}), "
-                            f"retrying in {delay:.2f}s: {e}"
+                            "Function failed, retrying",
+                            extra={
+                                "function": func.__name__,
+                                "attempt": attempt + 1,
+                                "max_attempts": max_attempts,
+                                "retry_delay": delay,
+                                "error": str(e),
+                                "error_type": type(e).__name__
+                            }
                         )
                         await asyncio.sleep(delay)
                     else:
-                        logger.error(f"{func.__name__} failed after {max_attempts} attempts: {e}")
+                        logger.error(
+                            "Function failed after all retry attempts",
+                            extra={
+                                "function": func.__name__,
+                                "max_attempts": max_attempts,
+                                "error": str(e),
+                                "error_type": type(e).__name__
+                            }
+                        )
 
             # If we get here, all attempts failed
             if last_exception:

@@ -112,7 +112,10 @@ async def search_web(query: str, top_k: int = 5, site: str | None = None) -> dic
             headers={"Accept": "text/html"},
         )
     except Exception as exc:
-        logger.error(f"Search failed: {exc}")
+        logger.error(
+            "Search failed",
+            extra={"error": str(exc), "error_type": type(exc).__name__, "query": search_query}
+        )
         return {"error": f"Search request failed: {exc}"}
 
     content_type = resp.headers.get("content-type", "").lower()
@@ -135,7 +138,10 @@ async def search_web(query: str, top_k: int = 5, site: str | None = None) -> dic
         if title or url or snippet:
             results.append({"title": title, "url": url, "snippet": snippet})
 
-    logger.info(f"Search returned {len(results)} results")
+    logger.info(
+        "Search completed",
+        extra={"result_count": len(results), "query": query}
+    )
     return {"results": results, "query": query}
 
 
@@ -161,7 +167,10 @@ async def fetch_url(url: str, max_links: int = 10) -> dict[str, Any]:
             headers={"Accept": "text/html"},
         )
     except Exception as exc:
-        logger.error(f"Fetch failed for {url}: {exc}")
+        logger.error(
+            "Fetch failed",
+            extra={"error": str(exc), "error_type": type(exc).__name__, "url": url}
+        )
         return {"error": f"Fetch request failed: {exc}", "url": url}
 
     content_type = resp.headers.get("content-type", "").lower()
@@ -194,7 +203,10 @@ async def fetch_url(url: str, max_links: int = 10) -> dict[str, Any]:
         if len(links) >= max_links:
             break
 
-    logger.info(f"Fetched {url}: {len(text)} chars, {len(links)} links")
+    logger.info(
+        "URL fetched successfully",
+        extra={"url": url, "text_length": len(text), "link_count": len(links)}
+    )
     return {"title": title, "url": url, "text": text[:5000], "links": links}
 
 
@@ -230,7 +242,10 @@ async def head_url(url: str, follow_redirects: bool = False) -> dict[str, Any]:
             result["location"] = loc
         return result
     except Exception as exc:
-        logger.error(f"HEAD failed for {url}: {exc}")
+        logger.error(
+            "HEAD request failed",
+            extra={"error": str(exc), "error_type": type(exc).__name__, "url": url}
+        )
         return {"error": f"HEAD request failed: {exc}", "url": url}
 
 
@@ -256,7 +271,10 @@ async def extract_readable(
             headers={"Accept": "text/html"},
         )
     except Exception as exc:
-        logger.error(f"Readable fetch failed for {url}: {exc}")
+        logger.error(
+            "Readable fetch failed",
+            extra={"error": str(exc), "error_type": type(exc).__name__, "url": url}
+        )
         return {"error": f"Fetch failed: {exc}", "url": url}
 
     content_type = resp.headers.get("content-type", "").lower()

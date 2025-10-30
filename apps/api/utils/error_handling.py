@@ -48,7 +48,7 @@ def handle_exceptions(func: Callable) -> Callable:
         except APIError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail)
         except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
+            logger.error("Unexpected error", extra={"error": str(e), "error_type": type(e).__name__}, exc_info=True)
             raise HTTPException(status_code=500, detail="Internal server error")
 
     return wrapper

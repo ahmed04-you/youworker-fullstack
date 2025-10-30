@@ -59,7 +59,7 @@ def get_now(tz: str = "UTC") -> dict[str, Any]:
     if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
         return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
 
-    logger.info(f"get_now called with tz='{tz}'")
+    logger.info("get_now called", extra={"timezone": tz})
 
     try:
         timezone = pytz.timezone(tz)
@@ -70,12 +70,18 @@ def get_now(tz: str = "UTC") -> dict[str, Any]:
             "timezone": tz,
             "formatted": now.strftime("%Y-%m-%d %H:%M:%S %Z"),
         }
-        logger.info(f"get_now success for tz='{tz}': {result}")
+        logger.info(
+            "get_now success",
+            extra={"timezone": tz, "timestamp": result["timestamp"]}
+        )
         return result
 
     except Exception as e:
         error_msg = f"Invalid timezone: {tz}"
-        logger.error(f"get_now failed for tz='{tz}': {str(e)}")
+        logger.error(
+            "get_now failed",
+            extra={"timezone": tz, "error": str(e), "error_type": type(e).__name__}
+        )
         return {"error": error_msg}
 
 

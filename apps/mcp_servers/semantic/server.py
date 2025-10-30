@@ -48,10 +48,10 @@ async def startup():
     qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
     ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
 
-    logger.info(f"Connecting to Qdrant at {qdrant_url}")
+    logger.info("Connecting to Qdrant", extra={"qdrant_url": qdrant_url})
     vector_store = QdrantStore(url=qdrant_url)
 
-    logger.info(f"Connecting to Ollama at {ollama_url}")
+    logger.info("Connecting to Ollama", extra={"ollama_url": ollama_url})
     auto_pull = os.environ.get("OLLAMA_AUTO_PULL", "1").lower() not in {"0", "false", "no"}
     ollama_client = OllamaClient(base_url=ollama_url, auto_pull=auto_pull)
 
@@ -150,11 +150,17 @@ async def semantic_query(
                 }
             )
 
-        logger.info(f"Query returned {len(formatted_results)} results")
+        logger.info(
+            "Query completed",
+            extra={"result_count": len(formatted_results), "query": query}
+        )
         return {"results": formatted_results, "query": query}
 
     except Exception as e:
-        logger.error(f"Query failed: {e}")
+        logger.error(
+            "Query failed",
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
         return {"error": str(e)}
 
 
@@ -165,11 +171,17 @@ async def list_collections() -> dict[str, Any]:
 
     try:
         collections = await vector_store.list_collections()
-        logger.info(f"Found {len(collections)} collections")
+        logger.info(
+            "Collections listed",
+            extra={"collection_count": len(collections)}
+        )
         return {"collections": collections}
 
     except Exception as e:
-        logger.error(f"List collections failed: {e}")
+        logger.error(
+            "List collections failed",
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
         return {"error": str(e)}
 
 
@@ -284,7 +296,10 @@ async def similar_to_text(
         ]
         return {"results": formatted}
     except Exception as e:
-        logger.error(f"similar_to_text failed: {e}")
+        logger.error(
+            "similar_to_text failed",
+            extra={"error": str(e), "error_type": type(e).__name__}
+        )
         return {"error": str(e)}
 
 

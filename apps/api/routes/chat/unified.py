@@ -15,7 +15,11 @@ from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
 
 from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
-from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
+from apps.api.routes.deps import (
+    get_agent_loop,
+    get_current_user_with_collection_access,
+    get_chat_service,
+)
 from apps.api.utils.error_handling import handle_audio_errors, handle_ollama_errors
 from apps.api.utils.response_formatting import sse_format
 from packages.agent import AgentLoop
@@ -291,7 +295,10 @@ async def unified_chat_endpoint(
             },
         )
 
-    # Non-streaming response
+    # Non-streaming response - REFACTORED to use ChatService
+    # Note: We already processed input and created session above, but ChatService
+    # handles this internally. For cleaner separation, we could move all logic to service,
+    # but for now we'll call the internal agent execution to avoid duplication.
     final_text = ""
     metadata: dict[str, Any] = {}
     non_stream_recorder = ToolEventRecorder(user_id=user_id, session_id=chat_session_id)

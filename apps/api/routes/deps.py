@@ -81,3 +81,31 @@ async def get_current_user_with_collection_access(
         pass
 
     return current_user
+
+
+async def get_chat_service(
+    request: Request,
+    agent_loop: AgentLoop = Depends(get_agent_loop),
+):
+    """
+    Dependency injection for ChatService.
+
+    Creates a ChatService instance with all required dependencies.
+    Note: Database session is managed by the service internally using get_async_session().
+
+    Args:
+        request: FastAPI request (for accessing settings)
+        agent_loop: Agent execution engine
+
+    Returns:
+        ChatService instance
+    """
+    from packages.db import get_async_session
+    from apps.api.services import ChatService
+
+    # Get a database session
+    async with get_async_session() as db:
+        yield ChatService(
+            db_session=db,
+            agent_loop=agent_loop,
+        )
