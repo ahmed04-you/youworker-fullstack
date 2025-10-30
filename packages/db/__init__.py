@@ -14,6 +14,18 @@ from .models import (
     UserCollectionAccess,
     UserDocumentAccess,
 )
+
+# New repository pattern - recommended for new code
+from .repositories import (
+    BaseRepository,
+    UserRepository,
+    GroupRepository,
+    ChatRepository,
+    DocumentRepository,
+    ToolRepository,
+)
+
+# Backward compatibility - CRUD functions
 from .crud import (
     ensure_root_user,
     get_user_by_api_key,
@@ -39,6 +51,14 @@ __all__ = [
     "DocumentCollection",
     "UserCollectionAccess",
     "UserDocumentAccess",
+    # Repositories (NEW - use these for new code)
+    "BaseRepository",
+    "UserRepository",
+    "GroupRepository",
+    "ChatRepository",
+    "DocumentRepository",
+    "ToolRepository",
+    # CRUD functions (backward compatibility)
     "ensure_root_user",
     "get_user_by_api_key",
     "regenerate_user_api_key",

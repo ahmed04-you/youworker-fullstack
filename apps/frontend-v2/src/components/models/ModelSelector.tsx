@@ -21,6 +21,7 @@ export function ModelSelector({ value, onChange }: ModelSelectorProps) {
     if (savedModelId && getModelById(savedModelId)) {
       onChange(savedModelId)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSelectModel = (modelId: string) => {

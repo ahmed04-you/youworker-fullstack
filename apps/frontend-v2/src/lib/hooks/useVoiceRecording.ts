@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { errorTracker } from '@/src/lib/utils'
 
 export type RecordingState = 'idle' | 'recording' | 'processing' | 'error'
 
@@ -62,7 +63,10 @@ export function useVoiceRecording({
 
       checkLevel()
     } catch (error) {
-      console.error('Failed to setup audio visualization:', error)
+      errorTracker.captureError(error as Error, {
+        component: 'useVoiceRecording',
+        action: 'setupAudioVisualization'
+      })
     }
   }, [recordingState])
 

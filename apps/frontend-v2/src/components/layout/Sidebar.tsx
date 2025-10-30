@@ -27,7 +27,7 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
   ]
 
   const handleNewChat = async () => {
-    const session = await createSession()
+    await createSession()
     // Navigate to new session would be handled by the parent
   }
 

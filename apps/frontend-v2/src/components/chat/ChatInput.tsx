@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useRef, KeyboardEvent } from 'react'
+import { useState, useRef, KeyboardEvent, useCallback, memo, useEffect } from 'react'
 import { GlassCard } from '@/src/components/ui/glass/GlassCard'
 import { GlassButton } from '@/src/components/ui/glass/GlassButton'
 import { Send, Paperclip, Mic, MicOff, X } from 'lucide-react'
 import { cn } from '@/src/lib/utils'
 import { useVoiceRecording } from '@/src/lib/hooks/useVoiceRecording'
+import { validateMessage } from '@/src/lib/utils/validation'
+import { errorTracker } from '@/src/lib/utils/errorTracking'
 
 interface ChatInputProps {
   value: string
@@ -15,10 +17,17 @@ interface ChatInputProps {
   loading?: boolean
 }
 
-export function ChatInput({ value, onChange, onSubmit, disabled, loading }: ChatInputProps) {
+export const ChatInput = memo(function ChatInput({
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  loading
+}: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [isFocused, setIsFocused] = useState(false)
   const [showVoiceModal, setShowVoiceModal] = useState(false)
+  const [animationTime, setAnimationTime] = useState(0)
 
   const {
     recordingState,
@@ -29,68 +38,91 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
     cancelRecording,
     isRecording
   } = useVoiceRecording({
-    onRecordingComplete: (audioBlob) => {
+    onRecordingComplete: (_audioBlob) => {
       // In a real app, you would send this to a speech-to-text API
-      console.log('Recording complete:', audioBlob)
       setShowVoiceModal(false)
       // For now, just show a placeholder message
       onChange('[Voice message recorded - Speech-to-text API not connected]')
     },
     onError: (error) => {
-      console.error('Recording error:', error)
+      errorTracker.captureError(error, {
+        component: 'ChatInput',
+        action: 'voiceRecording'
+      })
       alert(error.message)
       setShowVoiceModal(false)
     },
     maxDuration: 120000 // 2 minutes
   })
 
-  const handleSubmit = () => {
-    if (value.trim() && !disabled && !loading) {
-      onSubmit(value)
-      onChange('')
+  // Update animation time for audio visualization
+  useEffect(() => {
+    if (!isRecording) return
 
-      // Reset textarea height
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto'
-      }
+    let frameId: number
+    const updateTime = () => {
+      setAnimationTime(Date.now())
+      frameId = requestAnimationFrame(updateTime)
     }
-  }
+    frameId = requestAnimationFrame(updateTime)
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    return () => cancelAnimationFrame(frameId)
+  }, [isRecording])
+
+  const handleSubmit = useCallback(() => {
+    if (!value.trim() || disabled || loading) return
+
+    // Validate message
+    const validation = validateMessage(value)
+    if (!validation.valid) {
+      alert(validation.error)
+      return
+    }
+
+    onSubmit(value)
+    onChange('')
+
+    // Reset textarea height
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+    }
+  }, [value, disabled, loading, onSubmit, onChange])
+
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSubmit()
     }
-  }
+  }, [handleSubmit])
 
-  const handleInput = () => {
+  const handleInput = useCallback(() => {
     // Auto-resize textarea
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto'
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
     }
-  }
+  }, [])
 
-  const handleVoiceClick = () => {
+  const handleVoiceClick = useCallback(() => {
     setShowVoiceModal(true)
     startRecording()
-  }
+  }, [startRecording])
 
-  const handleStopRecording = () => {
+  const handleStopRecording = useCallback(() => {
     stopRecording()
-  }
+  }, [stopRecording])
 
-  const handleCancelRecording = () => {
+  const handleCancelRecording = useCallback(() => {
     cancelRecording()
     setShowVoiceModal(false)
-  }
+  }, [cancelRecording])
 
-  const formatDuration = (ms: number) => {
+  const formatDuration = useCallback((ms: number): string => {
     const seconds = Math.floor(ms / 1000)
     const minutes = Math.floor(seconds / 60)
     const remainingSeconds = seconds % 60
     return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
+  }, [])
 
   return (
     <GlassCard
@@ -107,6 +139,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
           size="sm"
           className="shrink-0"
           disabled={disabled}
+          aria-label="Attach file"
         >
           <Paperclip className="w-5 h-5" />
         </GlassButton>
@@ -126,6 +159,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
             placeholder="Type a message..."
             disabled={disabled}
             rows={1}
+            aria-label="Message input"
             className={cn(
               'w-full bg-transparent text-white placeholder:text-white/40',
               'resize-none outline-none',
@@ -142,6 +176,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
           className="shrink-0"
           disabled={disabled}
           onClick={handleVoiceClick}
+          aria-label="Record voice message"
         >
           <Mic className="w-5 h-5" />
         </GlassButton>
@@ -154,6 +189,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
           onClick={handleSubmit}
           disabled={disabled || !value.trim()}
           loading={loading}
+          aria-label="Send message"
         >
           <Send className="w-5 h-5" />
         </GlassButton>
@@ -161,25 +197,31 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
 
       {/* Voice Recording Modal */}
       {showVoiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="voice-modal-title"
+        >
           <GlassCard variant="heavy" className="w-full max-w-md p-6 animate-in zoom-in-95 duration-200">
             <div className="flex flex-col items-center gap-6">
               {/* Header */}
               <div className="flex items-center justify-between w-full">
-                <h3 className="text-lg font-semibold text-white">
+                <h3 id="voice-modal-title" className="text-lg font-semibold text-white">
                   {recordingState === 'processing' ? 'Processing...' : 'Recording'}
                 </h3>
                 <button
                   onClick={handleCancelRecording}
                   className="p-2 rounded-lg hover:bg-[var(--color-glass-white)]/10 transition-colors"
                   disabled={recordingState === 'processing'}
+                  aria-label="Close recording modal"
                 >
                   <X className="w-5 h-5 text-white/70" />
                 </button>
               </div>
 
               {/* Waveform visualization */}
-              <div className="relative w-full h-32 flex items-center justify-center">
+              <div className="relative w-full h-32 flex items-center justify-center" aria-live="polite">
                 {/* Pulsing circle */}
                 <div
                   className={cn(
@@ -191,26 +233,27 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
                   style={{
                     transform: `scale(${1 + audioLevel / 200})`
                   }}
+                  aria-hidden="true"
                 />
 
                 {/* Mic icon */}
                 <div className="relative z-10 w-16 h-16 rounded-full bg-gradient-brand flex items-center justify-center">
                   {isRecording ? (
-                    <Mic className="w-8 h-8 text-white" />
+                    <Mic className="w-8 h-8 text-white" aria-label="Recording active" />
                   ) : (
-                    <MicOff className="w-8 h-8 text-white" />
+                    <MicOff className="w-8 h-8 text-white" aria-label="Recording inactive" />
                   )}
                 </div>
 
                 {/* Audio level bars */}
                 {isRecording && (
-                  <div className="absolute inset-0 flex items-center justify-center gap-1">
+                  <div className="absolute inset-0 flex items-center justify-center gap-1" aria-hidden="true">
                     {[...Array(5)].map((_, i) => (
                       <div
                         key={i}
                         className="w-1 bg-[#E32D21] rounded-full transition-all duration-100"
                         style={{
-                          height: `${20 + (audioLevel / 2) * Math.sin(Date.now() / 200 + i)}%`,
+                          height: `${20 + (audioLevel / 2) * Math.sin(animationTime / 200 + i)}%`,
                           opacity: 0.6
                         }}
                       />
@@ -221,7 +264,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
 
               {/* Duration */}
               <div className="text-center">
-                <div className="text-3xl font-mono font-bold text-white mb-1">
+                <div className="text-3xl font-mono font-bold text-white mb-1" role="timer" aria-live="polite">
                   {formatDuration(duration)}
                 </div>
                 <p className="text-sm text-white/60">
@@ -238,6 +281,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
                   className="flex-1"
                   onClick={handleCancelRecording}
                   disabled={recordingState === 'processing'}
+                  aria-label="Cancel recording"
                 >
                   Cancel
                 </GlassButton>
@@ -246,6 +290,7 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
                   className="flex-1"
                   onClick={handleStopRecording}
                   disabled={recordingState === 'processing' || !isRecording}
+                  aria-label="Stop and send recording"
                 >
                   {recordingState === 'processing' ? 'Processing...' : 'Stop & Send'}
                 </GlassButton>
@@ -263,4 +308,4 @@ export function ChatInput({ value, onChange, onSubmit, disabled, loading }: Chat
       )}
     </GlassCard>
   )
-}
+})

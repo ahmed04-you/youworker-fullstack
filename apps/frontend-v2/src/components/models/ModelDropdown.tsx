@@ -6,7 +6,6 @@ import { GlassCard } from '@/src/components/ui/glass/GlassCard'
 import { GlassInput } from '@/src/components/ui/glass/GlassInput'
 import { ModelCard } from './ModelCard'
 import { Search, X } from 'lucide-react'
-import { cn } from '@/src/lib/utils'
 
 interface ModelDropdownProps {
   models: Model[]

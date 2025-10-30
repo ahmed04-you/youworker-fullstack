@@ -66,15 +66,17 @@ async def get_current_user_with_collection_access(
     Returns the User object.
     """
     from packages.db import get_async_session
+    from packages.db.repositories import DocumentRepository
 
     # Ensure root has access to default collection
     try:
         from packages.vectorstore.schema import DEFAULT_COLLECTION
-        from packages.db.crud import grant_user_collection_access
 
         async with get_async_session() as db:
-            await grant_user_collection_access(
-                db, user_id=current_user.id, collection_name=DEFAULT_COLLECTION
+            doc_repo = DocumentRepository(db)
+            await doc_repo.grant_user_collection_access(
+                user_id=current_user.id,
+                collection_name=DEFAULT_COLLECTION
             )
     except (AttributeError, ImportError, ValueError):
         # Silent fail - collection access is a nice-to-have

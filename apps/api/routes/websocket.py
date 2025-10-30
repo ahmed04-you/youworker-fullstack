@@ -313,9 +313,10 @@ async def websocket_chat_endpoint(
 
         # Tie to root user (single user for now)
         async with get_async_session() as db:
-            from packages.db.crud import ensure_root_user
+            from packages.db.repositories import UserRepository
 
-            user = await ensure_root_user(db, username="root", api_key=api_key)
+            user_repo = UserRepository(db)
+            user = await user_repo.ensure_root_user(username="root", api_key=api_key)
             if not user:
                 raise ValueError("User not found for API key")
 

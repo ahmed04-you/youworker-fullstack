@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { User } from '@/src/lib/types'
+import { errorTracker } from '@/src/lib/utils'
 
 const DEFAULT_USER: User = {
   id: 'demo-user',
@@ -19,7 +20,10 @@ function getUserFromStorage(): User {
       return JSON.parse(stored)
     }
   } catch (error) {
-    console.error('Failed to load user from storage:', error)
+    errorTracker.captureError(error as Error, {
+      component: 'useUser',
+      action: 'getUserFromStorage'
+    })
   }
 
   return DEFAULT_USER
@@ -29,7 +33,10 @@ function saveUserToStorage(user: User) {
   try {
     localStorage.setItem('user', JSON.stringify(user))
   } catch (error) {
-    console.error('Failed to save user to storage:', error)
+    errorTracker.captureError(error as Error, {
+      component: 'useUser',
+      action: 'saveUserToStorage'
+    })
   }
 }
 

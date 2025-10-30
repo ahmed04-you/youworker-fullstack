@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ChatWebSocket } from '@/src/lib/api/websocket'
 import { getMessages, createSession } from '@/src/lib/api/chat'
 import type { Message } from '@/src/lib/types'
+import { errorTracker } from '@/src/lib/utils'
 
 export function useChat(sessionId?: string) {
   const [messages, setMessages] = useState<Message[]>([])
@@ -36,7 +37,11 @@ export function useChat(sessionId?: string) {
     })
 
     websocket.onError((error) => {
-      console.error('WebSocket error:', error)
+      errorTracker.captureError(error, {
+        component: 'useChat',
+        action: 'websocketError',
+        metadata: { sessionId: currentSessionId }
+      })
       setIsConnected(false)
     })
 
@@ -48,6 +53,8 @@ export function useChat(sessionId?: string) {
       setIsConnected(true)
     })
 
+    // Synchronously setting state to track external system (WebSocket)
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setWs(websocket)
 
     return () => {
@@ -88,7 +95,11 @@ export function useChat(sessionId?: string) {
     try {
       ws?.send(content)
     } catch (error) {
-      console.error('Failed to send message:', error)
+      errorTracker.captureError(error as Error, {
+        component: 'useChat',
+        action: 'sendMessage',
+        metadata: { sessionId: currentSessionId }
+      })
       setIsLoading(false)
     }
   }, [currentSessionId, ws])

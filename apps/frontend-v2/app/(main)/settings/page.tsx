@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { SettingsSection, SettingItem } from '@/src/components/settings/SettingsSection'
 import { GlassButton } from '@/src/components/ui/glass/GlassButton'
-import { GlassCard } from '@/src/components/ui/glass/GlassCard'
 import { useSettings } from '@/src/lib/hooks/useSettings'
 import { availableModels } from '@/src/lib/data/models'
 import { useTranslations } from '@/src/lib/i18n/provider'
@@ -15,11 +14,6 @@ import {
   Sun,
   Moon,
   Type,
-  Globe,
-  Bot,
-  History,
-  ArrowDown,
-  Bell,
   Trash2,
   Download,
   AlertTriangle

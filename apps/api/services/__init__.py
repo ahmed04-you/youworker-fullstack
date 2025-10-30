@@ -9,6 +9,11 @@ from .base import BaseService
 from .chat_service import ChatService, ChatResponse, InputProcessingResult
 from .ingestion_service import IngestionService, IngestPathResult, FileUploadResult
 from .startup import StartupService
+from .group_service import GroupService
+from .account_service import AccountService
+from .session_service import SessionService
+from .document_service import DocumentService
+from .analytics_service import AnalyticsService
 
 __all__ = [
     "BaseService",
@@ -19,4 +24,9 @@ __all__ = [
     "IngestPathResult",
     "FileUploadResult",
     "StartupService",
+    "GroupService",
+    "AccountService",
+    "SessionService",
+    "DocumentService",
+    "AnalyticsService",
 ]

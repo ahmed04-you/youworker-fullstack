@@ -17,7 +17,7 @@ from fastapi import UploadFile
 
 from apps.api.auth.security import sanitize_input
 from packages.ingestion import IngestionPipeline
-from packages.db.crud import record_ingestion_run, upsert_document
+from packages.db.repositories import DocumentRepository, IngestionRepository
 
 from .base import BaseService
 
@@ -480,8 +480,8 @@ class IngestionService(BaseService):
             finished_at = datetime.now().astimezone()
 
             # Record ingestion run
-            await record_ingestion_run(
-                self.db,
+            ingestion_repo = IngestionRepository(self.db)
+            await ingestion_repo.record_ingestion_run(
                 user_id=user_id,
                 target=target,
                 from_web=from_web,
@@ -497,6 +497,7 @@ class IngestionService(BaseService):
             )
 
             # Record individual documents
+            doc_repo = DocumentRepository(self.db)
             for f in result.files or []:
                 uri = f.get("uri")
                 path = f.get("path")
@@ -507,8 +508,7 @@ class IngestionService(BaseService):
                     else None
                 )
 
-                await upsert_document(
-                    self.db,
+                await doc_repo.upsert_document(
                     user_id=user_id,
                     path_hash=path_hash or "",
                     uri=uri,

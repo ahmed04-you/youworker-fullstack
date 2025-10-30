@@ -89,3 +89,23 @@ export function sanitizeInput(input: string): string {
   element.textContent = input
   return element.innerHTML
 }
+
+/**
+ * Validate chat message content
+ */
+export function validateMessage(content: string): { valid: boolean; error?: string } {
+  if (!content || content.trim().length === 0) {
+    return { valid: false, error: 'Message cannot be empty' }
+  }
+
+  if (content.length > 4000) {
+    return { valid: false, error: 'Message too long (max 4000 characters)' }
+  }
+
+  // Check for potential XSS patterns
+  if (/<script|javascript:|onerror=/i.test(content)) {
+    return { valid: false, error: 'Invalid content detected' }
+  }
+
+  return { valid: true }
+}

@@ -10,7 +10,7 @@ export async function getDocument(documentId: string): Promise<Document> {
   return apiRequest<Document>(`/v1/documents/${documentId}`)
 }
 
-export async function uploadDocument(file: File, metadata?: Record<string, any>): Promise<Document> {
+export async function uploadDocument(file: File, metadata?: Record<string, unknown>): Promise<Document> {
   const csrfToken = await getCsrfToken()
 
   const formData = new FormData()

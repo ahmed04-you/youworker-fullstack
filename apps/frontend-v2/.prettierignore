@@ -1,0 +1,10 @@
+.next
+out
+build
+node_modules
+dist
+*.config.js
+*.config.mjs
+*.config.ts
+next-env.d.ts
+package-lock.json

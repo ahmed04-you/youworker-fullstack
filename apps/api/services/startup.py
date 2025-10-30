@@ -188,9 +188,11 @@ class StartupService:
             # Persist MCP servers and tools on refresh
             async def persist_registry(tools: dict[str, Any], clients: dict[str, Any]):
                 from packages.db import get_async_session
-                from packages.db.crud import upsert_mcp_servers, upsert_tools
+                from packages.db.repositories import MCPRepository
 
                 async with get_async_session() as db:
+                    mcp_repo = MCPRepository(db)
+
                     # Servers
                     servers = []
                     for sid, client in clients.items():
@@ -201,12 +203,13 @@ class StartupService:
                                 client.is_healthy,
                             )
                         )
-                    smap = await upsert_mcp_servers(db, servers)
+                    smap = await mcp_repo.upsert_mcp_servers(servers)
+
                     # Tools
                     tool_rows = []
                     for qname, tool in tools.items():
                         tool_rows.append((tool.server_id, qname, tool.description, tool.input_schema))
-                    await upsert_tools(db, smap, tool_rows)
+                    await mcp_repo.upsert_tools(smap, tool_rows)
 
             self.registry.set_refreshed_callback(persist_registry)
             # Trigger initial persist now

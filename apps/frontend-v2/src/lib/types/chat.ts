@@ -1,9 +1,16 @@
+export interface MessageMetadata {
+  model?: string
+  tokens?: number
+  latency?: number
+  contextDocuments?: string[]
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp: string
-  metadata?: Record<string, any>
+  metadata?: MessageMetadata
 }
 
 export interface Session {

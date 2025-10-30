@@ -2,7 +2,7 @@
 
 import { GlassCard } from '@/src/components/ui/glass/GlassCard'
 import { Document } from '@/src/lib/types'
-import { FileText, Trash2, Download } from 'lucide-react'
+import { FileText, Trash2 } from 'lucide-react'
 import { GlassButton } from '@/src/components/ui/glass/GlassButton'
 import { formatFileSize, formatTimestamp } from '@/src/lib/utils'
 

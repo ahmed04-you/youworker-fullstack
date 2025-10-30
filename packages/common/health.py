@@ -13,7 +13,8 @@ from qdrant_client import AsyncQdrantClient
 from sqlalchemy import text
 
 from packages.common.settings import get_settings
-from packages.db.session import get_async_session
+from packages.db.session import get_async_session, async_engine
+from packages.db.pool_monitor import PoolMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -38,17 +39,35 @@ class HealthCheck:
 
 
 async def check_postgres_health() -> HealthCheck:
-    """Check PostgreSQL database health."""
+    """Check PostgreSQL database health and connection pool status."""
     start = time.perf_counter()
     try:
         async with get_async_session() as db:
             await db.execute(text("SELECT 1"))
         latency = int((time.perf_counter() - start) * 1000)
+
+        # Get pool statistics
+        monitor = PoolMonitor(async_engine)
+        pool_stats = monitor.get_stats()
+        is_healthy, pool_message = monitor.check_health()
+
+        # Determine overall status based on both connection and pool health
+        if not is_healthy and pool_stats.is_saturated:
+            status = HealthStatus.DEGRADED
+            message = f"Connected but {pool_message.lower()}"
+        else:
+            status = HealthStatus.HEALTHY
+            message = f"Connected - {pool_stats.checked_out}/{pool_stats.pool_size} connections"
+
         return HealthCheck(
             name="postgres",
-            status=HealthStatus.HEALTHY,
-            message="Connected",
+            status=status,
+            message=message,
             latency_ms=latency,
+            details={
+                "pool": pool_stats.to_dict(),
+                "pool_health": pool_message,
+            }
         )
     except Exception as e:
         latency = int((time.perf_counter() - start) * 1000)

@@ -1,7 +1,7 @@
 'use client'
 
 import { GlassCard } from '@/src/components/ui/glass/GlassCard'
-import { MessageSquare, FileText, Settings, Home } from 'lucide-react'
+import { MessageSquare, FileText, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/src/lib/utils'

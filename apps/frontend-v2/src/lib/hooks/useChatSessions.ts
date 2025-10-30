@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { getSessions, createSession, deleteSession } from '@/src/lib/api/chat'
 import type { Session } from '@/src/lib/types'
+import { errorTracker } from '@/src/lib/utils'
 
 export function useChatSessions() {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -21,8 +22,12 @@ export function useChatSessions() {
       setSessions(data)
       setError(null)
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to load sessions:', err)
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useChatSessions',
+        action: 'loadSessions'
+      })
     } finally {
       setIsLoading(false)
     }
@@ -34,9 +39,13 @@ export function useChatSessions() {
       setSessions(prev => [session, ...prev])
       return session
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to create session:', err)
-      throw err
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useChatSessions',
+        action: 'createSession'
+      })
+      throw error
     }
   }
 
@@ -45,9 +54,14 @@ export function useChatSessions() {
       await deleteSession(sessionId)
       setSessions(prev => prev.filter(s => s.id !== sessionId))
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to delete session:', err)
-      throw err
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useChatSessions',
+        action: 'deleteSession',
+        metadata: { sessionId }
+      })
+      throw error
     }
   }
 

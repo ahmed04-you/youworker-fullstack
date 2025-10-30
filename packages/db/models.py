@@ -99,6 +99,39 @@ class EncryptedContent(TypeDecorator):
         return value
 
 
+class SoftDeleteMixin:
+    """
+    Mixin for soft-delete functionality.
+
+    Adds a deleted_at timestamp field. When set, the record is considered deleted.
+    Repositories should filter out soft-deleted records by default.
+
+    Usage:
+        class MyModel(SoftDeleteMixin, AsyncAttrs, Base):
+            ...
+    """
+
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        default=None,
+        index=True
+    )
+
+    @property
+    def is_deleted(self) -> bool:
+        """Check if this record is soft-deleted."""
+        return self.deleted_at is not None
+
+    def soft_delete(self) -> None:
+        """Mark this record as deleted."""
+        self.deleted_at = datetime.now(timezone.utc)
+
+    def restore(self) -> None:
+        """Restore a soft-deleted record."""
+        self.deleted_at = None
+
+
 class User(AsyncAttrs, Base):
     __tablename__ = "users"
 
@@ -223,7 +256,7 @@ class MCPServer(AsyncAttrs, Base):
     server_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     url: Mapped[str] = mapped_column(String(512))
     healthy: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
 
     tools: Mapped[list["Tool"]] = relationship(
         back_populates="server", cascade="all, delete-orphan"
@@ -256,7 +289,10 @@ class Tool(AsyncAttrs, Base):
         return value
 
     server: Mapped[MCPServer] = relationship(back_populates="tools")
-    __table_args__ = (UniqueConstraint("mcp_server_id", "name", name="uq_tool_server_name"),)
+    __table_args__ = (
+        UniqueConstraint("mcp_server_id", "name", name="uq_tool_server_name"),
+        Index("idx_tools_server_enabled", "mcp_server_id", "enabled"),
+    )
 
 
 class ToolRun(AsyncAttrs, Base):
@@ -311,7 +347,10 @@ class IngestionRun(AsyncAttrs, Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="success", index=True)
 
-    __table_args__ = (Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),)
+    __table_args__ = (
+        Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),
+        Index("idx_ingestion_runs_user_status_started", "user_id", "status", started_at.desc()),
+    )
 
 
 class Document(AsyncAttrs, Base):
@@ -352,6 +391,7 @@ class Document(AsyncAttrs, Base):
     __table_args__ = (
         Index("idx_documents_collection_created", "collection", created_at.desc()),
         Index("idx_documents_user_created", "user_id", created_at.desc()),
+        Index("idx_documents_user_collection_created", "user_id", "collection", created_at.desc()),
         Index("idx_documents_group_private", "group_id", "is_private"),
         # path_hash is unique per user, not globally
         UniqueConstraint("user_id", "path_hash", name="uq_user_document_path"),
@@ -362,8 +402,8 @@ class UserToolAccess(AsyncAttrs, Base):
     __tablename__ = "user_tool_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    tool_id: Mapped[int] = mapped_column(ForeignKey("tools.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    tool_id: Mapped[int] = mapped_column(ForeignKey("tools.id", ondelete="CASCADE"), index=True)
     __table_args__ = (UniqueConstraint("user_id", "tool_id", name="uq_user_tool"),)
 
 
@@ -379,9 +419,9 @@ class UserCollectionAccess(AsyncAttrs, Base):
     __tablename__ = "user_collection_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     collection_id: Mapped[int] = mapped_column(
-        ForeignKey("document_collections.id", ondelete="CASCADE")
+        ForeignKey("document_collections.id", ondelete="CASCADE"), index=True
     )
     __table_args__ = (UniqueConstraint("user_id", "collection_id", name="uq_user_collection"),)
 

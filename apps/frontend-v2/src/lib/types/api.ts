@@ -2,14 +2,13 @@ export interface ApiError {
   message: string
   code?: string
   status: number
-  details?: any
+  details?: Record<string, unknown>
 }
 
-export interface ApiResponse<T> {
-  data?: T
-  error?: ApiError
-  success: boolean
-}
+// Discriminated union for better type safety
+export type ApiResponse<T> =
+  | { success: true; data: T }
+  | { success: false; error: ApiError }
 
 export interface PaginatedResponse<T> {
   items: T[]
@@ -35,12 +34,12 @@ export interface CSRFTokenResponse {
 }
 
 export interface User {
-  id: string
-  email: string
-  name: string
-  avatar?: string
-  initials: string
-  created_at?: string
+  readonly id: string
+  readonly email: string
+  readonly name: string
+  readonly avatar?: string
+  readonly initials: string
+  readonly created_at?: string
 }
 
 export interface UserSettings {

@@ -160,11 +160,29 @@ class AuditAction:
     USER_UPDATE = "user.update"
     USER_DELETE = "user.delete"
 
+    # Group actions
+    GROUP_CREATE = "group.create"
+    GROUP_UPDATE = "group.update"
+    GROUP_DELETE = "group.delete"
+    GROUP_MEMBER_ADD = "group.member.add"
+    GROUP_MEMBER_REMOVE = "group.member.remove"
+    GROUP_MEMBER_ROLE_CHANGE = "group.member.role_change"
+
     # Document actions
     DOCUMENT_UPLOAD = "document.upload"
     DOCUMENT_DELETE = "document.delete"
     DOCUMENT_ACCESS = "document.access"
     DOCUMENT_SHARE = "document.share"
+    DOCUMENT_UNSHARE = "document.unshare"
+
+    # Chat actions
+    CHAT_SESSION_CREATE = "chat.session.create"
+    CHAT_SESSION_DELETE = "chat.session.delete"
+    CHAT_HISTORY_CLEAR = "chat.history.clear"
+
+    # Data actions
+    DATA_EXPORT = "data.export"
+    DATA_DELETE = "data.delete"
 
     # Admin actions
     ADMIN_USER_CREATE = "admin.user.create"
@@ -176,3 +194,17 @@ class AuditAction:
     AUTH_UNAUTHORIZED = "auth.unauthorized"
     AUTH_TOKEN_EXPIRED = "auth.token.expired"
     AUTH_SUSPICIOUS_ACTIVITY = "auth.suspicious_activity"
+
+
+# Common resource types
+class ResourceType:
+    """Common resource type identifiers."""
+
+    USER = "user"
+    GROUP = "group"
+    DOCUMENT = "document"
+    CHAT_SESSION = "chat_session"
+    API_KEY = "api_key"
+    MCP_SERVER = "mcp_server"
+    TOOL = "tool"
+    SECURITY = "security"

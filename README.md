@@ -4,6 +4,19 @@
 
 YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Context Protocol (MCP), progettato per l'implementazione on-premise. Questa soluzione proprietaria di YouCo offre capacità di elaborazione intelligente mantenendo tutti i dati e le operazioni all'interno dell'infrastruttura aziendale.
 
+## 📚 Documentazione
+
+**Documentazione completa disponibile in `/docs`:**
+
+- **[Panoramica](docs/README.md)** - Guida introduttiva e indice della documentazione
+- **[Architettura](docs/ARCHITECTURE.md)** - Architettura del sistema, design patterns e componenti
+- **[Guida Sviluppo](docs/DEVELOPMENT_GUIDE.md)** - Setup ambiente, workflow e best practices
+- **[API Reference](docs/API_REFERENCE.md)** - Documentazione completa degli endpoint API
+- **[Schema Database](docs/DATABASE_SCHEMA.md)** - Schema del database, relazioni e query
+- **[Testing Guide](docs/TESTING_GUIDE.md)** - Strategie di testing e copertura
+
+**Documentazione API interattiva:** `http://localhost:8001/docs` (Swagger UI)
+
 ---
 
 ## Caratteristiche Principali
@@ -295,62 +308,179 @@ docker logs -f youworker-mcp-web
 
 ## Sviluppo
 
-Vedi [docs/SVILUPPO.md](docs/SVILUPPO.md) per la guida completa allo sviluppo.
+### 📖 Guide per Sviluppatori
+
+**Consulta la documentazione completa:**
+- **[Guida Sviluppo](docs/DEVELOPMENT_GUIDE.md)** - Setup, workflow, code style
+- **[Architettura](docs/ARCHITECTURE.md)** - Design patterns e componenti
+- **[Testing Guide](docs/TESTING_GUIDE.md)** - Strategie di test e best practices
 
 ### Setup Ambiente di Sviluppo
 
 ```bash
-# Backend (Python)
-cd apps/api
-poetry install
-poetry shell
-uvicorn main:app --reload --port 8001
+# Clone e setup
+git clone <repository-url>
+cd youworker-fullstack
 
-# MCP Server
-cd apps/mcp_servers/web
-poetry install
-python -m web.server
+# Virtual environment
+python -m venv venv
+source venv/bin/activate
+
+# Installa dipendenze
+pip install -r requirements.txt
+pip install -r requirements-dev.txt  # Per sviluppo
+
+# Setup pre-commit hooks
+pre-commit install
+
+# Configura ambiente
+cp .env.example .env
+# Genera chiavi di sicurezza (vedi sezione Configurazione)
+
+# Crea database
+createdb youworker
+
+# Avvia backend
+uvicorn apps.api.main:app --reload --port 8001
 ```
 
 ### Testing
 
 ```bash
-# Test Python
-make test
-pytest tests/ -v
+# Esegui tutti i test
+pytest
 
-# Linting
-make lint
-make format
+# Test con coverage
+pytest --cov=apps --cov=packages --cov-report=html
+
+# Test specifici
+pytest tests/unit/services/test_group_service.py
+
+# Type checking
+mypy apps/ packages/
+
+# Linting e formatting
+ruff check apps/ packages/
+black apps/ packages/ tests/
 ```
+
+### Architettura del Codice
+
+YouWorker utilizza un'architettura a strati pulita:
+
+```
+┌─────────────────────────────────────┐
+│    Presentation Layer (Routes)     │  ← HTTP/WebSocket endpoints
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│    Service Layer (Services)         │  ← Business logic
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│  Repository Layer (Repositories)    │  ← Data access
+└─────────────────────────────────────┘
+                 ↓
+┌─────────────────────────────────────┐
+│    Data Layer (SQLAlchemy Models)   │  ← Database schema
+└─────────────────────────────────────┘
+```
+
+**Principi chiave:**
+- ✅ Separation of Concerns (ogni layer ha una responsabilità)
+- ✅ Dependency Injection (via FastAPI)
+- ✅ Repository Pattern (astrazione accesso dati)
+- ✅ Unit of Work Pattern (gestione transazioni)
+- ✅ Type Safety (mypy strict mode)
+- ✅ Test Coverage 80%+
 
 ### Struttura del Progetto
 
 ```
 youworker-fullstack/
 ├── apps/                      # Applicazioni
-│   ├── api/                  # FastAPI backend
-│   └── mcp_servers/          # Server MCP
-│       ├── web/              # Strumenti web
-│       ├── semantic/         # Ricerca semantica
-│       ├── datetime/         # Utilità date
-│       ├── ingest/           # Ingestion documenti
-│       └── units/            # Conversioni
-├── packages/                  # Pacchetti Python condivisi
-│   ├── common/               # Impostazioni e utilità
-│   ├── db/                   # Modelli database
-│   ├── vectorstore/          # Client Qdrant
-│   ├── llm/                  # Client Ollama
-│   ├── mcp/                  # Client MCP
-│   ├── agent/                # Loop agente AI
-│   ├── parsers/              # Parser documenti
-│   └── ingestion/            # Pipeline ingestion
-├── ops/                       # Operazioni e deployment
-│   ├── compose/              # Docker Compose
-│   ├── docker/               # Dockerfile
-│   ├── alembic/              # Migrazioni DB
-│   └── scripts/              # Script utilità
-└── data/                      # Dati persistenti (gitignored)
+│   └── api/                  # FastAPI backend
+│       ├── routes/           # HTTP endpoints
+│       │   ├── auth.py      # Autenticazione
+│       │   ├── chat/        # Chat endpoints
+│       │   ├── groups.py    # Gestione gruppi
+│       │   ├── analytics/   # Analytics
+│       │   └── ingestion.py # Ingestion documenti
+│       ├── services/         # Business logic layer
+│       │   ├── base.py
+│       │   ├── chat_service.py
+│       │   ├── group_service.py
+│       │   ├── ingestion_service.py
+│       │   └── account_service.py
+│       ├── middleware/       # Custom middleware
+│       ├── dependencies.py   # Dependency injection
+│       └── main.py          # Entry point
+│
+├── packages/                  # Pacchetti condivisi
+│   ├── db/                   # Database layer
+│   │   ├── models/          # SQLAlchemy models (per dominio)
+│   │   │   ├── user.py
+│   │   │   ├── group.py
+│   │   │   ├── chat.py
+│   │   │   ├── document.py
+│   │   │   └── tool.py
+│   │   ├── repositories/    # Repository pattern
+│   │   │   ├── base.py
+│   │   │   ├── user_repository.py
+│   │   │   ├── group_repository.py
+│   │   │   ├── chat_repository.py
+│   │   │   └── document_repository.py
+│   │   ├── uow.py          # Unit of Work pattern
+│   │   └── session.py      # Database session
+│   │
+│   ├── common/              # Utilities comuni
+│   │   ├── config/         # Configurazione (per dominio)
+│   │   │   ├── database.py
+│   │   │   ├── security.py
+│   │   │   ├── llm.py
+│   │   │   └── api.py
+│   │   ├── exceptions.py   # Custom exceptions
+│   │   ├── logger.py       # Logging setup
+│   │   └── settings.py     # Settings management
+│   │
+│   ├── agent/               # Agent framework
+│   │   ├── loop.py         # Agent execution loop
+│   │   └── registry.py     # MCP tool registry
+│   │
+│   ├── llm/                 # LLM integration
+│   │   ├── client.py       # Ollama client
+│   │   └── messages.py     # Message models
+│   │
+│   ├── vectorstore/         # Vector database
+│   │   └── qdrant.py       # Qdrant client
+│   │
+│   └── ingestion/           # Document processing
+│       ├── pipeline.py     # Orchestration
+│       └── parsers/        # Parsers (PDF, OCR, audio)
+│
+├── tests/                    # Test suite
+│   ├── unit/                # Unit tests (60%)
+│   │   ├── services/
+│   │   ├── repositories/
+│   │   └── models/
+│   ├── integration/         # Integration tests (30%)
+│   └── e2e/                # End-to-end tests (10%)
+│
+├── docs/                    # Documentazione
+│   ├── README.md           # Indice documentazione
+│   ├── ARCHITECTURE.md     # Architettura
+│   ├── DEVELOPMENT_GUIDE.md
+│   ├── API_REFERENCE.md
+│   ├── DATABASE_SCHEMA.md
+│   └── TESTING_GUIDE.md
+│
+├── ops/                     # Operations
+│   ├── docker/             # Dockerfile
+│   ├── compose/            # Docker Compose
+│   ├── alembic/            # DB migrations
+│   └── scripts/            # Utility scripts
+│
+└── data/                    # Dati persistenti (gitignored)
 ```
 
 ---
@@ -501,9 +631,21 @@ Per supporto tecnico, contatta:
 
 ### Versione
 
-**Versione corrente**: 1.0.0
-**Data rilascio**: Gennaio 2025
+**Versione corrente**: 1.0.0-pre-release 🚧
+**Status**: Pre-Release - Sviluppo in corso
+**Data rilascio prevista**: Q1 2025
 **Compatibilità**: AUTHENTIK 2023.10+
+
+**Obiettivi v1.0 (in sviluppo):**
+- 🚧 Architettura a strati pulita (Repository + Service + UoW patterns)
+- 🚧 Dependency Injection completa
+- 🚧 Type Safety con mypy strict mode
+- 🚧 Test Coverage 80%+
+- 🚧 Configurazione modulare per dominio
+- 🚧 Audit logging completo
+- ✅ Multi-tenancy con gruppi
+
+**Note**: La v1.0 è in fase di sviluppo attivo. Vedi [BACKEND_REFACTORING_GUIDE.md](BACKEND_REFACTORING_GUIDE.md) per lo stato di avanzamento.
 
 ---
 

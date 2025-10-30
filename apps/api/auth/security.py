@@ -16,9 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.config import settings
 from packages.db import get_async_session, get_user_by_api_key, User
-from packages.db.crud import ensure_root_user as _ensure_root_user_impl
-
-ensure_root_user = _ensure_root_user_impl
+from packages.db.repositories import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +68,9 @@ async def get_current_user(
                 username = payload.get("sub")
 
                 if username:
-                    user = await _ensure_root_user_impl(
-                        session=db, username=username, api_key=settings.root_api_key
+                    user_repo = UserRepository(db)
+                    user = await user_repo.ensure_root_user(
+                        username=username, api_key=settings.root_api_key
                     )
                     if user:
                         return user
@@ -98,8 +97,8 @@ async def get_current_user(
                     detail="Invalid Authentik credentials"
                 )
 
-            user = await _ensure_root_user_impl(
-                session=db,
+            user_repo = UserRepository(db)
+            user = await user_repo.ensure_root_user(
                 username=username,
                 api_key=authentik_api_key
             )
@@ -135,8 +134,9 @@ async def get_current_user_optional(
                 username = payload.get("sub")
 
                 if username:
-                    user = await _ensure_root_user_impl(
-                        session=db, username=username, api_key=settings.root_api_key
+                    user_repo = UserRepository(db)
+                    user = await user_repo.ensure_root_user(
+                        username=username, api_key=settings.root_api_key
                     )
                     if user:
                         return user
@@ -155,8 +155,8 @@ async def get_current_user_optional(
         if authentik_api_key:
             username = authentik_username or "root"
             if await _verify_api_key_with_session(db, authentik_api_key):
-                user = await _ensure_root_user_impl(
-                    session=db,
+                user_repo = UserRepository(db)
+                user = await user_repo.ensure_root_user(
                     username=username,
                     api_key=authentik_api_key
                 )

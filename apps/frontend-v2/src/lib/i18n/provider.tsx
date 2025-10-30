@@ -2,8 +2,9 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { Locale, i18n as i18nConfig } from './config'
+import { errorTracker } from '@/src/lib/utils'
 
-type Messages = Record<string, any>
+type Messages = Record<string, string | Messages>
 
 interface I18nContextType {
   locale: Locale
@@ -19,7 +20,11 @@ async function loadMessages(locale: Locale): Promise<Messages> {
     const messages = await import(`../../../locales/${locale}.json`)
     return messages.default
   } catch (error) {
-    console.error(`Failed to load messages for locale: ${locale}`, error)
+    errorTracker.captureError(error as Error, {
+      component: 'I18nProvider',
+      action: 'loadMessages',
+      metadata: { locale }
+    })
     // Fallback to English
     const messages = await import(`../../../locales/en.json`)
     return messages.default
@@ -41,7 +46,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
             setLocaleState(savedLocale as Locale)
           }
         } catch (error) {
-          console.error('Failed to load locale from settings:', error)
+          errorTracker.captureError(error as Error, {
+            component: 'I18nProvider',
+            action: 'loadLocale'
+          })
         }
       }
     }
@@ -66,7 +74,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   const t = (key: string, params?: Record<string, string | number>): string => {
     const keys = key.split('.')
-    let value: any = messages
+    let value: string | Messages = messages
 
     for (const k of keys) {
       if (value && typeof value === 'object' && k in value) {

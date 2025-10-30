@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { UserSettings } from '@/src/lib/types'
 import { getDefaultModel } from '@/src/lib/data/models'
+import { errorTracker } from '@/src/lib/utils'
 
 const DEFAULT_SETTINGS: UserSettings = {
   theme: 'dark',
@@ -23,7 +24,10 @@ function getSettingsFromStorage(): UserSettings {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) }
     }
   } catch (error) {
-    console.error('Failed to load settings from storage:', error)
+    errorTracker.captureError(error as Error, {
+      component: 'useSettings',
+      action: 'getSettingsFromStorage'
+    })
   }
 
   return DEFAULT_SETTINGS
@@ -33,19 +37,16 @@ function saveSettingsToStorage(settings: UserSettings) {
   try {
     localStorage.setItem('settings', JSON.stringify(settings))
   } catch (error) {
-    console.error('Failed to save settings to storage:', error)
+    errorTracker.captureError(error as Error, {
+      component: 'useSettings',
+      action: 'saveSettingsToStorage'
+    })
   }
 }
 
 export function useSettings() {
-  const [settings, setSettings] = useState<UserSettings>(DEFAULT_SETTINGS)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const loadedSettings = getSettingsFromStorage()
-    setSettings(loadedSettings)
-    setLoading(false)
-  }, [])
+  const [settings, setSettings] = useState<UserSettings>(() => getSettingsFromStorage())
+  const [loading, setLoading] = useState(false)
 
   const updateSettings = (updates: Partial<UserSettings>) => {
     const updatedSettings = { ...settings, ...updates }
@@ -81,7 +82,10 @@ export function useSettings() {
       keysToRemove.forEach(key => localStorage.removeItem(key))
       return true
     } catch (error) {
-      console.error('Failed to clear chat history:', error)
+      errorTracker.captureError(error as Error, {
+        component: 'useSettings',
+        action: 'clearChatHistory'
+      })
       return false
     }
   }
@@ -102,7 +106,10 @@ export function useSettings() {
       URL.revokeObjectURL(url)
       return true
     } catch (error) {
-      console.error('Failed to export data:', error)
+      errorTracker.captureError(error as Error, {
+        component: 'useSettings',
+        action: 'exportData'
+      })
       return false
     }
   }

@@ -8,6 +8,7 @@ import {
   searchDocuments as searchDocumentsApi,
 } from '@/src/lib/api/documents'
 import type { Document, DocumentSearchRequest, DocumentSearchResult } from '@/src/lib/types'
+import { errorTracker } from '@/src/lib/utils'
 
 export function useDocuments() {
   const [documents, setDocuments] = useState<Document[]>([])
@@ -26,22 +27,31 @@ export function useDocuments() {
       setDocuments(data)
       setError(null)
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to load documents:', err)
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useDocuments',
+        action: 'loadDocuments'
+      })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const upload = async (file: File, metadata?: Record<string, any>): Promise<Document> => {
+  const upload = async (file: File, metadata?: Record<string, unknown>): Promise<Document> => {
     try {
       const document = await uploadDocument(file, metadata)
       setDocuments(prev => [document, ...prev])
       return document
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to upload document:', err)
-      throw err
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useDocuments',
+        action: 'uploadDocument',
+        metadata: { fileName: file.name, fileSize: file.size }
+      })
+      throw error
     }
   }
 
@@ -50,9 +60,14 @@ export function useDocuments() {
       await deleteDocumentApi(documentId)
       setDocuments(prev => prev.filter(d => d.id !== documentId))
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to delete document:', err)
-      throw err
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useDocuments',
+        action: 'deleteDocument',
+        metadata: { documentId }
+      })
+      throw error
     }
   }
 
@@ -60,9 +75,14 @@ export function useDocuments() {
     try {
       return await searchDocumentsApi(request)
     } catch (err) {
-      setError(err as Error)
-      console.error('Failed to search documents:', err)
-      throw err
+      const error = err as Error
+      setError(error)
+      errorTracker.captureError(error, {
+        component: 'useDocuments',
+        action: 'searchDocuments',
+        metadata: { query: request.query }
+      })
+      throw error
     }
   }
 
