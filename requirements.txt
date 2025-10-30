@@ -1,7 +1,6 @@
 fastapi
 uvicorn[standard]
 slowapi
-prometheus-fastapi-instrumentator
 pydantic
 pydantic-settings
 python-multipart

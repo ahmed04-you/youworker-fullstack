@@ -88,6 +88,7 @@ class IngestionPipeline:
         from_web: bool = False,
         tags: Sequence[str] | None = None,
         collection_name: str | None = None,
+        user_id: int | None = None,
     ) -> IngestionReport:
         """High-level ingestion API for local paths or web resources."""
         self._active_ingestions += 1
@@ -302,6 +303,7 @@ class IngestionPipeline:
                 path_hash=path_hash,
                 original_format=item.mime,
                 output_format="markdown",
+                user_id=user_id,
                 tags=list(combined_tags) if combined_tags else None,
             )
             chunk.metadata = prune_metadata(chunk.metadata)

@@ -410,6 +410,7 @@ async def stream_agent_response(
                             db,
                             user_id=user_id,
                             session_id=None,  # Will be updated with actual session ID
+                            message_id=None,  # TODO: Thread message context through agent loop
                             tool_name=data.get("tool"),
                             args=data.get("args"),
                             start_ts=datetime.utcnow(),

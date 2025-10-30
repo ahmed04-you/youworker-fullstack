@@ -104,6 +104,7 @@ async def ingest_endpoint(
             recursive=recursive,
             from_web=from_web,
             tags=sanitized_tags,
+            user_id=_get_user_id(current_user),
         )
 
         error_messages = [
@@ -140,6 +141,7 @@ async def ingest_endpoint(
                     ph = hashlib.sha256(basis.encode("utf-8")).hexdigest() if basis else None
                     await upsert_document(
                         db,
+                        user_id=_get_user_id(current_user),
                         path_hash=ph or "",
                         uri=uri,
                         path=path,
@@ -279,6 +281,7 @@ async def ingest_upload_endpoint(
             recursive=False,
             from_web=False,
             tags=sanitized_tags,
+            user_id=_get_user_id(current_user),
         )
 
         error_messages = [
@@ -319,6 +322,7 @@ async def ingest_upload_endpoint(
                     ph = hashlib.sha256(basis.encode("utf-8")).hexdigest() if basis else None
                     await upsert_document(
                         db,
+                        user_id=_get_user_id(current_user),
                         path_hash=ph or "",
                         uri=uri,
                         path=path,

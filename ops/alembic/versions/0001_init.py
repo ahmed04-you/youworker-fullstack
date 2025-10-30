@@ -99,6 +99,7 @@ def upgrade() -> None:
         sa.Column('tool_id', sa.Integer(), sa.ForeignKey('tools.id', ondelete='SET NULL'), nullable=True),
         sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
         sa.Column('session_id', sa.Integer(), sa.ForeignKey('chat_sessions.id', ondelete='SET NULL'), nullable=True),
+        sa.Column('message_id', sa.Integer(), sa.ForeignKey('chat_messages.id', ondelete='CASCADE'), nullable=True),
         sa.Column('tool_name', sa.String(length=256), nullable=False),
         sa.Column('status', sa.String(length=32), nullable=False),
         sa.Column('start_ts', sa.DateTime(timezone=True), nullable=False),
@@ -111,6 +112,7 @@ def upgrade() -> None:
     op.create_index('ix_tool_runs_user_start', 'tool_runs', ['user_id', 'start_ts'])
     op.create_index('ix_tool_runs_tool_start', 'tool_runs', ['tool_name', 'start_ts'])
     op.create_index('ix_tool_runs_analytics', 'tool_runs', ['user_id', 'tool_name', 'status', 'start_ts'])
+    op.create_index('ix_tool_runs_message', 'tool_runs', ['message_id', 'start_ts'])
 
     # Ingestion runs table
     op.create_table(
@@ -135,6 +137,7 @@ def upgrade() -> None:
     op.create_table(
         'documents',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column('user_id', sa.Integer(), sa.ForeignKey('users.id', ondelete='CASCADE'), nullable=False),
         sa.Column('uri', sa.Text(), nullable=True),
         sa.Column('path', sa.Text(), nullable=True),
         sa.Column('mime', sa.String(length=128), nullable=True),
@@ -147,7 +150,9 @@ def upgrade() -> None:
         sa.Column('last_ingested_at', sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index('ix_documents_collection_created', 'documents', ['collection', 'created_at'])
-    op.create_index('ix_documents_path_hash', 'documents', ['path_hash'], unique=True)
+    op.create_index('ix_documents_user_created', 'documents', ['user_id', 'created_at'])
+    op.create_index('ix_documents_path_hash', 'documents', ['path_hash'])
+    op.create_unique_constraint('uq_user_document_path', 'documents', ['user_id', 'path_hash'])
 
     # User tool access table
     op.create_table(
@@ -191,11 +196,14 @@ def downgrade() -> None:
     op.drop_table('user_collection_access')
     op.drop_table('document_collections')
     op.drop_table('user_tool_access')
+    op.drop_constraint('uq_user_document_path', 'documents', type_='unique')
     op.drop_index('ix_documents_path_hash', table_name='documents')
+    op.drop_index('ix_documents_user_created', table_name='documents')
     op.drop_index('ix_documents_collection_created', table_name='documents')
     op.drop_table('documents')
     op.drop_index('ix_ingestion_runs_user_started', table_name='ingestion_runs')
     op.drop_table('ingestion_runs')
+    op.drop_index('ix_tool_runs_message', table_name='tool_runs')
     op.drop_index('ix_tool_runs_analytics', table_name='tool_runs')
     op.drop_index('ix_tool_runs_tool_start', table_name='tool_runs')
     op.drop_index('ix_tool_runs_user_start', table_name='tool_runs')

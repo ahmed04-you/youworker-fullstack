@@ -129,7 +129,7 @@ class JobResult:
 
 
 async def ingest_url(
-    url: str, tags: list[str] | None = None, collection: str | None = None
+    url: str, user_id: int, tags: list[str] | None = None, collection: str | None = None
 ) -> dict[str, Any]:
     if not pipeline:
         return {"error": "Ingestion pipeline not initialized"}
@@ -149,6 +149,7 @@ async def ingest_url(
             from_web=True,
             tags=tags or [],
             collection_name=collection,
+            user_id=user_id,
         )
         finished = datetime.now(timezone.utc).isoformat()
 
@@ -174,7 +175,7 @@ async def ingest_url(
             async with get_async_session() as db:
                 await record_ingestion_run(
                     db,
-                    user_id=1,
+                    user_id=user_id,
                     target=safe_url,
                     from_web=True,
                     recursive=False,
@@ -193,6 +194,7 @@ async def ingest_url(
                     ph = hashlib.sha256((uri or path or "").encode("utf-8")).hexdigest()
                     await upsert_document(
                         db,
+                        user_id=user_id,
                         path_hash=ph,
                         uri=uri,
                         path=path,
@@ -222,7 +224,7 @@ async def ingest_url(
 
 
 async def ingest_path(
-    path: str, recursive: bool = False, tags: list[str] | None = None, collection: str | None = None
+    path: str, user_id: int, recursive: bool = False, tags: list[str] | None = None, collection: str | None = None
 ) -> dict[str, Any]:
     if not pipeline:
         return {"error": "Ingestion pipeline not initialized"}
@@ -242,6 +244,7 @@ async def ingest_path(
             from_web=False,
             tags=tags or [],
             collection_name=collection,
+            user_id=user_id,
         )
         finished = datetime.now(timezone.utc).isoformat()
         errors = [
@@ -265,7 +268,7 @@ async def ingest_path(
             async with get_async_session() as db:
                 await record_ingestion_run(
                     db,
-                    user_id=1,
+                    user_id=user_id,
                     target=str(safe_path),
                     from_web=False,
                     recursive=recursive,
@@ -284,6 +287,7 @@ async def ingest_path(
                     ph = hashlib.sha256((uri or path or "").encode("utf-8")).hexdigest()
                     await upsert_document(
                         db,
+                        user_id=user_id,
                         path_hash=ph,
                         uri=uri,
                         path=path,
@@ -336,6 +340,11 @@ def get_tools_schema() -> list[dict[str, Any]]:
                         "maxLength": 2048,
                         "pattern": r"^https?://.+$",
                     },
+                    "user_id": {
+                        "type": "integer",
+                        "description": "User ID for document ownership",
+                        "minimum": 1,
+                    },
                     "tags": {
                         "type": "array",
                         "items": {"type": "string"},
@@ -350,7 +359,7 @@ def get_tools_schema() -> list[dict[str, Any]]:
                         "pattern": r"^[A-Za-z0-9._-]+$",
                     },
                 },
-                "required": ["url"],
+                "required": ["url", "user_id"],
                 "additionalProperties": False,
             },
         },
@@ -365,6 +374,11 @@ def get_tools_schema() -> list[dict[str, Any]]:
                         "description": "Path to file or directory under allowed roots",
                         "minLength": 1,
                         "maxLength": 4096,
+                    },
+                    "user_id": {
+                        "type": "integer",
+                        "description": "User ID for document ownership",
+                        "minimum": 1,
                     },
                     "recursive": {
                         "type": "boolean",
@@ -384,7 +398,7 @@ def get_tools_schema() -> list[dict[str, Any]]:
                         "pattern": r"^[A-Za-z0-9._-]+$",
                     },
                 },
-                "required": ["path"],
+                "required": ["path", "user_id"],
                 "additionalProperties": False,
             },
         },
@@ -464,12 +478,14 @@ async def mcp_socket(ws: WebSocket):
                     if name == "url":
                         result = await ingest_url(
                             url=arguments["url"],
+                            user_id=arguments["user_id"],
                             tags=arguments.get("tags"),
                             collection=arguments.get("collection"),
                         )
                     elif name == "path":
                         result = await ingest_path(
                             path=arguments["path"],
+                            user_id=arguments["user_id"],
                             recursive=arguments.get("recursive", False),
                             tags=arguments.get("tags"),
                             collection=arguments.get("collection"),

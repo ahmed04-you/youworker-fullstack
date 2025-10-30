@@ -72,6 +72,7 @@ class ToolEventRecorder:
                         db,
                         user_id=self._user_id,
                         session_id=self._session_id,
+                        message_id=None,  # TODO: Thread message context through agent loop
                         tool_name=tool_name,
                         args=args,
                         start_ts=timestamp,

@@ -32,15 +32,17 @@ async def record_tool_start(
     db,
     user_id: int,
     session_id: Optional[int],
+    message_id: Optional[int],
     tool_name: str,
     args: Dict[str, Any],
     start_ts: datetime,
 ):
-    """Record the start of a tool execution."""
+    """Record the start of a tool execution linked to the message being generated."""
     return await start_tool_run(
         session=db,
         user_id=user_id,
         session_id=session_id,
+        message_id=message_id,
         tool_name=tool_name,
         args=args,
         start_ts=start_ts,

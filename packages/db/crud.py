@@ -341,6 +341,7 @@ async def start_tool_run(
     *,
     user_id: int,
     session_id: int | None,
+    message_id: int | None,
     tool_name: str,
     args: dict | None,
     start_ts: datetime,
@@ -358,6 +359,7 @@ async def start_tool_run(
     tr = ToolRun(
         user_id=user_id,
         session_id=session_id,
+        message_id=message_id,
         tool_name=tool_name,
         tool_id=tool_id,
         status="start",
@@ -440,6 +442,7 @@ async def record_ingestion_run(
 async def upsert_document(
     session: AsyncSession,
     *,
+    user_id: int,
     path_hash: str,
     uri: str | None,
     path: str | None,
@@ -449,7 +452,11 @@ async def upsert_document(
     tags: list[str] | None,
     collection: str | None,
 ) -> Document:
-    q = select(Document).where(Document.path_hash == path_hash)
+    # Document is unique per user and path_hash
+    q = select(Document).where(
+        Document.user_id == user_id,
+        Document.path_hash == path_hash
+    )
     result = await session.execute(q)
     doc = result.scalar_one_or_none()
     now = datetime.utcnow()
@@ -465,6 +472,7 @@ async def upsert_document(
         await session.flush()
         return doc
     doc = Document(
+        user_id=user_id,
         uri=uri,
         path=path,
         mime=mime,
@@ -558,37 +566,21 @@ async def get_session_tool_runs(
 
 async def get_user_documents(
     session: AsyncSession,
-    user_id: int | None = None,
+    user_id: int,
     collection: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[Document]:
-    """Get documents, optionally filtered by collection."""
-    query = select(Document).order_by(Document.last_ingested_at.desc())
-
-    if user_id is not None:
-        access_exists = await session.execute(
-            select(UserDocumentAccess.id)
-            .where(UserDocumentAccess.user_id == user_id)
-            .limit(1)
-        )
-        if access_exists.scalar_one_or_none() is not None:
-            query = (
-                query.join(
-                    UserDocumentAccess,
-                    UserDocumentAccess.document_id == Document.id,
-                )
-                .where(UserDocumentAccess.user_id == user_id)
-                .distinct()
-            )
+    """Get user's documents, optionally filtered by collection."""
+    query = select(Document).where(Document.user_id == user_id)
 
     if collection:
         query = query.where(Document.collection == collection)
 
-    query = query.limit(limit).offset(offset)
+    query = query.order_by(Document.last_ingested_at.desc()).limit(limit).offset(offset)
 
-    q = await session.execute(query)
-    return list(q.unique().scalars().all())
+    result = await session.execute(query)
+    return list(result.scalars().all())
 
 
 async def get_user_ingestion_runs(
@@ -643,9 +635,9 @@ async def delete_session(session: AsyncSession, session_id: int, user_id: int) -
     return True
 
 
-async def delete_document(session: AsyncSession, document_id: int) -> bool:
-    """Delete a document from the catalog."""
-    q = select(Document).where(Document.id == document_id)
+async def delete_document(session: AsyncSession, document_id: int, user_id: int) -> bool:
+    """Delete a document owned by the user."""
+    q = select(Document).where(Document.id == document_id, Document.user_id == user_id)
     result = await session.execute(q)
     doc = result.scalar_one_or_none()
     if not doc:

@@ -329,20 +329,6 @@ async def create_session(request: Request):
     ...
 ```
 
-**Metriche Prometheus:**
-
-```python
-from prometheus_fastapi_instrumentator import Instrumentator
-
-instrumentator = Instrumentator()
-instrumentator.instrument(app).expose(app, endpoint="/metrics")
-```
-
-Metriche esposte:
-- `http_request_duration_seconds`: Latenza richieste
-- `http_requests_total`: Conteggio richieste
-- `http_requests_in_progress`: Richieste concorrenti
-
 ---
 
 ### 5. Server MCP (Model Context Protocol)
@@ -797,29 +783,19 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
 
 ---
 
-### 9. Grafana & Prometheus (Monitoring)
+### 9. Metriche e Analytics
 
-**Prometheus:**
-- Scraping metriche da `/metrics` (API)
-- Retention: 15 giorni
-- Storage: Timeseries database
+**Metriche persistite in PostgreSQL:**
+- Chat sessions con metadata (modello, tool usati, timestamp)
+- Documenti ingeriti (tipo, dimensione, stato elaborazione)
+- Tool execution tracking nel contesto delle sessioni
+- Token usage per sessione
 
-**Metriche chiave:**
-```
-# API
-http_request_duration_seconds{method="GET", path="/v1/chat/sessions"}
-http_requests_total{method="POST", path="/v1/chat/new", status="201"}
-
-# Custom
-youworker_active_chat_sessions
-youworker_tool_execution_duration_seconds{tool="web.search"}
-youworker_llm_tokens_total{model="gpt-oss:20b", type="prompt"}
-```
-
-**Grafana:**
-- Dashboards pre-configurati
-- Alerting su soglie
-- Visualizzazioni real-time
+**Tabelle chiave:**
+- `chat_sessions` - Sessioni chat con tool usage
+- `chat_messages` - Messaggi con token count
+- `documents` - Documenti ingeriti con metadata
+- `tool_runs` - Esecuzioni tool nel contesto delle sessioni
 
 ---
 

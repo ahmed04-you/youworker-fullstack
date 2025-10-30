@@ -39,9 +39,7 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 - **Metadati e tag**: Organizzazione e ricerca avanzata dei documenti
 
 ### 📊 Analytics e Monitoraggio
-- **Dashboard Grafana**: Visualizzazione metriche in tempo reale
-- **Prometheus**: Raccolta metriche di sistema e applicazione
-- **Usage analytics**: Tracciamento utilizzo strumenti, sessioni, token
+- **Usage analytics**: Tracciamento utilizzo strumenti, sessioni, token persistito in PostgreSQL
 - **Logging strutturato**: Log centralizzati per debugging e audit
 
 ### 🔒 Sicurezza Enterprise
@@ -82,8 +80,6 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 ### Infrastruttura
 - **Docker & Docker Compose**: Containerizzazione e orchestrazione
 - **NGINX**: Reverse proxy con terminazione SSL
-- **Grafana**: Dashboards di monitoraggio
-- **Prometheus**: Raccolta metriche
 
 ---
 
@@ -235,7 +231,6 @@ Apri il browser e naviga a:
 
 - **Frontend**: `https://youworker.tuazienda.it`
 - **API Health**: `https://youworker.tuazienda.it:8000/health`
-- **Grafana**: `http://localhost:3001` (admin/admin)
 
 ---
 
@@ -407,16 +402,6 @@ youworker-fullstack/
 ---
 
 ## Monitoraggio e Troubleshooting
-
-### Grafana Dashboards
-
-Accedi a `http://localhost:3001` (admin/admin):
-
-- **Overview**: Salute generale del sistema
-- **API Performance**: Latenza, throughput, errori
-- **Chat Analytics**: Sessioni, messaggi, token
-- **Tool Usage**: Utilizzo strumenti MCP
-- **Resources**: CPU, memoria, disco
 
 ### Health Checks
 

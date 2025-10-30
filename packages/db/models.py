@@ -223,6 +223,9 @@ class ToolRun(AsyncAttrs, Base):
     session_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    message_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     tool_name: Mapped[str] = mapped_column(String(256), index=True)
     status: Mapped[str] = mapped_column(String(32), index=True)
     start_ts: Mapped[datetime] = mapped_column(
@@ -238,6 +241,7 @@ class ToolRun(AsyncAttrs, Base):
         Index("idx_tool_runs_user_start", "user_id", start_ts.desc()),
         Index("idx_tool_runs_tool_start", "tool_name", start_ts.desc()),
         Index("idx_tool_runs_analytics", "user_id", "tool_name", "status", start_ts.desc()),
+        Index("idx_tool_runs_message", "message_id", start_ts.desc()),
     )
 
 
@@ -267,6 +271,7 @@ class Document(AsyncAttrs, Base):
     __tablename__ = "documents"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     uri: Mapped[Optional[str]] = mapped_column(Text)
     path: Mapped[Optional[str]] = mapped_column(Text)
     mime: Mapped[Optional[str]] = mapped_column(String(128))
@@ -274,11 +279,13 @@ class Document(AsyncAttrs, Base):
     source: Mapped[Optional[str]] = mapped_column(String(32))
     tags: Mapped[Optional[dict]] = mapped_column(JSONB)
     collection: Mapped[Optional[str]] = mapped_column(String(128), index=True)
-    path_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True)
+    path_hash: Mapped[Optional[str]] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow, index=True
     )
     last_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship("User")
 
     @validates("tags")
     def validate_tags(self, key, value):
@@ -290,7 +297,12 @@ class Document(AsyncAttrs, Base):
                 raise ValueError("tags too large (max 5KB)")
         return value
 
-    __table_args__ = (Index("idx_documents_collection_created", "collection", created_at.desc()),)
+    __table_args__ = (
+        Index("idx_documents_collection_created", "collection", created_at.desc()),
+        Index("idx_documents_user_created", "user_id", created_at.desc()),
+        # path_hash is unique per user, not globally
+        UniqueConstraint("user_id", "path_hash", name="uq_user_document_path"),
+    )
 
 
 class UserToolAccess(AsyncAttrs, Base):

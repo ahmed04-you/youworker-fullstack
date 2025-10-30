@@ -19,6 +19,7 @@ def build_chunk_metadata(
     path_hash: str,
     original_format: str | None,
     output_format: str,
+    user_id: int | None = None,
     pages: Sequence[Dict] | None = None,
     tags: List[str] | None = None,
 ) -> Dict[str, Any]:
@@ -30,6 +31,7 @@ def build_chunk_metadata(
         path_hash: Hash of the source path
         original_format: MIME type of original file
         output_format: Rendered format (markdown/json)
+        user_id: User ID for document ownership filtering in Qdrant
         pages: Page metadata list
         tags: Optional tags
 
@@ -44,6 +46,8 @@ def build_chunk_metadata(
         "output_format": output_format,
         "pages": list(pages or []),
     }
+    if user_id is not None:
+        metadata["user_id"] = user_id
     if tags:
         metadata["tags"] = tags
     return metadata
@@ -95,7 +99,7 @@ def prune_metadata(
                 return working
 
     # Remove non-essential keys by priority
-    essential_keys = {"uri", "path_hash", "chunk_id", "source", "mime"}
+    essential_keys = {"uri", "path_hash", "chunk_id", "source", "mime", "user_id"}
     removable = sorted(
         (k for k in working if k not in essential_keys),
         key=lambda k: approx_size(working[k]),

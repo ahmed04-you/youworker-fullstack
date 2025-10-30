@@ -15,7 +15,6 @@ pydantic = "^2.9.2"
 pydantic-settings = "^2.6.1"
 python-multipart = "^0.0.20"
 slowapi = "^0.1.9"
-prometheus-fastapi-instrumentator = "^7.0.0"
 websockets = ">=12,<16"
 python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 

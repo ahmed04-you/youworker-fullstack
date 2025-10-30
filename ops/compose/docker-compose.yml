@@ -6,7 +6,7 @@ x-healthcheck-defaults: &healthcheck-defaults
 
 services:
   postgres:
-    image: postgres:15
+    image: postgres:latest
     container_name: youworker-postgres
     restart: unless-stopped
     environment:
@@ -22,7 +22,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-youworker}"]
 
   qdrant:
-    image: qdrant/qdrant:v1.8.2
+    image: qdrant/qdrant:latest
     container_name: youworker-qdrant
     restart: unless-stopped
     ports:
@@ -224,50 +224,8 @@ services:
       retries: 5
       start_period: 300s
 
-  grafana:
-    image: grafana/grafana:10.4.3
-    container_name: youworker-grafana
-    restart: unless-stopped
-    ports:
-      - "3001:3000"
-    volumes:
-      - ../../data/grafana:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3001}
-      GF_INSTALL_PLUGINS: ""
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
-
-  prometheus:
-    image: prom/prometheus:v2.51.2
-    container_name: youworker-prometheus
-    restart: unless-stopped
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ../../data/prometheus:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
-    depends_on:
-      api:
-        condition: service_healthy
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
-
   nginx:
-    image: nginx:1.25.5-alpine
+    image: nginx:alpine
     container_name: youworker-nginx
     restart: unless-stopped
     network_mode: "host"

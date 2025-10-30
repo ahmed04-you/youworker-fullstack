@@ -66,8 +66,6 @@ Load Balancer: HAProxy / NGINX
 6333    - Qdrant (interno)
 11434   - Ollama (interno)
 7001-05 - Server MCP (interno)
-3001    - Grafana (opzionale)
-9090    - Prometheus (opzionale)
 ```
 
 ---
@@ -349,7 +347,7 @@ docker compose -f ops/compose/docker-compose.yml logs -f
 docker ps
 ```
 
-Dovresti vedere **13 container** in esecuzione:
+Dovresti vedere **11 container** in esecuzione:
 ```
 CONTAINER ID   IMAGE                    STATUS         PORTS
 abc123...      youworker-frontend       Up 2 minutes   3000/tcp
@@ -359,12 +357,10 @@ jkl012...      youworker-mcp-semantic   Up 2 minutes   7002/tcp
 mno345...      youworker-mcp-datetime   Up 2 minutes   7003/tcp
 pqr678...      youworker-mcp-ingest     Up 2 minutes   7004/tcp
 stu901...      youworker-mcp-units      Up 2 minutes   7005/tcp
-vwx234...      postgres:15              Up 2 minutes   5432/tcp
+vwx234...      postgres:latest          Up 2 minutes   5432/tcp
 yza567...      qdrant/qdrant:latest     Up 2 minutes   6333/tcp
 bcd890...      ollama/ollama:latest     Up 2 minutes   11434/tcp
 efg123...      nginx:alpine             Up 2 minutes   0.0.0.0:8000->443/tcp
-hij456...      grafana/grafana:latest   Up 2 minutes   0.0.0.0:3001->3000/tcp
-klm789...      prom/prometheus:latest   Up 2 minutes   9090/tcp
 ```
 
 ### Inizializzazione Database
@@ -514,22 +510,7 @@ crontab -e
 0 2 * * * cd /path/to/youworker && make backup BACKUP_DIR=/backup/youworker
 ```
 
-### 2. Configurare Monitoring
-
-```bash
-# Accedi a Grafana
-http://localhost:3001
-# Username: admin
-# Password: admin (cambiala al primo accesso)
-
-# Aggiungi datasource Prometheus
-# URL: http://prometheus:9090
-
-# Importa dashboard pre-configurati
-# Dashboard → Import → ops/grafana/dashboards/*.json
-```
-
-### 3. Configurare Log Rotation
+### 2. Configurare Log Rotation
 
 ```bash
 # File: /etc/logrotate.d/youworker
@@ -548,7 +529,7 @@ http://localhost:3001
 }
 ```
 
-### 4. Configurare Firewall
+### 3. Configurare Firewall
 
 ```bash
 # UFW (Ubuntu)
@@ -607,7 +588,6 @@ AUTHENTIK_ENABLED=true
 - [ ] IP whitelisting configurato
 - [ ] AUTHENTIK configurato e testato
 - [ ] Backup automatici schedulati
-- [ ] Monitoring Grafana configurato
 - [ ] Firewall configurato
 - [ ] Log rotation configurato
 - [ ] Disaster recovery testato

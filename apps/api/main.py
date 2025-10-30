@@ -16,7 +16,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from prometheus_fastapi_instrumentator import Instrumentator
 
 from apps.api.config import settings
 from apps.api.middleware import (
@@ -91,12 +90,6 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
-
-instrumentator = Instrumentator(
-    should_group_status_codes=True,
-    should_ignore_untemplated=True,
-)
-instrumentator.instrument(app).expose(app, include_in_schema=False, should_gzip=True)
 
 # Configure rate limiting
 app.state.limiter = limiter
