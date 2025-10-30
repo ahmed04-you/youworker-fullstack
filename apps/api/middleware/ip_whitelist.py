@@ -74,7 +74,7 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
 
         Checks headers in order:
         1. X-Forwarded-For (proxy/load balancer)
-        2. X-Real-IP (Nginx)
+        2. X-Real-IP (reverse proxy)
         3. request.client.host (direct connection)
         """
         # Check X-Forwarded-For header (may contain multiple IPs)
@@ -83,7 +83,7 @@ class IPWhitelistMiddleware(BaseHTTPMiddleware):
             # Take the first IP (original client)
             return forwarded_for.split(",")[0].strip()
 
-        # Check X-Real-IP header (Nginx)
+        # Check X-Real-IP header (reverse proxy)
         real_ip = request.headers.get("X-Real-IP")
         if real_ip:
             return real_ip.strip()

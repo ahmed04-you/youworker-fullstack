@@ -56,7 +56,10 @@ class StartupService:
             if decrypted != test_data:
                 raise ValueError("Encryption test failed: data mismatch")
         except Exception as e:
-            logger.critical(f"STARTUP FAILED: Encryption key validation failed: {e}")
+            logger.critical(
+                "STARTUP FAILED: Encryption key validation failed",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
             raise ConfigurationError(f"Invalid encryption configuration: {e}") from e
 
     def _validate_csrf_config(self) -> None:
@@ -90,9 +93,19 @@ class StartupService:
 
         try:
             Path(settings.ingest_upload_root).mkdir(parents=True, exist_ok=True)
-            logger.info("Ensured directory exists: %s", settings.ingest_upload_root)
+            logger.info(
+                "Ensured directory exists",
+                extra={"directory": str(settings.ingest_upload_root)}
+            )
         except (OSError, PermissionError) as e:
-            logger.warning("Could not create directory %s: %s", settings.ingest_upload_root, e)
+            logger.warning(
+                "Could not create directory",
+                extra={
+                    "directory": str(settings.ingest_upload_root),
+                    "error": str(e),
+                    "error_type": type(e).__name__
+                }
+            )
 
         # Initialize database
         logger.info("Initializing database...")
@@ -155,7 +168,10 @@ class StartupService:
                     server_id = derive_server_id(url)
                     mcp_server_configs.append({"server_id": server_id, "url": url})
 
-        logger.info(f"Configured MCP servers: {mcp_server_configs}")
+        logger.info(
+            "Configured MCP servers",
+            extra={"mcp_servers": mcp_server_configs, "count": len(mcp_server_configs)}
+        )
 
         # Initialize MCP registry
         self.registry = MCPRegistry(server_configs=mcp_server_configs)
@@ -164,7 +180,10 @@ class StartupService:
         logger.info("About to connect to MCP servers...")
         try:
             await self.registry.connect_all()
-            logger.info(f"Connected to {len(self.registry.clients)} MCP servers")
+            logger.info(
+                "Connected to MCP servers",
+                extra={"server_count": len(self.registry.clients)}
+            )
 
             # Persist MCP servers and tools on refresh
             async def persist_registry(tools: dict[str, Any], clients: dict[str, Any]):
@@ -196,7 +215,10 @@ class StartupService:
             refresh_interval = max(0, settings.mcp_refresh_interval)
             await self.registry.start_periodic_refresh(interval_seconds=refresh_interval)
         except (ConnectionError, TimeoutError, OSError) as e:
-            logger.error(f"Failed to connect to MCP servers: {e}")
+            logger.error(
+                "Failed to connect to MCP servers",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
             # Continue anyway - some servers may be unavailable
 
         # Initialize agent loop

@@ -79,7 +79,6 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 
 ### Infrastruttura
 - **Docker & Docker Compose**: Containerizzazione e orchestrazione
-- **NGINX**: Reverse proxy con terminazione SSL
 
 ---
 
@@ -91,19 +90,16 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 │              (Autenticazione & API Keys)                     │
 └───────────────────────────┬─────────────────────────────────┘
                             │
-┌───────────────────────────▼─────────────────────────────────┐
-│                    NGINX Reverse Proxy                       │
-│              (Porta 8000 - HTTPS con SSL)                    │
-└──────────────┬──────────────────────────────────┬───────────┘
-               │                                   │
-        ┌──────▼──────┐                    ┌──────▼──────────┐
-        │   Frontend   │                    │   Backend API   │
-        │  (Next.js)   │◄──────────────────►│   (FastAPI)     │
-        │  Porta 3000  │    WebSocket/HTTP  │   Porta 8001    │
-        └──────────────┘                    └────────┬────────┘
-                                                     │
-        ┌────────────────────────────────────────────┴─────────────┐
-        │                                                            │
+                     ┌──────┴──────┐
+                     │             │
+              ┌──────▼──────┐ ┌────▼────────────┐
+              │   Frontend   │ │   Backend API   │
+              │  (Next.js)   │◄┤   (FastAPI)     │
+              │  Porta 3000  │ │   Porta 8001    │
+              └──────────────┘ └────────┬────────┘
+                                        │
+        ┌───────────────────────────────┴─────────────┐
+        │                                               │
 ┌───────▼────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼─────┐
 │ Server MCP (5) │  │   Ollama     │  │   Qdrant     │  │  PostgreSQL  │
 │  Porte 7001-05 │  │  Porta 11434 │  │  Porta 6333  │  │  Porta 5432  │
@@ -177,18 +173,7 @@ CHAT_MODEL=gpt-oss:20b
 EMBED_MODEL=embeddinggemma:300m
 ```
 
-### Passo 3: Certificati SSL
-
-```bash
-# Genera certificati autofirmati (sviluppo)
-make ssl-setup
-
-# OPPURE copia i tuoi certificati in:
-# ops/docker/nginx/certs/cert.pem
-# ops/docker/nginx/certs/key.pem
-```
-
-### Passo 4: Avvio dei Servizi
+### Passo 3: Avvio dei Servizi
 
 ```bash
 # Build delle immagini Docker
@@ -204,7 +189,7 @@ docker ps
 make compose-logs
 ```
 
-### Passo 5: Download Modelli AI
+### Passo 4: Download Modelli AI
 
 ```bash
 # Scarica i modelli LLM necessari (può richiedere tempo)
@@ -215,7 +200,7 @@ docker exec -it ollama ollama pull gpt-oss:20b
 docker exec -it ollama ollama pull embeddinggemma:300m
 ```
 
-### Passo 6: Inizializzazione Database
+### Passo 5: Inizializzazione Database
 
 ```bash
 # Esegui le migrazioni del database
@@ -225,12 +210,12 @@ make db-migrate
 docker exec -it postgres psql -U youworker -d youworker -c "\dt"
 ```
 
-### Passo 7: Verifica Installazione
+### Passo 6: Verifica Installazione
 
 Apri il browser e naviga a:
 
-- **Frontend**: `https://youworker.tuazienda.it`
-- **API Health**: `https://youworker.tuazienda.it:8000/health`
+- **Frontend**: `http://localhost:3000`
+- **API Health**: `http://localhost:8001/health`
 
 ---
 
@@ -407,19 +392,19 @@ youworker-fullstack/
 
 ```bash
 # Salute generale
-curl https://youworker.tuazienda.it:8000/health
+curl http://localhost:8001/health
 
 # Stato server MCP
-curl https://youworker.tuazienda.it:8000/health/mcp
+curl http://localhost:8001/health/mcp
 
 # Stato Ollama e modelli
-curl https://youworker.tuazienda.it:8000/health/ollama
+curl http://localhost:8001/health/ollama
 
 # Stato Qdrant
-curl https://youworker.tuazienda.it:8000/health/qdrant
+curl http://localhost:8001/health/qdrant
 
 # Stato PostgreSQL
-curl https://youworker.tuazienda.it:8000/health/postgres
+curl http://localhost:8001/health/postgres
 ```
 
 ### Log Analysis
@@ -465,7 +450,7 @@ docker exec -it youworker-api python -m scripts.init_qdrant
 docker exec youworker-api env | grep AUTH
 
 # Test API key
-curl -H "X-API-Key: YOUR_KEY" https://youworker.tuazienda.it:8000/v1/auth/me
+curl -H "X-API-Key: YOUR_KEY" http://localhost:8001/v1/auth/me
 ```
 
 ---

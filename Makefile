@@ -21,8 +21,6 @@ help:
 	@echo "  status           - Show service status"
 	@echo "  dev-frontend     - Run frontend in development mode"
 	@echo "  frontend-logs    - View frontend logs"
-	@echo "  ssl-setup        - Generate SSL certificates"
-	@echo "  start-ssl        - Start services with SSL setup"
 	@echo ""
 	@echo "Backup & Recovery:"
 	@echo "  backup           - Create encrypted backup (PostgreSQL + Qdrant)"
@@ -34,13 +32,8 @@ help:
 # Start all services (GPU auto-detected and used if available)
 compose-up:
 	@# Ensure required data directories exist with permissive access for containers
-	@mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models
+	@mkdir -p data/postgres data/qdrant data/ollama data/uploads data/models
 	@chmod -R u+rwX,go+rwX data 2>/dev/null || true
-	@# Ensure SSL certs exist for nginx
-	@if [ ! -f data/nginx/ssl/cert.pem ] || [ ! -f data/nginx/ssl/key.pem ]; then \
-		echo "[compose-up] Generating local SSL certificates..."; \
-		./scripts/generate-ssl-cert.sh localhost 127.0.0.1; \
-	fi
 	@if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then \
 		echo "[compose-up] GPU detected and will be used for acceleration"; \
 	else \
@@ -79,7 +72,7 @@ reset-data:
 		echo "Removing data directories as root (handles permissions)..."; \
 		docker run --rm -v "$(shell pwd)/data:/data" alpine:3 sh -c 'rm -rf /data/*'; \
 		echo "Re-creating expected directories..."; \
-		mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models; \
+		mkdir -p data/postgres data/qdrant data/ollama data/uploads data/models; \
 		chmod -R u+rwX,go+rwX data; \
 		echo "Data reset complete."; \
 	else \
@@ -187,31 +180,16 @@ frontend-logs:
 build-frontend:
 	cd apps/frontend && npm run build
 
-# SSL certificate generation
-ssl-setup:
-	@echo "Generating SSL certificates..."
-	./scripts/generate-ssl-cert.sh localhost 127.0.0.1
-
-# Start with SSL setup
-start-ssl:
-	@echo "Starting YouWorker.AI with SSL..."
-	./scripts/start-with-ssl.sh localhost 127.0.0.1
-
-# Start with SSL for production domain
-start-ssl-prod:
-	@echo "Starting YouWorker.AI with SSL for production..."
-	./scripts/start-with-ssl.sh $(DOMAIN) $(IP)
-
 # Create necessary directories
 setup-dirs:
 	@echo "Creating necessary directories..."
-	mkdir -p data/postgres data/qdrant data/ollama data/nginx/ssl data/uploads data/models
+	mkdir -p data/postgres data/qdrant data/ollama data/uploads data/models
 
-# Full setup (directories + SSL + start)
-setup-full: setup-dirs ssl-setup compose-up
+# Full setup (directories + start)
+setup-full: setup-dirs compose-up
 	@echo "Full setup completed!"
-	@echo "Access YouWorker.AI at: https://localhost:8000"
-	@echo "API documentation at: https://localhost:8001/docs"
+	@echo "Access YouWorker.AI at: http://localhost:3000"
+	@echo "API documentation at: http://localhost:8001/docs"
 
 # Create encrypted database backup (PostgreSQL + Qdrant)
 backup:

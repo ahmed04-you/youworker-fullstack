@@ -25,29 +25,19 @@ YouWorker è un sistema distribuito basato su microservizi, progettato per funzi
 └────────────────────────────┬─────────────────────────────────────┘
                              │ Header forwarding
                              │ X-Authentik-Api-Key
-┌────────────────────────────▼─────────────────────────────────────┐
-│                      NGINX (Reverse Proxy)                        │
-│  - Terminazione SSL/TLS                                           │
-│  - Load balancing                                                 │
-│  - Header injection                                               │
-│  - Rate limiting (primo livello)                                  │
-└────────┬────────────────────────────────────┬─────────────────────┘
-         │                                    │
-         │ /                                  │ /v1/*
-         │ /_next/*                           │ /health
-         │ /api/*                             │ /chat/*
-         │                                    │
-┌────────▼────────┐                  ┌────────▼────────────────────┐
-│   FRONTEND      │                  │      BACKEND API            │
-│   (Next.js 16)  │                  │      (FastAPI)              │
-│                 │                  │                             │
-│ - React 19      │◄────────────────►│ - REST API                  │
-│ - SSR/SSG       │  HTTP/WebSocket  │ - WebSocket streaming       │
-│ - TypeScript    │                  │ - Async/await               │
-│ - Tailwind      │                  │ - Python 3.11+              │
-│                 │                  │                             │
-│ Port: 3000      │                  │ Port: 8001                  │
-└─────────────────┘                  └──────────┬──────────────────┘
+                      ┌──────┴──────┐
+                      │             │
+             ┌────────▼────────┐  ┌─▼───────────────────────────┐
+             │   FRONTEND      │  │      BACKEND API            │
+             │   (Next.js 16)  │  │      (FastAPI)              │
+             │                 │  │                             │
+             │ - React 19      │◄─┤ - REST API                  │
+             │ - SSR/SSG       │  │ - WebSocket streaming       │
+             │ - TypeScript    │  │ - Async/await               │
+             │ - Tailwind      │  │ - Python 3.11+              │
+             │                 │  │                             │
+             │ Port: 3000      │  │ Port: 8001                  │
+             └─────────────────┘  └──────────┬──────────────────┘
                                                 │
                          ┌──────────────────────┼────────────────┐
                          │                      │                │
@@ -89,7 +79,6 @@ YouWorker è un sistema distribuito basato su microservizi, progettato per funzi
 
 **Integrazione con YouWorker:**
 - Header forwarding: `X-Authentik-Api-Key`
-- Proxy outpost davanti a NGINX
 - Validazione API key nel backend
 - Mapping utenti automatico
 
@@ -98,44 +87,7 @@ Vedi [AUTHENTIK.md](AUTHENTIK.md) per dettagli.
 
 ---
 
-### 2. NGINX (Reverse Proxy)
-
-**Responsabilità:**
-- Terminazione SSL/TLS
-- Routing richieste tra frontend e backend
-- Compressione gzip
-- Caching statico
-- Rate limiting di primo livello
-- Header di sicurezza
-
-**Configurazione:**
-File: `ops/docker/nginx/nginx.conf`
-
-**Routing:**
-```
-/                   → Frontend (Next.js)
-/_next/*            → Frontend (assets statici)
-/api/*              → Frontend (API routes)
-/v1/*               → Backend API (REST)
-/chat/*             → Backend API (WebSocket)
-/health             → Backend API (health checks)
-```
-
-**SSL/TLS:**
-- Certificati in `ops/docker/nginx/certs/`
-- TLS 1.2+ obbligatorio
-- Cipher suite sicure (Mozilla Modern)
-- HSTS abilitato
-
-**Performance:**
-- Worker processes: Auto (numero CPU)
-- Keepalive: 65s
-- Client body size: 100MB (upload documenti)
-- Proxy buffering: Abilitato
-
----
-
-### 3. Frontend (Next.js)
+### 2. Frontend (Next.js)
 
 **Architettura:**
 ```

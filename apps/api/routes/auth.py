@@ -83,7 +83,7 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
     Authenticate using Authentik SSO headers.
 
     Authentik injects per-user authentication headers that are validated here.
-    In development mode, simulated headers from nginx.conf are used.
+    In development mode, simulated headers are used.
 
     This is now the ONLY authentication method supported.
     """

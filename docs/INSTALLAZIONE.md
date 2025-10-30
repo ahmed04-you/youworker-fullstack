@@ -53,15 +53,13 @@ RAM: 64+ GB
 GPU: Multipli NVIDIA A100 (40GB/80GB VRAM)
 Disco: 1+ TB NVMe RAID 10
 Network: 10 Gbps
-Load Balancer: HAProxy / NGINX
 ```
 
 ### Porte di Rete
 
 ```
-8000    - NGINX (HTTPS pubblico)
-8001    - API Backend (interno)
-3000    - Frontend (interno)
+8001    - API Backend
+3000    - Frontend
 5432    - PostgreSQL (interno)
 6333    - Qdrant (interno)
 11434   - Ollama (interno)
@@ -230,59 +228,6 @@ AUTHENTIK_ISSUER=https://auth.tuazienda.it/application/o/youworker/
 
 ---
 
-## Certificati SSL
-
-### Opzione 1: Certificati Self-Signed (Sviluppo)
-
-```bash
-make ssl-setup
-
-# Oppure manualmente:
-mkdir -p ops/docker/nginx/certs
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout ops/docker/nginx/certs/key.pem \
-  -out ops/docker/nginx/certs/cert.pem \
-  -subj "/C=IT/ST=Milano/L=Milano/O=YouCo/CN=youworker.tuazienda.it"
-```
-
-### Opzione 2: Let's Encrypt (Produzione)
-
-```bash
-# Installa certbot
-sudo apt install certbot
-
-# Genera certificati
-sudo certbot certonly --standalone \
-  -d youworker.tuazienda.it \
-  --email admin@tuazienda.it \
-  --agree-tos
-
-# Copia certificati
-sudo cp /etc/letsencrypt/live/youworker.tuazienda.it/fullchain.pem \
-     ops/docker/nginx/certs/cert.pem
-sudo cp /etc/letsencrypt/live/youworker.tuazienda.it/privkey.pem \
-     ops/docker/nginx/certs/key.pem
-
-# Rinnovo automatico
-sudo crontab -e
-# Aggiungi:
-0 0 * * * certbot renew --quiet && cp /etc/letsencrypt/live/youworker.tuazienda.it/*.pem /path/to/youworker/ops/docker/nginx/certs/ && docker restart nginx
-```
-
-### Opzione 3: Certificati Aziendali
-
-```bash
-# Copia i tuoi certificati in:
-ops/docker/nginx/certs/cert.pem  # Certificato pubblico
-ops/docker/nginx/certs/key.pem   # Chiave privata
-
-# Se hai certificato intermedio:
-cat your-cert.crt intermediate.crt > ops/docker/nginx/certs/cert.pem
-cp your-key.key ops/docker/nginx/certs/key.pem
-```
-
----
-
 ## Download Modelli AI
 
 ```bash
@@ -347,7 +292,7 @@ docker compose -f ops/compose/docker-compose.yml logs -f
 docker ps
 ```
 
-Dovresti vedere **11 container** in esecuzione:
+Dovresti vedere **10 container** in esecuzione:
 ```
 CONTAINER ID   IMAGE                    STATUS         PORTS
 abc123...      youworker-frontend       Up 2 minutes   3000/tcp
@@ -360,7 +305,6 @@ stu901...      youworker-mcp-units      Up 2 minutes   7005/tcp
 vwx234...      postgres:latest          Up 2 minutes   5432/tcp
 yza567...      qdrant/qdrant:latest     Up 2 minutes   6333/tcp
 bcd890...      ollama/ollama:latest     Up 2 minutes   11434/tcp
-efg123...      nginx:alpine             Up 2 minutes   0.0.0.0:8000->443/tcp
 ```
 
 ### Inizializzazione Database
@@ -421,7 +365,7 @@ echo "✓ API key salvata in: ~/.youworker-admin-key"
 
 ```bash
 # Verifica salute generale
-curl -k https://localhost:8000/health
+curl http://localhost:8001/health
 
 # Output atteso:
 {

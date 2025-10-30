@@ -38,15 +38,7 @@ Questa guida descrive come configurare AUTHENTIK per l'autenticazione e la gesti
 │  - Inietta header X-Authentik-Api-Key│
 └──────┬───────────────────────────────┘
        │
-       │ 2. Request + Header
-       ▼
-┌──────────────────────────────────────┐
-│           NGINX (YouWorker)          │
-│  - Reverse proxy                     │
-│  - Forward header a backend          │
-└──────┬───────────────────────────────┘
-       │
-       │ 3. Request + X-Authentik-Api-Key
+       │ 2. Request + X-Authentik-Api-Key
        ▼
 ┌──────────────────────────────────────┐
 │         FastAPI Backend              │
@@ -492,18 +484,7 @@ ERROR: Missing authentication header X-Authentik-Api-Key
 1. Verifica configurazione outpost:
    - Custom headers: `X-Authentik-Api-Key: "%(ak_token)s"`
 
-2. Verifica NGINX forwarda l'header:
-
-```nginx
-# ops/docker/nginx/nginx.conf
-location /v1/ {
-    proxy_pass http://api:8001;
-    proxy_set_header X-Authentik-Api-Key $http_x_authentik_api_key;
-    # ... altri header
-}
-```
-
-3. Debug header ricevuti:
+2. Debug header ricevuti:
 
 ```python
 # Aggiungi in middleware
