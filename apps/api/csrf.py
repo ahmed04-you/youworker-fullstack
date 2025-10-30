@@ -17,6 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import ClassVar
 
 from apps.api.config import settings
+from packages.common.exceptions import ConfigurationError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ def _resolve_secret() -> bytes:
 
     secret = settings.csrf_secret or settings.jwt_secret or settings.root_api_key
     if not secret:
-        raise RuntimeError(
+        raise ConfigurationError(
             "CSRF protection is enabled but CSRF_SECRET / JWT_SECRET is not configured."
         )
 

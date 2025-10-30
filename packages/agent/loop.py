@@ -5,15 +5,18 @@ CRITICAL: The agent must emit AT MOST ONE tool call per assistant message and ST
 It continues only after a new completion request that includes the tool result.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import AsyncIterator, Dict, Any
+from typing import AsyncIterator, Any
 
 from packages.llm import OllamaClient, ChatMessage, ToolCall
 from packages.agent.registry import MCPRegistry
+from packages.common import get_settings, Settings
 
 
 class ToolCallViolationError(Exception):
@@ -162,6 +165,8 @@ class AgentLoop:
         registry: MCPRegistry,
         model: str = "gpt-oss:20b",
         default_language: str = DEFAULT_AGENT_LANGUAGE,
+        max_iterations: int | None = None,
+        settings: Settings | None = None,
     ):
         """
         Initialize agent loop.
@@ -170,11 +175,16 @@ class AgentLoop:
             ollama_client: Ollama LLM client
             registry: MCP tool registry
             model: Model name to use
+            default_language: Default language for agent responses
+            max_iterations: Maximum tool call iterations (uses settings if not provided)
+            settings: Settings instance (uses default if not provided)
         """
         self.ollama_client = ollama_client
         self.registry = registry
         self.model = model
         self.default_language = self._normalize_language(default_language)
+        self._settings = settings or get_settings()
+        self._max_iterations = max_iterations or self._settings.max_agent_iterations
 
     @staticmethod
     def _normalize_language(language: str | None) -> str:
@@ -327,10 +337,10 @@ class AgentLoop:
         self,
         messages: list[ChatMessage],
         enable_tools: bool = True,
-        max_iterations: int = 10,
+        max_iterations: int | None = None,
         language: str | None = None,
         model: str | None = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Run agent until completion, handling tool calls automatically.
 
@@ -344,16 +354,21 @@ class AgentLoop:
         Args:
             messages: Initial conversation
             enable_tools: Enable tool calling
-            max_iterations: Max tool iterations to prevent loops
+            max_iterations: Max tool iterations to prevent loops (uses instance default if None)
+            language: Language for agent responses
+            model: Model override
 
         Yields:
             Dict payloads representing SSE events
         """
+        # Use provided max_iterations or fall back to instance default
+        effective_max_iterations = max_iterations if max_iterations is not None else self._max_iterations
+
         conversation = list(messages)
         iterations = 0
         tool_calls_executed = 0
 
-        while iterations < max_iterations:
+        while iterations < effective_max_iterations:
             iterations += 1
 
             # Run one turn and process streaming events

@@ -9,15 +9,20 @@ Tools:
 """
 
 import logging
-import json
 import re
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket
 import pytz
 from dateutil.parser import parse as parse_date
 import dateparser
+
+from packages.mcp.base_handler import (
+    MCPProtocolHandler,
+    MCPServerInfo,
+    mcp_websocket_handler,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -223,274 +228,157 @@ if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=7003)
 
 
-def get_tools_schema() -> list[dict[str, Any]]:
-    return [
-        {
-            "name": "now",
-            "description": "Get the current date and time in the specified timezone. Returns ISO format timestamp.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "tz": {
-                        "type": "string",
-                        "description": "Timezone name (e.g., 'UTC', 'America/New_York', 'Europe/London')",
-                        "default": "UTC",
-                        "minLength": 1,
-                        "maxLength": 64,
-                        "pattern": r"^[A-Za-z0-9._+\-/]+$",
-                    }
-                },
-                "additionalProperties": False,
+# Initialize MCP protocol handler
+mcp_handler = MCPProtocolHandler(
+    server_info=MCPServerInfo(
+        name="datetime",
+        version="0.1.0",
+    )
+)
+
+# Register tools
+mcp_handler.register_tool(
+    name="now",
+    description="Get the current date and time in the specified timezone. Returns ISO format timestamp.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "tz": {
+                "type": "string",
+                "description": "Timezone name (e.g., 'UTC', 'America/New_York', 'Europe/London')",
+                "default": "UTC",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": r"^[A-Za-z0-9._+\-/]+$",
+            }
+        },
+        "additionalProperties": False,
+    },
+    handler=lambda tz="UTC": get_now(tz=tz),
+)
+
+mcp_handler.register_tool(
+    name="format",
+    description="Format a timestamp with a custom format string and timezone. Uses Python strftime format codes.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "iso": {
+                "type": "string",
+                "description": "ISO format timestamp to format",
+                "minLength": ISO_MIN_LEN,
+                "maxLength": ISO_MAX_LEN,
+            },
+            "fmt": {
+                "type": "string",
+                "description": "Format string (e.g., '%Y-%m-%d %H:%M:%S', '%B %d, %Y')",
+                "default": "%Y-%m-%d %H:%M:%S",
+                "minLength": 1,
+                "maxLength": FMT_MAX_LEN,
+            },
+            "tz": {
+                "type": "string",
+                "description": "Target timezone",
+                "default": "UTC",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": r"^[A-Za-z0-9._+\-/]+$",
             },
         },
-        {
-            "name": "format",
-            "description": "Format a timestamp with a custom format string and timezone. Uses Python strftime format codes.",
-            "inputSchema": {
+        "required": ["iso"],
+        "additionalProperties": False,
+    },
+    handler=lambda iso, fmt="%Y-%m-%d %H:%M:%S", tz="UTC": format_time(iso=iso, fmt=fmt, tz=tz),
+)
+
+mcp_handler.register_tool(
+    name="add",
+    description="Add or subtract a time delta from a timestamp. Returns ISO format timestamp.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "iso": {
+                "type": "string",
+                "description": "ISO format timestamp",
+                "minLength": ISO_MIN_LEN,
+                "maxLength": ISO_MAX_LEN,
+            },
+            "delta": {
                 "type": "object",
+                "description": "Time delta to add (use negative values to subtract)",
                 "properties": {
-                    "iso": {
-                        "type": "string",
-                        "description": "ISO format timestamp to format",
-                        "minLength": ISO_MIN_LEN,
-                        "maxLength": ISO_MAX_LEN,
+                    "days": {
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": -DELTA_LIMIT,
+                        "maximum": DELTA_LIMIT,
                     },
-                    "fmt": {
-                        "type": "string",
-                        "description": "Format string (e.g., '%Y-%m-%d %H:%M:%S', '%B %d, %Y')",
-                        "default": "%Y-%m-%d %H:%M:%S",
-                        "minLength": 1,
-                        "maxLength": FMT_MAX_LEN,
+                    "hours": {
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": -DELTA_LIMIT,
+                        "maximum": DELTA_LIMIT,
                     },
-                    "tz": {
-                        "type": "string",
-                        "description": "Target timezone",
-                        "default": "UTC",
-                        "minLength": 1,
-                        "maxLength": 64,
-                        "pattern": r"^[A-Za-z0-9._+\-/]+$",
+                    "minutes": {
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": -DELTA_LIMIT,
+                        "maximum": DELTA_LIMIT,
+                    },
+                    "seconds": {
+                        "type": "integer",
+                        "default": 0,
+                        "minimum": -DELTA_LIMIT,
+                        "maximum": DELTA_LIMIT,
                     },
                 },
-                "required": ["iso"],
+                "required": [],
                 "additionalProperties": False,
             },
-        },
-        {
-            "name": "add",
-            "description": "Add or subtract a time delta from a timestamp. Returns ISO format timestamp.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "iso": {
-                        "type": "string",
-                        "description": "ISO format timestamp",
-                        "minLength": ISO_MIN_LEN,
-                        "maxLength": ISO_MAX_LEN,
-                    },
-                    "delta": {
-                        "type": "object",
-                        "description": "Time delta to add (use negative values to subtract)",
-                        "properties": {
-                            "days": {
-                                "type": "integer",
-                                "default": 0,
-                                "minimum": -DELTA_LIMIT,
-                                "maximum": DELTA_LIMIT,
-                            },
-                            "hours": {
-                                "type": "integer",
-                                "default": 0,
-                                "minimum": -DELTA_LIMIT,
-                                "maximum": DELTA_LIMIT,
-                            },
-                            "minutes": {
-                                "type": "integer",
-                                "default": 0,
-                                "minimum": -DELTA_LIMIT,
-                                "maximum": DELTA_LIMIT,
-                            },
-                            "seconds": {
-                                "type": "integer",
-                                "default": 0,
-                                "minimum": -DELTA_LIMIT,
-                                "maximum": DELTA_LIMIT,
-                            },
-                        },
-                        "required": [],
-                        "additionalProperties": False,
-                    },
-                    "tz": {
-                        "type": "string",
-                        "description": "Timezone for the result",
-                        "default": "UTC",
-                        "minLength": 1,
-                        "maxLength": 64,
-                        "pattern": r"^[A-Za-z0-9._+\-/]+$",
-                    },
-                },
-                "required": ["iso", "delta"],
-                "additionalProperties": False,
+            "tz": {
+                "type": "string",
+                "description": "Timezone for the result",
+                "default": "UTC",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": r"^[A-Za-z0-9._+\-/]+$",
             },
         },
-        {
-            "name": "parse_natural",
-            "description": "Parse natural language date/time expressions with optional timezone.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "Natural language date expression",
-                        "minLength": 1,
-                        "maxLength": 256,
-                    },
-                    "tz": {
-                        "type": "string",
-                        "description": "Timezone name (default UTC)",
-                        "default": "UTC",
-                        "minLength": 1,
-                        "maxLength": 64,
-                        "pattern": r"^[A-Za-z0-9._+\-/]+$",
-                    },
-                },
-                "required": ["text"],
-                "additionalProperties": False,
+        "required": ["iso", "delta"],
+        "additionalProperties": False,
+    },
+    handler=lambda iso, delta, tz="UTC": add_time(iso=iso, delta=delta, tz=tz),
+)
+
+mcp_handler.register_tool(
+    name="parse_natural",
+    description="Parse natural language date/time expressions with optional timezone.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string",
+                "description": "Natural language date expression",
+                "minLength": 1,
+                "maxLength": 256,
+            },
+            "tz": {
+                "type": "string",
+                "description": "Timezone name (default UTC)",
+                "default": "UTC",
+                "minLength": 1,
+                "maxLength": 64,
+                "pattern": r"^[A-Za-z0-9._+\-/]+$",
             },
         },
-    ]
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+    handler=lambda text, tz="UTC": parse_natural(text=text, tz=tz),
+)
 
 
 @app.websocket("/mcp")
 async def mcp_socket(ws: WebSocket):
-    await ws.accept()
-    try:
-        while True:
-            raw = await ws.receive_text()
-            try:
-                req = json.loads(raw)
-            except Exception:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": None,
-                            "error": {
-                                "code": -32700,
-                                "message": "Parse error",
-                                "data": {"raw": str(raw)[:200]},
-                            },
-                        }
-                    )
-                )
-                continue
-
-            req_id = req.get("id")
-            method = req.get("method")
-            params = req.get("params", {}) or {}
-
-            try:
-                if method == "initialize":
-                    result = {
-                        "protocolVersion": "2024-10-01",
-                        "serverInfo": {"name": "datetime", "version": "0.1.0"},
-                        "capabilities": {"tools": {"list": True, "call": True}},
-                    }
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
-                    )
-
-                elif method == "tools/list":
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"tools": get_tools_schema()},
-                            }
-                        )
-                    )
-
-                elif method == "tools/call":
-                    name = params.get("name")
-                    arguments = params.get("arguments", {})
-                    if name == "now":
-                        result = get_now(tz=arguments.get("tz", "UTC"))
-                    elif name == "format":
-                        result = format_time(
-                            iso=arguments["iso"],
-                            fmt=arguments.get("fmt", "%Y-%m-%d %H:%M:%S"),
-                            tz=arguments.get("tz", "UTC"),
-                        )
-                    elif name == "add":
-                        result = add_time(
-                            iso=arguments["iso"],
-                            delta=arguments["delta"],
-                            tz=arguments.get("tz", "UTC"),
-                        )
-                    elif name == "parse_natural":
-                        result = parse_natural(
-                            text=arguments["text"],
-                            tz=arguments.get("tz", "UTC"),
-                        )
-                    else:
-                        await ws.send_text(
-                            json.dumps(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": req_id,
-                                    "error": {
-                                        "code": -32601,
-                                        "message": f"Unknown tool: {name}",
-                                        "data": {"name": name},
-                                    },
-                                }
-                            )
-                        )
-                        continue
-
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"content": [{"type": "json", "json": result}]},
-                            }
-                        )
-                    )
-
-                elif method == "ping":
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
-                    )
-
-                else:
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {
-                                    "code": -32601,
-                                    "message": "Method not found",
-                                    "data": {"method": method},
-                                },
-                            }
-                        )
-                    )
-
-            except Exception as e:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": str(e),
-                                "data": {"type": type(e).__name__},
-                            },
-                        }
-                    )
-                )
-    except WebSocketDisconnect:
-        logger.info("MCP WebSocket disconnected (datetime)")
+    """MCP WebSocket endpoint using base handler."""
+    await mcp_websocket_handler(ws, mcp_handler)

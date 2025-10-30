@@ -12,7 +12,6 @@ Tools:
 import asyncio
 import os
 import ipaddress
-import json
 import logging
 import re
 import socket
@@ -21,8 +20,14 @@ from urllib.parse import urlparse
 
 import httpx
 from readability import Document
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket
 from bs4 import BeautifulSoup
+
+from packages.mcp.base_handler import (
+    MCPProtocolHandler,
+    MCPServerInfo,
+    mcp_websocket_handler,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -542,304 +547,184 @@ async def _ensure_safe_url(raw_url: str) -> str:
     return parsed.geturl()
 
 
-def get_tools_schema() -> list[dict[str, Any]]:
-    """Return tool definitions in MCP schema."""
-    return [
-        {
-            "name": "search",
-            "description": "Search the web for information. Returns a list of search results with titles, URLs, and snippets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query",
-                        "minLength": QUERY_MIN_LEN,
-                        "maxLength": QUERY_MAX_LEN,
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of results to return",
-                        "default": 5,
-                        "minimum": 1,
-                        "maximum": MAX_TOP_K,
-                    },
-                    "site": {
-                        "type": "string",
-                        "description": "Optional site restriction (e.g., 'wikipedia.org')",
-                        "minLength": 3,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9.-]+$",
-                    },
-                },
-                "required": ["query"],
-                "additionalProperties": False,
+# Initialize MCP protocol handler
+mcp_handler = MCPProtocolHandler(
+    server_info=MCPServerInfo(
+        name="web",
+        version="0.1.0",
+    )
+)
+
+# Register tools
+mcp_handler.register_tool(
+    name="search",
+    description="Search the web for information. Returns a list of search results with titles, URLs, and snippets.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query",
+                "minLength": QUERY_MIN_LEN,
+                "maxLength": QUERY_MAX_LEN,
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Number of results to return",
+                "default": 5,
+                "minimum": 1,
+                "maximum": MAX_TOP_K,
+            },
+            "site": {
+                "type": "string",
+                "description": "Optional site restriction (e.g., 'wikipedia.org')",
+                "minLength": 3,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9.-]+$",
             },
         },
-        {
-            "name": "fetch",
-            "description": "Fetch and extract content from a URL. Returns the page title, URL, main text content, and links.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to fetch",
-                        "minLength": 8,
-                        "maxLength": 2048,
-                        "pattern": r"^https?://.+$",
-                    },
-                    "max_links": {
-                        "type": "integer",
-                        "description": "Maximum number of links to return",
-                        "default": 10,
-                        "minimum": 1,
-                        "maximum": MAX_FETCH_LINKS,
-                    },
-                },
-                "required": ["url"],
-                "additionalProperties": False,
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+    handler=lambda query, top_k=5, site=None: search_web(
+        query=query, top_k=top_k, site=site
+    ),
+)
+
+mcp_handler.register_tool(
+    name="fetch",
+    description="Fetch and extract content from a URL. Returns the page title, URL, main text content, and links.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "The URL to fetch",
+                "minLength": 8,
+                "maxLength": 2048,
+                "pattern": r"^https?://.+$",
+            },
+            "max_links": {
+                "type": "integer",
+                "description": "Maximum number of links to return",
+                "default": 10,
+                "minimum": 1,
+                "maximum": MAX_FETCH_LINKS,
             },
         },
-        {
-            "name": "head",
-            "description": "Fast HTTP HEAD probe. Returns status and key headers (content-type, length, last-modified, server).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to probe",
-                        "minLength": 8,
-                        "maxLength": 2048,
-                        "pattern": r"^https?://.+$",
-                    },
-                    "follow_redirects": {
-                        "type": "boolean",
-                        "description": "Whether to follow redirects",
-                        "default": False,
-                    },
-                },
-                "required": ["url"],
-                "additionalProperties": False,
+        "required": ["url"],
+        "additionalProperties": False,
+    },
+    handler=lambda url, max_links=10: fetch_url(url=url, max_links=max_links),
+)
+
+mcp_handler.register_tool(
+    name="head",
+    description="Fast HTTP HEAD probe. Returns status and key headers (content-type, length, last-modified, server).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "The URL to probe",
+                "minLength": 8,
+                "maxLength": 2048,
+                "pattern": r"^https?://.+$",
+            },
+            "follow_redirects": {
+                "type": "boolean",
+                "description": "Whether to follow redirects",
+                "default": False,
             },
         },
-        {
-            "name": "extract_readable",
-            "description": "Extract main article content and metadata from a URL using readability.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "The URL to extract",
-                        "minLength": 8,
-                        "maxLength": 2048,
-                        "pattern": r"^https?://.+$",
-                    },
-                    "include_links": {
-                        "type": "boolean",
-                        "description": "Include hyperlinks from the main content",
-                        "default": False,
-                    },
-                    "max_chars": {
-                        "type": "integer",
-                        "description": "Maximum number of characters of text to return",
-                        "default": 5000,
-                        "minimum": 200,
-                        "maximum": 50000,
-                    },
-                },
-                "required": ["url"],
-                "additionalProperties": False,
+        "required": ["url"],
+        "additionalProperties": False,
+    },
+    handler=lambda url, follow_redirects=False: head_url(
+        url=url, follow_redirects=follow_redirects
+    ),
+)
+
+mcp_handler.register_tool(
+    name="extract_readable",
+    description="Extract main article content and metadata from a URL using readability.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "The URL to extract",
+                "minLength": 8,
+                "maxLength": 2048,
+                "pattern": r"^https?://.+$",
+            },
+            "include_links": {
+                "type": "boolean",
+                "description": "Include hyperlinks from the main content",
+                "default": False,
+            },
+            "max_chars": {
+                "type": "integer",
+                "description": "Maximum number of characters of text to return",
+                "default": 5000,
+                "minimum": 200,
+                "maximum": 50000,
             },
         },
-        {
-            "name": "crawl",
-            "description": "Crawl a page and outgoing links up to depth 1–2; returns titles, URLs, and readable snippets.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "Starting URL",
-                        "minLength": 8,
-                        "maxLength": 2048,
-                        "pattern": r"^https?://.+$",
-                    },
-                    "depth": {
-                        "type": "integer",
-                        "description": "Maximum crawl depth (0=current page only)",
-                        "default": 1,
-                        "minimum": 0,
-                        "maximum": CRAWL_MAX_DEPTH,
-                    },
-                    "max_pages": {
-                        "type": "integer",
-                        "description": "Maximum pages to visit",
-                        "default": 5,
-                        "minimum": 1,
-                        "maximum": CRAWL_MAX_PAGES,
-                    },
-                    "same_host": {
-                        "type": "boolean",
-                        "description": "Restrict crawl to the same host",
-                        "default": True,
-                    },
-                },
-                "required": ["url"],
-                "additionalProperties": False,
+        "required": ["url"],
+        "additionalProperties": False,
+    },
+    handler=lambda url, include_links=False, max_chars=5000: extract_readable(
+        url=url, include_links=include_links, max_chars=max_chars
+    ),
+)
+
+mcp_handler.register_tool(
+    name="crawl",
+    description="Crawl a page and outgoing links up to depth 1–2; returns titles, URLs, and readable snippets.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "Starting URL",
+                "minLength": 8,
+                "maxLength": 2048,
+                "pattern": r"^https?://.+$",
+            },
+            "depth": {
+                "type": "integer",
+                "description": "Maximum crawl depth (0=current page only)",
+                "default": 1,
+                "minimum": 0,
+                "maximum": CRAWL_MAX_DEPTH,
+            },
+            "max_pages": {
+                "type": "integer",
+                "description": "Maximum pages to visit",
+                "default": 5,
+                "minimum": 1,
+                "maximum": CRAWL_MAX_PAGES,
+            },
+            "same_host": {
+                "type": "boolean",
+                "description": "Restrict crawl to the same host",
+                "default": True,
             },
         },
-    ]
+        "required": ["url"],
+        "additionalProperties": False,
+    },
+    handler=lambda url, depth=1, max_pages=5, same_host=True: crawl(
+        url=url, depth=depth, max_pages=max_pages, same_host=same_host
+    ),
+)
 
 
 @app.websocket("/mcp")
 async def mcp_socket(ws: WebSocket):
-    """JSON-RPC 2.0 over WebSocket endpoint implementing MCP methods."""
-    await ws.accept()
-    try:
-        while True:
-            raw = await ws.receive_text()
-            try:
-                req = json.loads(raw)
-            except Exception:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": None,
-                            "error": {
-                                "code": -32700,
-                                "message": "Parse error",
-                                "data": {"raw": str(raw)[:200]},
-                            },
-                        }
-                    )
-                )
-                continue
-
-            req_id = req.get("id")
-            method = req.get("method")
-            params = req.get("params", {}) or {}
-
-            try:
-                if method == "initialize":
-                    result = {
-                        "protocolVersion": "2024-10-01",
-                        "serverInfo": {"name": "web", "version": "0.1.0"},
-                        "capabilities": {"tools": {"list": True, "call": True}},
-                    }
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
-                    )
-
-                elif method == "tools/list":
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"tools": get_tools_schema()},
-                            }
-                        )
-                    )
-
-                elif method == "tools/call":
-                    name = params.get("name")
-                    arguments = params.get("arguments", {})
-                    if name == "search":
-                        result = await search_web(
-                            query=arguments["query"],
-                            top_k=arguments.get("top_k", 5),
-                            site=arguments.get("site"),
-                        )
-                    elif name == "fetch":
-                        result = await fetch_url(
-                            url=arguments["url"],
-                            max_links=arguments.get("max_links", 10),
-                        )
-                    elif name == "head":
-                        result = await head_url(
-                            url=arguments["url"],
-                            follow_redirects=arguments.get("follow_redirects", False),
-                        )
-                    elif name == "extract_readable":
-                        result = await extract_readable(
-                            url=arguments["url"],
-                            include_links=arguments.get("include_links", False),
-                            max_chars=arguments.get("max_chars", 5000),
-                        )
-                    elif name == "crawl":
-                        result = await crawl(
-                            url=arguments["url"],
-                            depth=arguments.get("depth", 1),
-                            max_pages=arguments.get("max_pages", 5),
-                            same_host=arguments.get("same_host", True),
-                        )
-                    else:
-                        await ws.send_text(
-                            json.dumps(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": req_id,
-                                    "error": {
-                                        "code": -32601,
-                                        "message": f"Unknown tool: {name}",
-                                        "data": {"name": name},
-                                    },
-                                }
-                            )
-                        )
-                        continue
-
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"content": [{"type": "json", "json": result}]},
-                            }
-                        )
-                    )
-
-                elif method == "ping":
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
-                    )
-
-                else:
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {
-                                    "code": -32601,
-                                    "message": "Method not found",
-                                    "data": {"method": method},
-                                },
-                            }
-                        )
-                    )
-
-            except Exception as e:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": str(e),
-                                "data": {"type": type(e).__name__},
-                            },
-                        }
-                    )
-                )
-
-    except WebSocketDisconnect:
-        logger.info("MCP WebSocket disconnected")
+    """MCP WebSocket endpoint using base handler."""
+    await mcp_websocket_handler(ws, mcp_handler)
 
 
 if __name__ == "__main__":

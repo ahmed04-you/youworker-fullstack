@@ -1,5 +1,7 @@
 """Ollama client with streaming, thinking traces, and tool calling support."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
@@ -7,6 +9,9 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 import httpx
+
+from packages.common import get_correlation_id
+from packages.common.retry import async_retry
 
 logger = logging.getLogger(__name__)
 
@@ -136,10 +141,17 @@ class OllamaClient:
         try:
             await self._ensure_model_available(model)
 
+            # Add correlation ID header for distributed tracing
+            headers = {
+                "Content-Type": "application/json",
+                "X-Correlation-ID": get_correlation_id(),
+            }
+
             async with self.client.stream(
                 "POST",
                 f"{self.base_url}/api/chat",
                 json=payload,
+                headers=headers,
             ) as response:
                 response.raise_for_status()
 
@@ -216,6 +228,7 @@ class OllamaClient:
             logger.info("Model '%s' downloaded successfully", model)
             self._ensured_models.add(model)
 
+    @async_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
     async def _model_exists(self, model: str) -> bool:
         if not model:
             return True

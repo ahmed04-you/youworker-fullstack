@@ -9,8 +9,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from httpx import HTTPStatusError
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.routes.deps import get_agent_loop, get_current_user_with_collection_access
@@ -29,13 +27,11 @@ from .persistence import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 HEARTBEAT_INTERVAL_SECONDS = 15
 
 
 @router.post("/chat")
-@limiter.limit("30/minute")
 async def chat_endpoint(
     request: Request,
     chat_request: ChatRequest,
@@ -49,6 +45,8 @@ async def chat_endpoint(
     - Tool calls are executed internally
     - Only final answers are streamed to the client
     - Thinking traces are captured but NOT streamed
+
+    Rate limit: 100/minute per user (enforced by global rate limiter with user identification)
     """
     messages = await prepare_chat_messages(chat_request.messages)
     request_model = chat_request.model or settings.chat_model

@@ -12,7 +12,7 @@ import logging
 import math
 import os
 import wave
-from typing import TYPE_CHECKING, Any, AsyncGenerator, Optional, Tuple
+from typing import TYPE_CHECKING, Any, AsyncGenerator
 
 import numpy as np
 
@@ -346,7 +346,7 @@ async def stream_synthesize_speech(
     *,
     chunk_size: int = 1024,
     fallback: bool = True,
-) -> AsyncGenerator[Tuple[bytes, int], None]:
+) -> AsyncGenerator[tuple[bytes, int], None]:
     """
     Stream speech synthesis in chunks.
 
@@ -447,7 +447,7 @@ async def transcribe_audio_pcm16(
         language: Optional language code (e.g., "it", "en"). If None, uses STT_LANGUAGE env var.
 
     Returns:
-        {"text": str, "language": Optional[str], "confidence": Optional[float]}
+        {"text": str, "language": str | None, "confidence": float | None}
     """
     if not audio_pcm:
         return {"text": "", "language": None, "confidence": None}
@@ -514,7 +514,7 @@ async def synthesize_speech(
     text: str,
     *,
     fallback: bool = True,
-) -> Optional[Tuple[bytes, int]]:
+) -> tuple[bytes, int] | None:
     """
     Generate PCM16 mono audio for the provided text.
 
@@ -529,7 +529,7 @@ async def synthesize_speech(
 
     if voice:
 
-        def _run_voice() -> Tuple[bytes, int]:
+        def _run_voice() -> tuple[bytes, int]:
             logger.info(
                 "Starting Piper synthesis for text: %s",
                 cleaned[:100] + "..." if len(cleaned) > 100 else cleaned,

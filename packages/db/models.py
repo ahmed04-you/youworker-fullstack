@@ -3,9 +3,8 @@ from __future__ import annotations
 import base64
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Optional
 
 import sqlalchemy as sa
 from cryptography.fernet import Fernet, InvalidToken
@@ -27,10 +26,11 @@ from sqlalchemy.types import TypeDecorator
 
 from .session import Base
 from packages.common import get_settings
+from packages.common.exceptions import ConfigurationError
 
 
 @lru_cache(maxsize=1)
-def _get_message_fernet() -> Optional[Fernet]:
+def _get_message_fernet() -> Fernet | None:
     settings = get_settings()
     secret_source = (
         settings.chat_message_encryption_secret
@@ -59,7 +59,7 @@ class EncryptedContent(TypeDecorator):
             fernet = _get_message_fernet()
             # CRITICAL: Encryption is now mandatory
             if fernet is None:
-                raise RuntimeError(
+                raise ConfigurationError(
                     "Chat message encryption is mandatory but CHAT_MESSAGE_ENCRYPTION_SECRET "
                     "is not configured. Generate one with: "
                     "python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"
@@ -79,7 +79,7 @@ class EncryptedContent(TypeDecorator):
             fernet = _get_message_fernet()
             # CRITICAL: Decryption requires valid key
             if fernet is None:
-                raise RuntimeError(
+                raise ConfigurationError(
                     "Cannot decrypt message: CHAT_MESSAGE_ENCRYPTION_SECRET not configured"
                 )
             try:
@@ -102,8 +102,8 @@ class User(AsyncAttrs, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     username: Mapped[str] = mapped_column(String(128), unique=True, index=True)
     is_root: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
-    api_key_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    api_key_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     sessions: Mapped[list["ChatSession"]] = relationship(back_populates="user")
 
@@ -112,15 +112,15 @@ class ChatSession(AsyncAttrs, Base):
     __tablename__ = "chat_sessions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    external_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    external_id: Mapped[str | None] = mapped_column(String(64), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    title: Mapped[Optional[str]] = mapped_column(String(256))
-    model: Mapped[Optional[str]] = mapped_column(String(128))
+    title: Mapped[str | None] = mapped_column(String(256))
+    model: Mapped[str | None] = mapped_column(String(128))
     enable_tools: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user: Mapped[User] = relationship(back_populates="sessions")
     messages: Mapped[list["ChatMessage"]] = relationship(
@@ -140,14 +140,14 @@ class ChatMessage(AsyncAttrs, Base):
         ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
     )
     role: Mapped[str] = mapped_column(String(16), index=True)
-    content: Mapped[Optional[str]] = mapped_column(EncryptedContent, nullable=True)
-    tool_call_name: Mapped[Optional[str]] = mapped_column(String(256))
-    tool_call_id: Mapped[Optional[str]] = mapped_column(String(128))
+    content: Mapped[str | None] = mapped_column(EncryptedContent, nullable=True)
+    tool_call_name: Mapped[str | None] = mapped_column(String(256))
+    tool_call_id: Mapped[str | None] = mapped_column(String(128))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
-    tokens_in: Mapped[Optional[int]] = mapped_column(Integer)
-    tokens_out: Mapped[Optional[int]] = mapped_column(Integer)
+    tokens_in: Mapped[int | None] = mapped_column(Integer)
+    tokens_out: Mapped[int | None] = mapped_column(Integer)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
 
@@ -176,7 +176,7 @@ class MCPServer(AsyncAttrs, Base):
     server_id: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     url: Mapped[str] = mapped_column(String(512))
     healthy: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     tools: Mapped[list["Tool"]] = relationship(
         back_populates="server", cascade="all, delete-orphan"
@@ -191,11 +191,11 @@ class Tool(AsyncAttrs, Base):
         ForeignKey("mcp_servers.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(256), index=True)  # qualified name like web.search
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    input_schema: Mapped[Optional[dict]] = mapped_column(JSONB)
+    description: Mapped[str | None] = mapped_column(Text)
+    input_schema: Mapped[dict | None] = mapped_column(JSONB)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     last_discovered_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     @validates("input_schema")
@@ -216,26 +216,26 @@ class ToolRun(AsyncAttrs, Base):
     __tablename__ = "tool_runs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tool_id: Mapped[Optional[int]] = mapped_column(
+    tool_id: Mapped[int | None] = mapped_column(
         ForeignKey("tools.id", ondelete="SET NULL"), index=True, nullable=True
     )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    session_id: Mapped[Optional[int]] = mapped_column(
+    session_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_sessions.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    message_id: Mapped[Optional[int]] = mapped_column(
+    message_id: Mapped[int | None] = mapped_column(
         ForeignKey("chat_messages.id", ondelete="CASCADE"), nullable=True, index=True
     )
     tool_name: Mapped[str] = mapped_column(String(256), index=True)
     status: Mapped[str] = mapped_column(String(32), index=True)
     start_ts: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
-    end_ts: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    latency_ms: Mapped[Optional[int]] = mapped_column(Integer)
-    args: Mapped[Optional[dict]] = mapped_column(JSONB)
-    error_message: Mapped[Optional[str]] = mapped_column(Text)
-    result_preview: Mapped[Optional[str]] = mapped_column(Text)
+    end_ts: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    latency_ms: Mapped[int | None] = mapped_column(Integer)
+    args: Mapped[dict | None] = mapped_column(JSONB)
+    error_message: Mapped[str | None] = mapped_column(Text)
+    result_preview: Mapped[str | None] = mapped_column(Text)
 
     __table_args__ = (
         Index("idx_tool_runs_user_start", "user_id", start_ts.desc()),
@@ -253,15 +253,15 @@ class IngestionRun(AsyncAttrs, Base):
     target: Mapped[str] = mapped_column(Text)
     from_web: Mapped[bool] = mapped_column(Boolean, default=False)
     recursive: Mapped[bool] = mapped_column(Boolean, default=False)
-    tags: Mapped[Optional[dict]] = mapped_column(JSONB)
-    collection: Mapped[Optional[str]] = mapped_column(String(128))
+    tags: Mapped[dict | None] = mapped_column(JSONB)
+    collection: Mapped[str | None] = mapped_column(String(128))
     totals_files: Mapped[int] = mapped_column(Integer, default=0)
     totals_chunks: Mapped[int] = mapped_column(Integer, default=0)
-    errors: Mapped[Optional[dict]] = mapped_column(JSONB)
+    errors: Mapped[dict | None] = mapped_column(JSONB)
     started_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
-    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="success", index=True)
 
     __table_args__ = (Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),)
@@ -272,18 +272,18 @@ class Document(AsyncAttrs, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    uri: Mapped[Optional[str]] = mapped_column(Text)
-    path: Mapped[Optional[str]] = mapped_column(Text)
-    mime: Mapped[Optional[str]] = mapped_column(String(128))
-    bytes_size: Mapped[Optional[int]] = mapped_column(BigInteger)
-    source: Mapped[Optional[str]] = mapped_column(String(32))
-    tags: Mapped[Optional[dict]] = mapped_column(JSONB)
-    collection: Mapped[Optional[str]] = mapped_column(String(128), index=True)
-    path_hash: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    uri: Mapped[str | None] = mapped_column(Text)
+    path: Mapped[str | None] = mapped_column(Text)
+    mime: Mapped[str | None] = mapped_column(String(128))
+    bytes_size: Mapped[int | None] = mapped_column(BigInteger)
+    source: Mapped[str | None] = mapped_column(String(32))
+    tags: Mapped[dict | None] = mapped_column(JSONB)
+    collection: Mapped[str | None] = mapped_column(String(128), index=True)
+    path_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, index=True
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
-    last_ingested_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_ingested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship("User")
 
@@ -319,7 +319,7 @@ class DocumentCollection(AsyncAttrs, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
 class UserCollectionAccess(AsyncAttrs, Base):
@@ -341,3 +341,85 @@ class UserDocumentAccess(AsyncAttrs, Base):
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
 
     __table_args__ = (UniqueConstraint("user_id", "document_id", name="uq_user_document"),)
+
+
+class AuditLog(AsyncAttrs, Base):
+    """
+    Audit log for tracking sensitive operations and security events.
+
+    Records user actions, administrative operations, and security-relevant events
+    for compliance, debugging, and security monitoring purposes.
+    """
+
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="User who performed the action (NULL for system actions)",
+    )
+    action: Mapped[str] = mapped_column(
+        String(128),
+        index=True,
+        comment="Action type (e.g., 'user.login', 'document.delete', 'api_key.regenerate')",
+    )
+    resource_type: Mapped[str | None] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="Type of resource affected (e.g., 'user', 'document', 'tool')",
+    )
+    resource_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        index=True,
+        comment="ID of the affected resource",
+    )
+    changes: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="JSON object containing before/after values or action details",
+    )
+    ip_address: Mapped[str | None] = mapped_column(
+        String(45),
+        nullable=True,
+        comment="IP address of the client (supports IPv6)",
+    )
+    user_agent: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="User agent string from the request",
+    )
+    correlation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        index=True,
+        comment="Request correlation ID for tracing",
+    )
+    success: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        index=True,
+        comment="Whether the action succeeded",
+    )
+    error_message: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Error message if action failed",
+    )
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    # Relationships
+    user: Mapped[User | None] = relationship("User")
+
+    __table_args__ = (
+        Index("idx_audit_logs_user_timestamp", "user_id", "timestamp"),
+        Index("idx_audit_logs_action_timestamp", "action", "timestamp"),
+        Index("idx_audit_logs_resource", "resource_type", "resource_id"),
+    )

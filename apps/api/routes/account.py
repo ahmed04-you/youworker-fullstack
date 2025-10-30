@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.encoders import jsonable_encoder
@@ -57,7 +57,7 @@ async def export_account(current_user=Depends(get_current_user_with_collection_a
 
     payload = jsonable_encoder(snapshot)
     content = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
-    filename = f"youworker-export-{datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')}.json"
+    filename = f"youworker-export-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}.json"
 
     logger.info("account-export-generated user_id=%s bytes=%s", current_user.id, len(content))
 

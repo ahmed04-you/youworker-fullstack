@@ -14,6 +14,7 @@ from apps.api.routes.deps import (
     get_registry_optional,
 )
 from apps.api.auth.security import get_current_user_optional
+from packages.common.health import get_aggregate_health
 
 logger = logging.getLogger(__name__)
 
@@ -99,3 +100,20 @@ async def health_check(
             "ollama": ollama_status,
         },
     }
+
+
+@router.get("/health/detailed")
+async def detailed_health_check():
+    """
+    Detailed health check with comprehensive dependency monitoring.
+
+    Performs active health checks on all service dependencies:
+    - PostgreSQL database connection
+    - Qdrant vector database
+    - Ollama LLM service
+    - MCP servers configuration
+
+    Returns detailed status, latency, and diagnostic information for each service.
+    This endpoint is more comprehensive but slower than the basic /health endpoint.
+    """
+    return await get_aggregate_health()

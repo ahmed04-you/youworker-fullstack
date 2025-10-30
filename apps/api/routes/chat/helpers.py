@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, List, Optional
+from typing import Any, AsyncIterator
 
 from apps.api.config import settings as api_settings
 from packages.db import get_async_session
@@ -26,17 +26,17 @@ class ToolEventRecorder:
     def __init__(
         self,
         user_id: int,
-        session_id: Optional[int],
+        session_id: int | None,
         *,
         db_factory=get_async_session,
     ) -> None:
         self._user_id = user_id
         self._session_id = session_id
         self._db_factory = db_factory
-        self._last_run_id: Optional[int] = None
+        self._last_run_id: int | None = None
         self._logger = logging.getLogger(f"{__name__}.ToolEventRecorder")
 
-    async def record(self, event_data: Dict[str, Any] | None) -> Dict[str, Any]:
+    async def record(self, event_data: dict[str, Any] | None) -> dict[str, Any]:
         """
         Persist the supplied tool event and return a sanitized copy.
 
@@ -149,7 +149,7 @@ def get_user_id(user: Any) -> int:
     return int(value)
 
 
-async def prepare_chat_messages(history: List[dict]) -> List[LLMChatMessage]:
+async def prepare_chat_messages(history: list[dict]) -> list[LLMChatMessage]:
     """Prepare chat messages for agent loop."""
     messages = []
     for msg in history:
@@ -160,7 +160,7 @@ async def prepare_chat_messages(history: List[dict]) -> List[LLMChatMessage]:
 
 async def process_tracked_agent_events(
     agent_loop,
-    conversation: List[LLMChatMessage],
+    conversation: list[LLMChatMessage],
     enable_tools: bool,
     max_iterations: int,
     language: str,
@@ -168,14 +168,14 @@ async def process_tracked_agent_events(
     user_id: int,
     session_id: int,
     stream: bool = True,
-) -> AsyncIterator[Dict[str, Any]]:
+) -> AsyncIterator[dict[str, Any]]:
     """
     Process agent loop events with tool tracking, handling persistence.
 
     Yields events for streaming; for non-streaming, collects results.
     """
-    tool_events: List[Dict[str, Any]] = []
-    logs: List[Dict[str, str]] = []
+    tool_events: list[dict[str, Any]] = []
+    logs: list[dict[str, str]] = []
     recorder = ToolEventRecorder(user_id=user_id, session_id=session_id)
     collected_content = ""
 

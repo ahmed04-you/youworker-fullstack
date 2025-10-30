@@ -10,8 +10,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from httpx import HTTPStatusError
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
@@ -41,7 +39,6 @@ from .persistence import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 HEARTBEAT_INTERVAL_SECONDS = 15
 
@@ -92,7 +89,6 @@ async def process_input(
 
 
 @router.post("/unified-chat", response_model=UnifiedChatResponse)
-@limiter.limit("30/minute")
 @handle_audio_errors
 @handle_ollama_errors
 async def unified_chat_endpoint(

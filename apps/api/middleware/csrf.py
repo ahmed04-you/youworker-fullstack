@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Iterable, Set
+from typing import Iterable
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class CSRFMiddleware(BaseHTTPMiddleware):
     """Validate CSRF tokens on unsafe HTTP methods."""
 
-    SAFE_METHODS: Set[str] = {"GET", "HEAD", "OPTIONS", "TRACE"}
+    SAFE_METHODS: set[str] = {"GET", "HEAD", "OPTIONS", "TRACE"}
 
     def __init__(
         self,
@@ -37,8 +37,8 @@ class CSRFMiddleware(BaseHTTPMiddleware):
         self.exempt_paths = self._normalize_paths(exempt_paths or ())
 
     @staticmethod
-    def _normalize_paths(paths: Iterable[str]) -> Set[str]:
-        normalized: Set[str] = set()
+    def _normalize_paths(paths: Iterable[str]) -> set[str]:
+        normalized: set[str] = set()
         for path in paths:
             if not path:
                 continue

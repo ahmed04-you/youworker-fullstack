@@ -18,6 +18,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 import websockets
 from websockets.protocol import State
 
+from packages.common.correlation import get_correlation_id
+
 logger = logging.getLogger(__name__)
 
 
@@ -209,18 +211,28 @@ class MCPClient:
     @retry(
         stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=10), reraise=True
     )
-    async def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> Any:
+    async def call_tool(
+        self, tool_name: str, arguments: dict[str, Any], correlation_id: str | None = None
+    ) -> Any:
         """Execute a tool on the MCP server via WebSocket."""
         # Strip server prefix if present
         if tool_name.startswith(f"{self.server_id}."):
             tool_name = tool_name[len(self.server_id) + 1 :]
 
+        # Use provided correlation ID or get from context
+        cid = correlation_id or get_correlation_id()
+
         try:
-            result = await self._send_rpc("tools/call", {"name": tool_name, "arguments": arguments})
+            result = await self._send_rpc(
+                "tools/call", {"name": tool_name, "arguments": arguments}, correlation_id=cid
+            )
             self._healthy = True
             return self._parse_result(result)
         except Exception as e:
-            logger.error(f"Failed to call tool {tool_name} on {self.server_id}: {e}")
+            logger.error(
+                f"Failed to call tool {tool_name} on {self.server_id}: {e}",
+                extra={"correlation_id": cid},
+            )
             self._healthy = False
             raise
 
@@ -230,6 +242,7 @@ class MCPClient:
         params: dict[str, Any],
         *,
         allow_heartbeat: bool = True,
+        correlation_id: str | None = None,
     ) -> dict[str, Any]:
         """Send JSON-RPC over WebSocket, handling reconnects and heartbeats."""
         await self._connect()
@@ -245,7 +258,17 @@ class MCPClient:
 
                 assert self._ws is not None
                 req_id = self._next_id()
-                request = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
+
+                # Add correlation ID to params metadata if provided
+                if correlation_id:
+                    params_with_metadata = params.copy()
+                    if "metadata" not in params_with_metadata:
+                        params_with_metadata["metadata"] = {}
+                    params_with_metadata["metadata"]["correlation_id"] = correlation_id
+                    request = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params_with_metadata}
+                else:
+                    request = {"jsonrpc": "2.0", "id": req_id, "method": method, "params": params}
+
                 loop = asyncio.get_running_loop()
                 fut: asyncio.Future = loop.create_future()
                 self._pending[req_id] = fut

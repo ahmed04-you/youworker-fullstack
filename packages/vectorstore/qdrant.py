@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from qdrant_client import AsyncQdrantClient
+
+from packages.common.retry import async_retry
 from qdrant_client.models import (
     Distance,
     VectorParams,
@@ -61,6 +63,7 @@ class QdrantStore:
         self.default_collection = default_collection
         self.client = AsyncQdrantClient(url=url)
 
+    @async_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
     async def ensure_collection(self, collection_name: str | None = None) -> None:
         """
         Create collection if it doesn't exist.
@@ -92,6 +95,7 @@ class QdrantStore:
             logger.error(f"Failed to ensure collection {collection_name}: {e}")
             raise
 
+    @async_retry(max_attempts=3, min_wait=1.0, max_wait=10.0)
     async def upsert_chunks(
         self,
         chunks: list[dict[str, Any]],
@@ -141,6 +145,7 @@ class QdrantStore:
             logger.error(f"Failed to upsert chunks: {e}")
             raise
 
+    @async_retry(max_attempts=3, min_wait=1.0, max_wait=5.0)
     async def search(
         self,
         query_embedding: list[float],

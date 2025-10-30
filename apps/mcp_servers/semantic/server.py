@@ -10,14 +10,18 @@ Tools:
 
 import logging
 import os
-import json
 import re
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket
 
 from packages.vectorstore import QdrantStore
 from packages.llm import OllamaClient
+from packages.mcp.base_handler import (
+    MCPProtocolHandler,
+    MCPServerInfo,
+    mcp_websocket_handler,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -284,280 +288,165 @@ async def similar_to_text(
         return {"error": str(e)}
 
 
-def get_tools_schema() -> list[dict[str, Any]]:
-    return [
-        {
-            "name": "query",
-            "description": "Perform semantic search over ingested documents. Returns relevant document chunks with similarity scores.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query",
-                        "minLength": QUERY_MIN_LEN,
-                        "maxLength": QUERY_MAX_LEN,
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of results to return",
-                        "default": 5,
-                        "minimum": 1,
-                        "maximum": SEMANTIC_MAX_TOP_K,
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": r"^[A-Za-z0-9._-]+$",
-                        },
-                        "description": "Optional tags to filter by",
-                        "maxItems": 10,
-                    },
-                    "collection": {
-                        "type": "string",
-                        "description": "Optional collection name (defaults to 'documents')",
-                        "minLength": 1,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9._-]+$",
-                    },
+# Initialize MCP protocol handler
+mcp_handler = MCPProtocolHandler(
+    server_info=MCPServerInfo(
+        name="semantic",
+        version="0.1.0",
+    )
+)
+
+# Register tools
+mcp_handler.register_tool(
+    name="query",
+    description="Perform semantic search over ingested documents. Returns relevant document chunks with similarity scores.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "query": {
+                "type": "string",
+                "description": "The search query",
+                "minLength": QUERY_MIN_LEN,
+                "maxLength": QUERY_MAX_LEN,
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Number of results to return",
+                "default": 5,
+                "minimum": 1,
+                "maximum": SEMANTIC_MAX_TOP_K,
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": r"^[A-Za-z0-9._-]+$",
                 },
-                "required": ["query"],
-                "additionalProperties": False,
+                "description": "Optional tags to filter by",
+                "maxItems": 10,
+            },
+            "collection": {
+                "type": "string",
+                "description": "Optional collection name (defaults to 'documents')",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9._-]+$",
             },
         },
-        {
-            "name": "answer",
-            "description": "RAG answer composer with citations from the vector store.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "question": {
-                        "type": "string",
-                        "description": "Question to answer using retrieved context",
-                        "minLength": QUERY_MIN_LEN,
-                        "maxLength": QUERY_MAX_LEN,
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of documents to retrieve for context",
-                        "default": 5,
-                        "minimum": 1,
-                        "maximum": SEMANTIC_MAX_TOP_K,
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": r"^[A-Za-z0-9._-]+$",
-                        },
-                        "description": "Optional tags to filter by",
-                        "maxItems": 10,
-                    },
-                    "collection": {
-                        "type": "string",
-                        "description": "Optional collection name",
-                        "minLength": 1,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9._-]+$",
-                    },
+        "required": ["query"],
+        "additionalProperties": False,
+    },
+    handler=lambda query, top_k=5, tags=None, collection=None: semantic_query(
+        query=query, top_k=top_k, tags=tags, collection=collection
+    ),
+)
+
+mcp_handler.register_tool(
+    name="answer",
+    description="RAG answer composer with citations from the vector store.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "question": {
+                "type": "string",
+                "description": "Question to answer using retrieved context",
+                "minLength": QUERY_MIN_LEN,
+                "maxLength": QUERY_MAX_LEN,
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Number of documents to retrieve for context",
+                "default": 5,
+                "minimum": 1,
+                "maximum": SEMANTIC_MAX_TOP_K,
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": r"^[A-Za-z0-9._-]+$",
                 },
-                "required": ["question"],
-                "additionalProperties": False,
+                "description": "Optional tags to filter by",
+                "maxItems": 10,
+            },
+            "collection": {
+                "type": "string",
+                "description": "Optional collection name",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9._-]+$",
             },
         },
-        {
-            "name": "similar_to_text",
-            "description": "Find similar documents to the provided text (not just a short query).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "text": {
-                        "type": "string",
-                        "description": "Text body to find similar content for",
-                        "minLength": 1,
-                        "maxLength": QUERY_MAX_LEN,
-                    },
-                    "top_k": {
-                        "type": "integer",
-                        "description": "Number of results to return",
-                        "default": 5,
-                        "minimum": 1,
-                        "maximum": SEMANTIC_MAX_TOP_K,
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "minLength": 1,
-                            "maxLength": 64,
-                            "pattern": r"^[A-Za-z0-9._-]+$",
-                        },
-                        "description": "Optional tags to filter by",
-                        "maxItems": 10,
-                    },
-                    "collection": {
-                        "type": "string",
-                        "description": "Optional collection name",
-                        "minLength": 1,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9._-]+$",
-                    },
+        "required": ["question"],
+        "additionalProperties": False,
+    },
+    handler=lambda question, top_k=5, tags=None, collection=None: semantic_answer(
+        question=question, top_k=top_k, tags=tags, collection=collection
+    ),
+)
+
+mcp_handler.register_tool(
+    name="similar_to_text",
+    description="Find similar documents to the provided text (not just a short query).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "text": {
+                "type": "string",
+                "description": "Text body to find similar content for",
+                "minLength": 1,
+                "maxLength": QUERY_MAX_LEN,
+            },
+            "top_k": {
+                "type": "integer",
+                "description": "Number of results to return",
+                "default": 5,
+                "minimum": 1,
+                "maximum": SEMANTIC_MAX_TOP_K,
+            },
+            "tags": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": r"^[A-Za-z0-9._-]+$",
                 },
-                "required": ["text"],
-                "additionalProperties": False,
+                "description": "Optional tags to filter by",
+                "maxItems": 10,
+            },
+            "collection": {
+                "type": "string",
+                "description": "Optional collection name",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9._-]+$",
             },
         },
-        {
-            "name": "collections",
-            "description": "List all available document collections in the vector store.",
-            "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        },
-    ]
+        "required": ["text"],
+        "additionalProperties": False,
+    },
+    handler=lambda text, top_k=5, tags=None, collection=None: similar_to_text(
+        text=text, top_k=top_k, tags=tags, collection=collection
+    ),
+)
+
+mcp_handler.register_tool(
+    name="collections",
+    description="List all available document collections in the vector store.",
+    input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+    handler=lambda: list_collections(),
+)
 
 
 @app.websocket("/mcp")
 async def mcp_socket(ws: WebSocket):
-    await ws.accept()
-    try:
-        while True:
-            raw = await ws.receive_text()
-            try:
-                req = json.loads(raw)
-            except Exception:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": None,
-                            "error": {
-                                "code": -32700,
-                                "message": "Parse error",
-                                "data": {"raw": str(raw)[:200]},
-                            },
-                        }
-                    )
-                )
-                continue
-
-            req_id = req.get("id")
-            method = req.get("method")
-            params = req.get("params", {}) or {}
-
-            try:
-                if method == "initialize":
-                    result = {
-                        "protocolVersion": "2024-10-01",
-                        "serverInfo": {"name": "semantic", "version": "0.1.0"},
-                        "capabilities": {"tools": {"list": True, "call": True}},
-                    }
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
-                    )
-
-                elif method == "tools/list":
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"tools": get_tools_schema()},
-                            }
-                        )
-                    )
-
-                elif method == "tools/call":
-                    name = params.get("name")
-                    arguments = params.get("arguments", {})
-                    if name == "query":
-                        result = await semantic_query(
-                            query=arguments["query"],
-                            top_k=arguments.get("top_k", 5),
-                            tags=arguments.get("tags"),
-                            collection=arguments.get("collection"),
-                        )
-                    elif name == "answer":
-                        result = await semantic_answer(
-                            question=arguments["question"],
-                            top_k=arguments.get("top_k", 5),
-                            tags=arguments.get("tags"),
-                            collection=arguments.get("collection"),
-                        )
-                    elif name == "similar_to_text":
-                        result = await similar_to_text(
-                            text=arguments["text"],
-                            top_k=arguments.get("top_k", 5),
-                            tags=arguments.get("tags"),
-                            collection=arguments.get("collection"),
-                        )
-                    elif name == "collections":
-                        result = await list_collections()
-                    else:
-                        await ws.send_text(
-                            json.dumps(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": req_id,
-                                    "error": {
-                                        "code": -32601,
-                                        "message": f"Unknown tool: {name}",
-                                        "data": {"name": name},
-                                    },
-                                }
-                            )
-                        )
-                        continue
-
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"content": [{"type": "json", "json": result}]},
-                            }
-                        )
-                    )
-
-                elif method == "ping":
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
-                    )
-
-                else:
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {
-                                    "code": -32601,
-                                    "message": "Method not found",
-                                    "data": {"method": method},
-                                },
-                            }
-                        )
-                    )
-
-            except Exception as e:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": str(e),
-                                "data": {"type": type(e).__name__},
-                            },
-                        }
-                    )
-                )
-    except WebSocketDisconnect:
-        logger.info("MCP WebSocket disconnected (semantic)")
+    """MCP WebSocket endpoint using base handler."""
+    await mcp_websocket_handler(ws, mcp_handler)
 
 
 if __name__ == "__main__":

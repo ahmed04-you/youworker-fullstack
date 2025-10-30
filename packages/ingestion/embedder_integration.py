@@ -1,9 +1,10 @@
 """
 Embedding and vector store integration for ingestion pipeline.
 """
+from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Sequence
+from typing import Sequence
 
 from qdrant_client.http.models import PointStruct
 
@@ -30,7 +31,7 @@ def get_embedder(settings: Settings | None = None) -> Embedder:
 async def embed_chunks(
     chunks: Sequence[DocChunk],
     embedder: Embedder,
-) -> List[List[float]]:
+) -> list[list[float]]:
     """
     Generate embeddings for a list of chunks.
 
@@ -47,10 +48,10 @@ async def embed_chunks(
 
 async def prepare_points(
     chunks: Sequence[DocChunk],
-    vectors: List[List[float]],
+    vectors: list[list[float]],
     settings: Settings,
     collection_name: str | None = None,
-) -> List[PointStruct]:
+) -> list[PointStruct]:
     """
     Prepare Qdrant PointStructs from embedded chunks.
 
@@ -64,7 +65,7 @@ async def prepare_points(
         List of PointStruct ready for upsert
     """
     now_iso = datetime.now(timezone.utc).isoformat()
-    points: List[PointStruct] = []
+    points: list[PointStruct] = []
 
     for chunk, vector in zip(chunks, vectors, strict=True):
         chunk.embedding = vector
@@ -87,7 +88,7 @@ async def prepare_points(
 
 
 async def upsert_embedded_chunks(
-    points: List[PointStruct],
+    points: list[PointStruct],
     settings: Settings,
     collection_name: str | None = None,
 ) -> None:

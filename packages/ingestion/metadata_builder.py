@@ -2,9 +2,11 @@
 Metadata building and pruning for ingestion pipeline.
 """
 
+from __future__ import annotations
+
 import json
 
-from typing import Any, Dict, List, Sequence
+from typing import Any, Sequence
 
 
 from packages.common import get_logger
@@ -20,9 +22,9 @@ def build_chunk_metadata(
     original_format: str | None,
     output_format: str,
     user_id: int | None = None,
-    pages: Sequence[Dict] | None = None,
-    tags: List[str] | None = None,
-) -> Dict[str, Any]:
+    pages: Sequence[dict] | None = None,
+    tags: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Build complete metadata for a chunk.
 
@@ -54,9 +56,9 @@ def build_chunk_metadata(
 
 
 def prune_metadata(
-    metadata: Dict[str, Any],
+    metadata: dict[str, Any],
     max_bytes: int = 6000,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Prune metadata to fit within size limits for vector store.
 
@@ -116,9 +118,9 @@ def prune_metadata(
 
 
 def collect_artifacts(
-    span_summaries: Sequence[Dict],
+    span_summaries: Sequence[dict],
     segment_text: str,
-) -> tuple[List[Dict], Dict[str, List]]:
+) -> tuple[list[dict], dict[str, list]]:
     """
     Collect artifacts (tables, images, charts) from span summaries.
 
@@ -135,7 +137,7 @@ def collect_artifacts(
 
 def render_chunk_text(
     text: str,
-    artifacts: Dict[str, List],
+    artifacts: dict[str, list],
     output_format: str = "markdown",
 ) -> str:
     """

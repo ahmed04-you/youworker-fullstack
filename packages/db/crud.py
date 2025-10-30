@@ -1,13 +1,20 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from typing import Iterable
 import secrets
 
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+
+from packages.common.exceptions import (
+    ResourceNotFoundError,
+    ValidationError,
+    DatabaseError,
+)
 
 from .models import (
     User,
@@ -23,17 +30,15 @@ from .models import (
     UserDocumentAccess,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _hash_api_key(api_key: str) -> str:
     return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
 
 
-async def ensure_root_user(session, *, username: str, api_key: str) -> User:
-    # session is already an AsyncSession from the context manager
-    import logging
-
-    logger = logging.getLogger(__name__)
-    logger.warning(f"Session type: {type(session)}")
+async def ensure_root_user(session: AsyncSession, *, username: str, api_key: str) -> User:
+    """Ensure root user exists with given credentials."""
     q = select(User).where(User.username == username)
     result = await session.execute(q)
     user = result.scalar_one_or_none()
@@ -50,20 +55,42 @@ async def ensure_root_user(session, *, username: str, api_key: str) -> User:
     return user
 
 
-async def get_user_by_api_key(session: AsyncSession, api_key: str) -> User | None:
-    """Return the user matching the provided API key hash, if any."""
+async def get_user_by_api_key(session: AsyncSession, api_key: str) -> User:
+    """Return the user matching the provided API key hash."""
     if not api_key:
-        return None
-    hashed = _hash_api_key(api_key)
-    result = await session.execute(select(User).where(User.api_key_hash == hashed))
-    return result.scalar_one_or_none()
+        raise ValidationError("API key is required", code="MISSING_API_KEY")
+
+    try:
+        hashed = _hash_api_key(api_key)
+        result = await session.execute(select(User).where(User.api_key_hash == hashed))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            raise ResourceNotFoundError(
+                "Invalid API key",
+                code="INVALID_API_KEY"
+            )
+
+        return user
+    except (ResourceNotFoundError, ValidationError):
+        raise  # Re-raise business errors
+    except Exception as e:
+        logger.error(f"Database error in get_user_by_api_key: {e}", exc_info=True)
+        raise DatabaseError(
+            f"Failed to fetch user: {str(e)}",
+            details={"operation": "get_user_by_api_key"}
+        ) from e
 
 
 async def regenerate_user_api_key(session: AsyncSession, user_id: int) -> str:
     """Generate and persist a new API key for the given user."""
     user = await session.get(User, user_id)
     if not user:
-        raise ValueError("User not found")
+        raise ResourceNotFoundError(
+            f"User not found: {user_id}",
+            code="USER_NOT_FOUND",
+            details={"user_id": user_id}
+        )
     new_key = secrets.token_urlsafe(32)
     user.api_key_hash = _hash_api_key(new_key)
     await session.flush()
@@ -112,7 +139,11 @@ async def export_user_snapshot(session: AsyncSession, user_id: int) -> dict:
     """Collect a snapshot of the user's data for export."""
     user = await session.get(User, user_id)
     if not user:
-        raise ValueError("User not found")
+        raise ResourceNotFoundError(
+            f"User not found: {user_id}",
+            code="USER_NOT_FOUND",
+            details={"user_id": user_id}
+        )
 
     sessions_result = await session.execute(
         select(ChatSession)
@@ -130,7 +161,7 @@ async def export_user_snapshot(session: AsyncSession, user_id: int) -> dict:
     for chat_session in sessions:
         messages = sorted(
             chat_session.messages,
-            key=lambda message: message.created_at or datetime.utcnow(),
+            key=lambda message: message.created_at or datetime.now(timezone.utc),
         )
         sessions_payload.append(
             {
@@ -165,7 +196,7 @@ async def export_user_snapshot(session: AsyncSession, user_id: int) -> dict:
             "created_at": user.created_at,
             "is_root": user.is_root,
         },
-        "exported_at": datetime.utcnow(),
+        "exported_at": datetime.now(timezone.utc),
         "sessions": sessions_payload,
         "documents": [
             {
@@ -231,7 +262,7 @@ async def upsert_mcp_servers(
     existing = result.scalars().all()
     by_id = {s.server_id: s for s in existing}
     result: dict[str, MCPServer] = {}
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for server_id, url, healthy in servers:
         s = by_id.get(server_id)
         if s:
@@ -263,7 +294,7 @@ async def upsert_tools(
     result = await session.execute(q)
     existing = result.scalars().all()
     index = {(t.mcp_server_id, t.name): t for t in existing}
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     for server_id, name, description, schema in tools:
         server = server_map.get(server_id)
         if not server:
@@ -302,7 +333,7 @@ async def get_or_create_session(
         result = await session.execute(q)
         cs = result.scalar_one_or_none()
         if cs:
-            cs.updated_at = datetime.utcnow()
+            cs.updated_at = datetime.now(timezone.utc)
             cs.model = model or cs.model
             cs.enable_tools = enable_tools
             await session.flush()
@@ -459,7 +490,7 @@ async def upsert_document(
     )
     result = await session.execute(q)
     doc = result.scalar_one_or_none()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if doc:
         doc.uri = uri or doc.uri
         doc.path = path or doc.path
@@ -688,6 +719,6 @@ async def update_session_title(
         return False
 
     chat_session.title = title
-    chat_session.updated_at = datetime.utcnow()
+    chat_session.updated_at = datetime.now(timezone.utc)
     await session.flush()
     return True

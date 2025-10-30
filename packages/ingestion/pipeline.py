@@ -129,6 +129,7 @@ class IngestionPipeline:
                     tags=tags,
                     from_web=from_web,
                     collection_name=collection_name,
+                    user_id=user_id,
                     semaphore=semaphore,
                 )
             )
@@ -175,12 +176,13 @@ class IngestionPipeline:
         tags: Sequence[str],
         from_web: bool,
         collection_name: str | None = None,
+        user_id: int | None = None,
         semaphore: asyncio.Semaphore,
     ) -> tuple[int, IngestionItem, int, Exception | None]:
         async with semaphore:
             try:
                 chunk_count = await self._process_item(
-                    item, tags=tags, from_web=from_web, collection_name=collection_name
+                    item, tags=tags, from_web=from_web, collection_name=collection_name, user_id=user_id
                 )
                 return (index, item, chunk_count, None)
             except Exception as exc:
@@ -194,6 +196,7 @@ class IngestionPipeline:
         tags: Sequence[str],
         from_web: bool,
         collection_name: str | None = None,
+        user_id: int | None = None,
     ) -> int:
         source = self._determine_source(item.mime, from_web=from_web)
         raw_chunks: list[DocChunk] = []

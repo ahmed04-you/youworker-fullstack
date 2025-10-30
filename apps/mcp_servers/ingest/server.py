@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import json
 import logging
 import socket
 from collections import deque
@@ -23,12 +22,17 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket
 
 from packages.ingestion import IngestionPipeline
 from packages.common import get_settings
 from packages.db import init_db as init_database, get_async_session
 from packages.db.crud import record_ingestion_run, upsert_document
+from packages.mcp.base_handler import (
+    MCPProtocolHandler,
+    MCPServerInfo,
+    mcp_websocket_handler,
+)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -325,235 +329,122 @@ def ingest_status(limit: int = 10) -> dict[str, Any]:
     return {"runs": entries, "count": len(entries)}
 
 
-def get_tools_schema() -> list[dict[str, Any]]:
-    return [
-        {
-            "name": "url",
-            "description": "Ingest a URL and its content into the vector store; returns job status and counts.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "url": {
-                        "type": "string",
-                        "description": "URL to ingest",
-                        "minLength": 8,
-                        "maxLength": 2048,
-                        "pattern": r"^https?://.+$",
-                    },
-                    "user_id": {
-                        "type": "integer",
-                        "description": "User ID for document ownership",
-                        "minimum": 1,
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Tags to apply to ingested chunks",
-                        "maxItems": 20,
-                    },
-                    "collection": {
-                        "type": "string",
-                        "description": "Optional collection name",
-                        "minLength": 1,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9._-]+$",
-                    },
-                },
-                "required": ["url", "user_id"],
-                "additionalProperties": False,
+# Initialize MCP protocol handler
+mcp_handler = MCPProtocolHandler(
+    server_info=MCPServerInfo(
+        name="ingest",
+        version="0.1.0",
+    )
+)
+
+# Register tools
+mcp_handler.register_tool(
+    name="url",
+    description="Ingest a URL and its content into the vector store; returns job status and counts.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "URL to ingest",
+                "minLength": 8,
+                "maxLength": 2048,
+                "pattern": r"^https?://.+$",
+            },
+            "user_id": {
+                "type": "integer",
+                "description": "User ID for document ownership",
+                "minimum": 1,
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Tags to apply to ingested chunks",
+                "maxItems": 20,
+            },
+            "collection": {
+                "type": "string",
+                "description": "Optional collection name",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9._-]+$",
             },
         },
-        {
-            "name": "path",
-            "description": "Ingest a file or directory from an allowlisted mounted path (internal workflows).",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Path to file or directory under allowed roots",
-                        "minLength": 1,
-                        "maxLength": 4096,
-                    },
-                    "user_id": {
-                        "type": "integer",
-                        "description": "User ID for document ownership",
-                        "minimum": 1,
-                    },
-                    "recursive": {
-                        "type": "boolean",
-                        "description": "Recurse into directories",
-                        "default": False,
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "maxItems": 20,
-                    },
-                    "collection": {
-                        "type": "string",
-                        "description": "Optional collection name",
-                        "minLength": 1,
-                        "maxLength": 128,
-                        "pattern": r"^[A-Za-z0-9._-]+$",
-                    },
-                },
-                "required": ["path", "user_id"],
-                "additionalProperties": False,
+        "required": ["url", "user_id"],
+        "additionalProperties": False,
+    },
+    handler=lambda url, user_id, tags=None, collection=None: ingest_url(
+        url=url, user_id=user_id, tags=tags, collection=collection
+    ),
+)
+
+mcp_handler.register_tool(
+    name="path",
+    description="Ingest a file or directory from an allowlisted mounted path (internal workflows).",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Path to file or directory under allowed roots",
+                "minLength": 1,
+                "maxLength": 4096,
+            },
+            "user_id": {
+                "type": "integer",
+                "description": "User ID for document ownership",
+                "minimum": 1,
+            },
+            "recursive": {
+                "type": "boolean",
+                "description": "Recurse into directories",
+                "default": False,
+            },
+            "tags": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 20,
+            },
+            "collection": {
+                "type": "string",
+                "description": "Optional collection name",
+                "minLength": 1,
+                "maxLength": 128,
+                "pattern": r"^[A-Za-z0-9._-]+$",
             },
         },
-        {
-            "name": "status",
-            "description": "Show last N ingestion runs with counts and errors.",
-            "inputSchema": {
-                "type": "object",
-                "properties": {
-                    "limit": {
-                        "type": "integer",
-                        "description": "Number of runs to return",
-                        "default": 10,
-                        "minimum": 1,
-                        "maximum": 100,
-                    }
-                },
-                "additionalProperties": False,
-            },
+        "required": ["path", "user_id"],
+        "additionalProperties": False,
+    },
+    handler=lambda path, user_id, recursive=False, tags=None, collection=None: ingest_path(
+        path=path, user_id=user_id, recursive=recursive, tags=tags, collection=collection
+    ),
+)
+
+mcp_handler.register_tool(
+    name="status",
+    description="Show last N ingestion runs with counts and errors.",
+    input_schema={
+        "type": "object",
+        "properties": {
+            "limit": {
+                "type": "integer",
+                "description": "Number of runs to return",
+                "default": 10,
+                "minimum": 1,
+                "maximum": 100,
+            }
         },
-    ]
+        "additionalProperties": False,
+    },
+    handler=lambda limit=10: ingest_status(limit=limit),
+)
 
 
 @app.websocket("/mcp")
 async def mcp_socket(ws: WebSocket):
-    await ws.accept()
-    try:
-        while True:
-            raw = await ws.receive_text()
-            try:
-                req = json.loads(raw)
-            except Exception:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": None,
-                            "error": {
-                                "code": -32700,
-                                "message": "Parse error",
-                                "data": {"raw": str(raw)[:200]},
-                            },
-                        }
-                    )
-                )
-                continue
-
-            req_id = req.get("id")
-            method = req.get("method")
-            params = req.get("params", {}) or {}
-
-            try:
-                if method == "initialize":
-                    result = {
-                        "protocolVersion": "2024-10-01",
-                        "serverInfo": {"name": "ingest", "version": "0.1.0"},
-                        "capabilities": {"tools": {"list": True, "call": True}},
-                    }
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": result})
-                    )
-
-                elif method == "tools/list":
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"tools": get_tools_schema()},
-                            }
-                        )
-                    )
-
-                elif method == "tools/call":
-                    name = params.get("name")
-                    arguments = params.get("arguments", {})
-                    if name == "url":
-                        result = await ingest_url(
-                            url=arguments["url"],
-                            user_id=arguments["user_id"],
-                            tags=arguments.get("tags"),
-                            collection=arguments.get("collection"),
-                        )
-                    elif name == "path":
-                        result = await ingest_path(
-                            path=arguments["path"],
-                            user_id=arguments["user_id"],
-                            recursive=arguments.get("recursive", False),
-                            tags=arguments.get("tags"),
-                            collection=arguments.get("collection"),
-                        )
-                    elif name == "status":
-                        result = ingest_status(limit=arguments.get("limit", 10))
-                    else:
-                        await ws.send_text(
-                            json.dumps(
-                                {
-                                    "jsonrpc": "2.0",
-                                    "id": req_id,
-                                    "error": {
-                                        "code": -32601,
-                                        "message": f"Unknown tool: {name}",
-                                        "data": {"name": name},
-                                    },
-                                }
-                            )
-                        )
-                        continue
-
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "result": {"content": [{"type": "json", "json": result}]},
-                            }
-                        )
-                    )
-
-                elif method == "ping":
-                    await ws.send_text(
-                        json.dumps({"jsonrpc": "2.0", "id": req_id, "result": {"ok": True}})
-                    )
-
-                else:
-                    await ws.send_text(
-                        json.dumps(
-                            {
-                                "jsonrpc": "2.0",
-                                "id": req_id,
-                                "error": {
-                                    "code": -32601,
-                                    "message": "Method not found",
-                                    "data": {"method": method},
-                                },
-                            }
-                        )
-                    )
-
-            except Exception as e:
-                await ws.send_text(
-                    json.dumps(
-                        {
-                            "jsonrpc": "2.0",
-                            "id": req_id,
-                            "error": {
-                                "code": -32000,
-                                "message": str(e),
-                                "data": {"type": type(e).__name__},
-                            },
-                        }
-                    )
-                )
-    except WebSocketDisconnect:
-        logger.info("MCP WebSocket disconnected (ingest)")
+    """MCP WebSocket endpoint using base handler."""
+    await mcp_websocket_handler(ws, mcp_handler)
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 """
 Persistence functions for unified chat API.
 """
+from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any
 from packages.db.crud import (
     get_or_create_session,
     add_message,
@@ -31,10 +32,10 @@ async def persist_last_user_message(
 async def record_tool_start(
     db,
     user_id: int,
-    session_id: Optional[int],
-    message_id: Optional[int],
+    session_id: int | None,
+    message_id: int | None,
     tool_name: str,
-    args: Dict[str, Any],
+    args: dict[str, Any],
     start_ts: datetime,
 ):
     """Record the start of a tool execution linked to the message being generated."""
@@ -54,9 +55,9 @@ async def record_tool_end(
     run_id: int,
     status: str,
     end_ts: datetime,
-    latency_ms: Optional[int] = None,
-    result_preview: Optional[str] = None,
-    tool_name: Optional[str] = None,
+    latency_ms: int | None = None,
+    result_preview: str | None = None,
+    tool_name: str | None = None,
 ):
     """Record the end of a tool execution."""
     await finish_tool_run(
@@ -105,7 +106,7 @@ async def get_or_create_chat_session(
 async def get_chat_session_by_external_id(
     db,
     external_id: str,
-) -> Optional[ChatSession]:
+) -> ChatSession | None:
     """Get a chat session by external ID."""
     from sqlalchemy import select
 

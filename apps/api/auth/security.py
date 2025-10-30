@@ -1,11 +1,11 @@
 """
 Security utilities for authentication and authorization.
 """
+from __future__ import annotations
 
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 from pathlib import Path
 
 from fastapi import HTTPException, Header, Depends, Cookie
@@ -30,7 +30,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 security = HTTPBearer(auto_error=False)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
     """Create JWT access token."""
     to_encode = data.copy()
     if expires_delta:
@@ -44,9 +44,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_current_user(
-    youworker_token: Optional[str] = Cookie(default=None),
-    authentik_api_key: Optional[str] = Header(default=None, alias="X-Authentik-Api-Key"),
-    authentik_username: Optional[str] = Header(default=None, alias="X-Authentik-Username"),
+    youworker_token: str | None = Cookie(default=None),
+    authentik_api_key: str | None = Header(default=None, alias="X-Authentik-Api-Key"),
+    authentik_username: str | None = Header(default=None, alias="X-Authentik-Username"),
 ):
     """
     Get the current user from JWT cookie.
@@ -109,9 +109,9 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    youworker_token: Optional[str] = Cookie(default=None),
-    authentik_api_key: Optional[str] = Header(default=None, alias="X-Authentik-Api-Key"),
-    authentik_username: Optional[str] = Header(default=None, alias="X-Authentik-Username"),
+    youworker_token: str | None = Cookie(default=None),
+    authentik_api_key: str | None = Header(default=None, alias="X-Authentik-Api-Key"),
+    authentik_username: str | None = Header(default=None, alias="X-Authentik-Username"),
 ):
     """
     Get the current user from JWT cookie, or None if no valid authentication.

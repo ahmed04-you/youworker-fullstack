@@ -71,6 +71,25 @@ target-version = ['py311']
 line-length = 100
 target-version = "py311"
 
+# Enable pycodestyle (`E`), Pyflakes (`F`), pyupgrade (`UP`), and more
+select = [
+    "E",      # pycodestyle errors
+    "F",      # Pyflakes
+    "UP",     # pyupgrade (enforces modern Python syntax)
+    "B",      # flake8-bugbear
+    "SIM",    # flake8-simplify
+    "I",      # isort
+    "DTZ",    # flake8-datetimez (prevent naive datetime usage)
+]
+
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+]
+
+[tool.ruff.lint.pyupgrade]
+# Keep runtime-required Union syntax for Python < 3.10, but we target 3.11+
+keep-runtime-typing = false
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]

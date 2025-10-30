@@ -4,7 +4,7 @@ import hashlib
 import io
 from contextlib import suppress
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator
 from uuid import uuid4
 
 import pandas as pd
@@ -311,7 +311,7 @@ def _safe_assign(target: object, attribute: str, value: object) -> None:
         )
 
 
-def _export_markdown(result: Any) -> Optional[str]:
+def _export_markdown(result: Any) -> str | None:
     """Attempt to export the Docling result to markdown."""
     document = getattr(result, "document", None)
     if document is None:
@@ -354,7 +354,7 @@ def _export_markdown(result: Any) -> Optional[str]:
     return None
 
 
-def _coerce_markdown(output: Any) -> Optional[str]:
+def _coerce_markdown(output: Any) -> str | None:
     """Normalize various exporter return types to a markdown string."""
     if not output:
         return None
@@ -540,7 +540,7 @@ def _extract_picture_image_metadata(item: Any, document: Any) -> dict[str, Any]:
         "ocr_used": False,
         "ocr_attempted": False,
     }
-    ocr_text: Optional[str] = None
+    ocr_text: str | None = None
 
     # Capture lightweight reference data from ImageRef if available
     image_ref = getattr(item, "image", None)

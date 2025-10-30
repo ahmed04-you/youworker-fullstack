@@ -1,8 +1,7 @@
 """
 Token-based chunking utilities for ingestion pipeline.
 """
-
-from typing import List, Tuple
+from __future__ import annotations
 
 from packages.parsers.chunker import (
     chunk_token_ranges,
@@ -14,7 +13,7 @@ def chunk_text_tokens(
     text: str,
     chunk_size: int = 500,
     chunk_overlap: int = 50,
-) -> List[str]:
+) -> list[str]:
     """
     Chunk text into overlapping segments based on token count.
 
@@ -41,10 +40,10 @@ def chunk_text_tokens(
 
 
 def get_chunk_token_ranges(
-    tokens: List[str],
+    tokens: list[str],
     chunk_size: int = 500,
     chunk_overlap: int = 50,
-) -> List[Tuple[int, int]]:
+) -> list[tuple[int, int]]:
     """
     Get token ranges for chunking without creating text.
 

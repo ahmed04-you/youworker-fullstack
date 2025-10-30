@@ -1,11 +1,222 @@
 """
 Unified chat endpoint with WebSocket support for real-time communication.
+
+WebSocket Reconnection Strategy for Frontend Clients
+=====================================================
+
+This document describes the recommended reconnection strategy for WebSocket clients
+connecting to the /chat/{session_id} endpoint.
+
+## Connection Lifecycle
+
+1. **Initial Connection**
+   - Connect to ws://host/chat/{session_id}
+   - Include authentication via one of:
+     - Header: X-Api-Key: <your_api_key>
+     - Query param: ?api_key=<your_api_key>
+     - Header: Authorization: <your_api_key> (backward compat)
+
+2. **Heartbeat/Keep-Alive**
+   - Server sends periodic heartbeat messages (every 30 seconds by default)
+   - Client should respond to heartbeats to keep connection alive
+   - If no heartbeat received for 60 seconds, consider connection dead
+
+3. **Disconnection Detection**
+   - Listen for WebSocket close events (onclose)
+   - Listen for WebSocket error events (onerror)
+   - Detect network failures (no heartbeat)
+
+## Recommended Reconnection Algorithm
+
+### Exponential Backoff with Jitter
+
+```typescript
+interface ReconnectionConfig {
+  maxRetries: number;        // Maximum reconnection attempts (default: 10)
+  initialDelay: number;      // Initial delay in ms (default: 1000)
+  maxDelay: number;          // Maximum delay in ms (default: 30000)
+  backoffMultiplier: number; // Delay multiplier (default: 2)
+  jitterFactor: number;      // Random jitter 0-1 (default: 0.1)
+}
+
+class WebSocketClient {
+  private ws: WebSocket | null = null;
+  private reconnectAttempts = 0;
+  private reconnectTimer: number | null = null;
+  private config: ReconnectionConfig = {
+    maxRetries: 10,
+    initialDelay: 1000,
+    maxDelay: 30000,
+    backoffMultiplier: 2,
+    jitterFactor: 0.1,
+  };
+
+  connect(sessionId: string, apiKey: string) {
+    const url = `ws://localhost:8000/chat/${sessionId}?api_key=${apiKey}`;
+    this.ws = new WebSocket(url);
+
+    this.ws.onopen = () => {
+      console.log('WebSocket connected');
+      this.reconnectAttempts = 0; // Reset on successful connection
+    };
+
+    this.ws.onclose = (event) => {
+      console.log('WebSocket closed:', event.code, event.reason);
+      if (event.code !== 1000) { // 1000 = normal closure
+        this.scheduleReconnect(sessionId, apiKey);
+      }
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      // Error will trigger onclose, which handles reconnection
+    };
+
+    this.ws.onmessage = (event) => {
+      this.handleMessage(JSON.parse(event.data));
+    };
+  }
+
+  private scheduleReconnect(sessionId: string, apiKey: string) {
+    if (this.reconnectAttempts >= this.config.maxRetries) {
+      console.error('Max reconnection attempts reached');
+      this.onMaxRetriesReached?.();
+      return;
+    }
+
+    const delay = this.calculateDelay();
+    console.log(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts + 1}/${this.config.maxRetries})`);
+
+    this.reconnectTimer = window.setTimeout(() => {
+      this.reconnectAttempts++;
+      this.connect(sessionId, apiKey);
+    }, delay);
+  }
+
+  private calculateDelay(): number {
+    // Exponential backoff: delay = initialDelay * (multiplier ^ attempts)
+    const exponentialDelay = this.config.initialDelay *
+      Math.pow(this.config.backoffMultiplier, this.reconnectAttempts);
+
+    // Cap at maxDelay
+    const cappedDelay = Math.min(exponentialDelay, this.config.maxDelay);
+
+    // Add random jitter to prevent thundering herd
+    const jitter = cappedDelay * this.config.jitterFactor * (Math.random() - 0.5);
+
+    return Math.floor(cappedDelay + jitter);
+  }
+
+  disconnect() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
+    }
+  }
+
+  send(message: any) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    } else {
+      console.error('Cannot send message: WebSocket not open');
+    }
+  }
+
+  // Callback for max retries reached
+  onMaxRetriesReached?: () => void;
+
+  private handleMessage(data: any) {
+    // Handle different message types
+    switch (data.type) {
+      case 'heartbeat':
+        // Respond to server heartbeat
+        this.send({ type: 'heartbeat_ack' });
+        break;
+      case 'text':
+      case 'audio':
+      case 'tool':
+      case 'status':
+        // Handle actual messages
+        this.onMessage?.( data);
+        break;
+      default:
+        console.warn('Unknown message type:', data.type);
+    }
+  }
+
+  // Callback for messages
+  onMessage?: (data: any) => void;
+}
+```
+
+## Usage Example
+
+```typescript
+const client = new WebSocketClient();
+
+// Set up callbacks
+client.onMessage = (data) => {
+  console.log('Received:', data);
+  // Update UI with message
+};
+
+client.onMaxRetriesReached = () => {
+  // Show error to user
+  alert('Connection lost. Please refresh the page.');
+};
+
+// Connect
+client.connect('my-session-id', 'my-api-key');
+
+// Send message
+client.send({
+  type: 'text',
+  content: 'Hello, AI!',
+  metadata: {}
+});
+
+// Disconnect when done
+client.disconnect();
+```
+
+## Best Practices
+
+1. **Session State Management**
+   - Store session_id in browser storage for reconnection
+   - Maintain message queue for failed sends during reconnection
+   - Re-send pending messages after successful reconnection
+
+2. **User Experience**
+   - Show connection status indicator in UI
+   - Display "Reconnecting..." message during reconnection
+   - Allow manual reconnection button after max retries
+
+3. **Error Handling**
+   - Distinguish between network errors and server errors
+   - Log disconnection reasons for debugging
+   - Provide clear error messages to users
+
+4. **Security**
+   - Don't expose API keys in URLs for production (use headers)
+   - Implement token refresh if using JWT authentication
+   - Clear sensitive data on disconnect
+
+5. **Performance**
+   - Avoid creating multiple concurrent connections
+   - Clean up event listeners on disconnect
+   - Use connection pooling for multiple sessions
 """
+
+from __future__ import annotations
 
 import base64
 import logging
-from datetime import datetime
-from typing import Any, Dict, Optional
+from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
@@ -43,22 +254,22 @@ class ChatMessageModel(BaseModel):
     """Enhanced chat message model for chat API."""
 
     type: str  # "text", "audio", "system"
-    content: Optional[str] = None
-    audio_data: Optional[str] = None  # Base64 encoded audio
+    content: str | None = None
+    audio_data: str | None = None  # Base64 encoded audio
     sample_rate: int = Field(default=16000, ge=8000, le=48000)
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    timestamp: str | None = None
 
 
 class ChatResponseModel(BaseModel):
     """Enhanced chat response model for chat API."""
 
     type: str  # "text", "audio", "error", "tool", "status"
-    content: Optional[str] = None
-    audio_data: Optional[str] = None
-    sample_rate: Optional[int] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    timestamp: Optional[str] = None
+    content: str | None = None
+    audio_data: str | None = None
+    sample_rate: int | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    timestamp: str | None = None
 
 
 @router.websocket("/chat/{session_id}")
@@ -121,7 +332,7 @@ async def websocket_chat_endpoint(
             {
                 "type": "error",
                 "content": error_msg,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
         await websocket.close(code=1008, reason=error_msg)
@@ -137,7 +348,7 @@ async def websocket_chat_endpoint(
             {
                 "type": "system",
                 "content": "Connected to chat session",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -164,7 +375,7 @@ async def websocket_chat_endpoint(
                             "type": "status",
                             "content": "Stream stopped",
                             "metadata": {"stage": "stopped"},
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         },
                     )
                 elif message.type == "ping":
@@ -174,7 +385,7 @@ async def websocket_chat_endpoint(
                         connection_id,
                         {
                             "type": "pong",
-                            "timestamp": datetime.utcnow().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         },
                     )
                 else:
@@ -190,7 +401,7 @@ async def websocket_chat_endpoint(
                     {
                         "type": "error",
                         "content": f"Error processing message: {str(e)}",
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
 
@@ -222,7 +433,7 @@ async def handle_text_message(
             {
                 "type": "error",
                 "content": "Service not ready - agent loop not initialized",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
         return
@@ -277,7 +488,7 @@ async def handle_audio_message(
                 "type": "status",
                 "content": "Transcribing audio...",
                 "metadata": {"stage": "transcription"},
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -294,7 +505,7 @@ async def handle_audio_message(
                 {
                     "type": "error",
                     "content": "Could not transcribe audio",
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
             return
@@ -309,7 +520,7 @@ async def handle_audio_message(
                     "confidence": transcript_result.get("confidence"),
                     "language": transcript_result.get("language"),
                 },
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -328,7 +539,7 @@ async def handle_audio_message(
             {
                 "type": "error",
                 "content": f"Error processing audio: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -351,7 +562,7 @@ async def stream_agent_response(
             "type": "status",
             "content": "Thinking...",
             "metadata": {"stage": "thinking"},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         },
     )
 
@@ -381,7 +592,7 @@ async def stream_agent_response(
                         "type": "text",
                         "content": text,
                         "metadata": {"is_streaming": True},
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
 
@@ -399,7 +610,7 @@ async def stream_agent_response(
                             "args": data.get("args"),
                             "latency_ms": data.get("latency_ms"),
                         },
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
 
@@ -413,7 +624,7 @@ async def stream_agent_response(
                             message_id=None,  # TODO: Thread message context through agent loop
                             tool_name=data.get("tool"),
                             args=data.get("args"),
-                            start_ts=datetime.utcnow(),
+                            start_ts=datetime.now(timezone.utc),
                         )
                 elif data.get("status") in ["end", "error"]:
                     async with get_async_session() as db:
@@ -423,7 +634,7 @@ async def stream_agent_response(
                                 tool_run.id if tool_run else 1
                             ),  # Get from start event in real implementation
                             status=data.get("status"),
-                            end_ts=datetime.utcnow(),
+                            end_ts=datetime.now(timezone.utc),
                             latency_ms=data.get("latency_ms"),
                             result_preview=data.get("result_preview"),
                             tool_name=data.get("tool"),
@@ -448,7 +659,7 @@ async def stream_agent_response(
                         "type": "text",
                         "content": final_text,
                         "metadata": {"is_final": True},
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
 
@@ -463,7 +674,7 @@ async def stream_agent_response(
                         "type": "status",
                         "content": "Response complete",
                         "metadata": {"stage": "complete"},
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
 
@@ -476,7 +687,7 @@ async def stream_agent_response(
             {
                 "type": "error",
                 "content": f"Error generating response: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -491,7 +702,7 @@ async def stream_audio_response(connection_id: str, text: str):
                 "type": "status",
                 "content": "Generating audio...",
                 "metadata": {"stage": "audio_generation"},
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -510,7 +721,7 @@ async def stream_audio_response(connection_id: str, text: str):
                     "audio_data": audio_b64,
                     "sample_rate": sample_rate,
                     "metadata": {"is_final": True},
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 },
             )
 
@@ -520,7 +731,7 @@ async def stream_audio_response(connection_id: str, text: str):
             {
                 "type": "audio",
                 "metadata": {"is_final": True},
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 
@@ -531,7 +742,7 @@ async def stream_audio_response(connection_id: str, text: str):
             {
                 "type": "error",
                 "content": f"Error generating audio: {str(e)}",
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             },
         )
 

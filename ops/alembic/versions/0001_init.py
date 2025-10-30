@@ -26,7 +26,7 @@ def upgrade() -> None:
         sa.Column('username', sa.String(length=128), nullable=False),
         sa.Column('is_root', sa.Boolean(), nullable=False, server_default=sa.false()),
         sa.Column('api_key_hash', sa.String(length=128), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
     )
     op.create_index('ix_users_username', 'users', ['username'], unique=True)
     op.create_index('ix_users_is_root', 'users', ['is_root'])
@@ -40,8 +40,8 @@ def upgrade() -> None:
         sa.Column('title', sa.String(length=256), nullable=True),
         sa.Column('model', sa.String(length=128), nullable=True),
         sa.Column('enable_tools', sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
     )
     op.create_index('ix_chat_sessions_external_id', 'chat_sessions', ['external_id'])
     op.create_index('ix_chat_sessions_user_created', 'chat_sessions', ['user_id', 'created_at'])
@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column('content', sa.LargeBinary(), nullable=True),  # Encrypted with Fernet
         sa.Column('tool_call_name', sa.String(length=256), nullable=True),
         sa.Column('tool_call_id', sa.String(length=128), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
         sa.Column('tokens_in', sa.Integer(), nullable=True),
         sa.Column('tokens_out', sa.Integer(), nullable=True),
     )
@@ -72,7 +72,7 @@ def upgrade() -> None:
         sa.Column('server_id', sa.String(length=64), nullable=False),
         sa.Column('url', sa.String(length=512), nullable=False),
         sa.Column('healthy', sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column('last_seen', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('last_seen', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
     )
     op.create_index('ix_mcp_servers_server_id', 'mcp_servers', ['server_id'], unique=True)
     op.create_index('ix_mcp_servers_healthy', 'mcp_servers', ['healthy'])
@@ -86,7 +86,7 @@ def upgrade() -> None:
         sa.Column('description', sa.Text(), nullable=True),
         sa.Column('input_schema', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('enabled', sa.Boolean(), nullable=False, server_default=sa.true()),
-        sa.Column('last_discovered_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('last_discovered_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
     )
     op.create_index('ix_tools_name', 'tools', ['name'])
     op.create_index('ix_tools_enabled', 'tools', ['enabled'])
@@ -102,7 +102,7 @@ def upgrade() -> None:
         sa.Column('message_id', sa.Integer(), sa.ForeignKey('chat_messages.id', ondelete='CASCADE'), nullable=True),
         sa.Column('tool_name', sa.String(length=256), nullable=False),
         sa.Column('status', sa.String(length=32), nullable=False),
-        sa.Column('start_ts', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('start_ts', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
         sa.Column('end_ts', sa.DateTime(timezone=True), nullable=True),
         sa.Column('latency_ms', sa.Integer(), nullable=True),
         sa.Column('args', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
@@ -127,7 +127,7 @@ def upgrade() -> None:
         sa.Column('totals_files', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('totals_chunks', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('errors', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('started_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('started_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
         sa.Column('finished_at', sa.DateTime(timezone=True), nullable=True),
         sa.Column('status', sa.String(length=32), nullable=False, server_default='success'),
     )
@@ -146,7 +146,7 @@ def upgrade() -> None:
         sa.Column('tags', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column('collection', sa.String(length=128), nullable=True),
         sa.Column('path_hash', sa.String(length=64), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
         sa.Column('last_ingested_at', sa.DateTime(timezone=True), nullable=True),
     )
     op.create_index('ix_documents_collection_created', 'documents', ['collection', 'created_at'])
@@ -168,7 +168,7 @@ def upgrade() -> None:
         'document_collections',
         sa.Column('id', sa.Integer(), primary_key=True, autoincrement=True),
         sa.Column('name', sa.String(length=128), nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text("timezone('utc', now())")),
     )
     op.create_index('ix_document_collections_name', 'document_collections', ['name'], unique=True)
 

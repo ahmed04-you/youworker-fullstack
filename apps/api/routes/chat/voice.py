@@ -7,8 +7,6 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Depends, Request
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from apps.api.config import settings
 from apps.api.auth.security import sanitize_input
@@ -35,11 +33,9 @@ from .persistence import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-limiter = Limiter(key_func=get_remote_address)
 
 
 @router.post("/voice-turn", response_model=VoiceTurnResponse)
-@limiter.limit("20/minute")
 async def voice_turn_endpoint(
     request: Request,
     voice_request: VoiceTurnRequest,

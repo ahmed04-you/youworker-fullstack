@@ -2,11 +2,13 @@
 WebSocket connection manager for real-time chat communication.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from datetime import datetime, timezone
+from typing import Any
 from uuid import uuid4
 
 
@@ -29,17 +31,17 @@ class ConnectionManager:
 
     def __init__(self):
         # Active connections by session ID
-        self.active_connections: Dict[str, Any] = {}
+        self.active_connections: dict[str, Any] = {}
         # User sessions mapping
-        self.user_sessions: Dict[int, Set[str]] = {}
+        self.user_sessions: dict[int, set[str]] = {}
         # Connection metadata
-        self.connection_metadata: Dict[str, Dict[str, Any]] = {}
+        self.connection_metadata: dict[str, dict[str, Any]] = {}
         # Heartbeat tracking
-        self.last_heartbeat: Dict[str, datetime] = {}
+        self.last_heartbeat: dict[str, datetime] = {}
         # Lock for thread safety
         self._lock = asyncio.Lock()
 
-    async def connect(self, websocket: Any, user_id: int, session_id: Optional[str] = None) -> str:
+    async def connect(self, websocket: Any, user_id: int, session_id: str | None = None) -> str:
         """
         Accept and register a new WebSocket connection.
 
@@ -80,12 +82,12 @@ class ConnectionManager:
             self.connection_metadata[connection_id] = {
                 "user_id": user_id,
                 "session_id": session_id,
-                "connected_at": datetime.utcnow(),
-                "last_activity": datetime.utcnow(),
+                "connected_at": datetime.now(timezone.utc),
+                "last_activity": datetime.now(timezone.utc),
             }
 
             # Initialize heartbeat
-            self.last_heartbeat[connection_id] = datetime.utcnow()
+            self.last_heartbeat[connection_id] = datetime.now(timezone.utc)
 
         logger.info(f"WebSocket connected: {connection_id} for user {user_id}")
         return connection_id
@@ -125,7 +127,7 @@ class ConnectionManager:
 
         logger.info(f"WebSocket disconnected: {connection_id}")
 
-    async def send_message(self, connection_id: str, message: Dict[str, Any]):
+    async def send_message(self, connection_id: str, message: dict[str, Any]):
         """
         Send a message to a specific connection.
 
@@ -143,13 +145,13 @@ class ConnectionManager:
             # Update activity timestamp
             async with self._lock:
                 if connection_id in self.connection_metadata:
-                    self.connection_metadata[connection_id]["last_activity"] = datetime.utcnow()
+                    self.connection_metadata[connection_id]["last_activity"] = datetime.now(timezone.utc)
         except Exception as e:
             logger.error(f"Error sending message to {connection_id}: {e}")
             # Connection might be dead, schedule cleanup
             asyncio.create_task(self.disconnect(connection_id))
 
-    async def broadcast_to_session(self, session_id: str, message: Dict[str, Any]):
+    async def broadcast_to_session(self, session_id: str, message: dict[str, Any]):
         """
         Broadcast message to all connections in a session.
 
@@ -169,7 +171,7 @@ class ConnectionManager:
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def broadcast_to_user(self, user_id: int, message: Dict[str, Any]):
+    async def broadcast_to_user(self, user_id: int, message: dict[str, Any]):
         """
         Broadcast message to all connections for a user.
 
@@ -198,7 +200,7 @@ class ConnectionManager:
         """
         async with self._lock:
             if connection_id in self.last_heartbeat:
-                self.last_heartbeat[connection_id] = datetime.utcnow()
+                self.last_heartbeat[connection_id] = datetime.now(timezone.utc)
 
     async def check_stale_connections(self, timeout_seconds: int = 60):
         """
@@ -207,7 +209,7 @@ class ConnectionManager:
         Args:
             timeout_seconds: Seconds before considering connection stale
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stale_connections = []
 
         async with self._lock:
@@ -220,7 +222,7 @@ class ConnectionManager:
             logger.info(f"Cleaning up stale connection: {conn_id}")
             await self.disconnect(conn_id)
 
-    def get_connection_info(self, connection_id: str) -> Optional[Dict[str, Any]]:
+    def get_connection_info(self, connection_id: str) -> dict[str, Any] | None:
         """
         Get metadata for a connection.
 
@@ -232,7 +234,7 @@ class ConnectionManager:
         """
         return self.connection_metadata.get(connection_id)
 
-    def get_active_sessions(self, user_id: int) -> List[str]:
+    def get_active_sessions(self, user_id: int) -> list[str]:
         """
         Get active session IDs for a user.
 

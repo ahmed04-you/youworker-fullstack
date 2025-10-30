@@ -11,6 +11,7 @@ from fastapi import FastAPI
 
 from apps.api.config import settings
 from packages.agent import MCPRegistry, AgentLoop
+from packages.common.exceptions import ConfigurationError
 from packages.db import init_db as init_database
 from packages.ingestion import IngestionPipeline
 from packages.llm import OllamaClient
@@ -42,7 +43,7 @@ class StartupService:
                 "'from cryptography.fernet import Fernet; "
                 "print(Fernet.generate_key().decode())'"
             )
-            raise RuntimeError(
+            raise ConfigurationError(
                 "Chat encryption secret not configured. "
                 "Set CHAT_MESSAGE_ENCRYPTION_SECRET in .env"
             )
@@ -56,7 +57,7 @@ class StartupService:
                 raise ValueError("Encryption test failed: data mismatch")
         except Exception as e:
             logger.critical(f"STARTUP FAILED: Encryption key validation failed: {e}")
-            raise RuntimeError(f"Invalid encryption configuration: {e}") from e
+            raise ConfigurationError(f"Invalid encryption configuration: {e}") from e
 
     def _validate_csrf_config(self) -> None:
         """Ensure CSRF protection has a configured secret."""
