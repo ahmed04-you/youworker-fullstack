@@ -19,8 +19,6 @@ help:
 	@echo "  format           - Format code with black"
 	@echo "  pull-models      - Pull Ollama models"
 	@echo "  status           - Show service status"
-	@echo "  dev-frontend     - Run frontend in development mode"
-	@echo "  frontend-logs    - View frontend logs"
 	@echo ""
 	@echo "Backup & Recovery:"
 	@echo "  backup           - Create encrypted backup (PostgreSQL + Qdrant)"
@@ -130,10 +128,6 @@ dev-mcp-units:
 install:
 	uv pip install --requirement requirements.txt
 
-# Install frontend dependencies
-install-frontend:
-	cd apps/frontend && npm install
-
 # Create .env file
 setup-env:
 	@if [ ! -f .env ]; then \
@@ -168,18 +162,6 @@ db-migrate:
 	fi; \
 	DATABASE_URL=$$DATABASE_URL alembic -c ops/alembic/alembic.ini upgrade head
 
-# Development: run frontend locally (requires API running)
-dev-frontend:
-	cd apps/frontend && npm run dev
-
-# View frontend logs
-frontend-logs:
-	$(COMPOSE_CMD) logs -f frontend
-
-# Build frontend for production
-build-frontend:
-	cd apps/frontend && npm run build
-
 # Create necessary directories
 setup-dirs:
 	@echo "Creating necessary directories..."
@@ -188,7 +170,6 @@ setup-dirs:
 # Full setup (directories + start)
 setup-full: setup-dirs compose-up
 	@echo "Full setup completed!"
-	@echo "Access YouWorker.AI at: http://localhost:3000"
 	@echo "API documentation at: http://localhost:8001/docs"
 
 # Create encrypted database backup (PostgreSQL + Qdrant)

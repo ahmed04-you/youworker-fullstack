@@ -68,15 +68,6 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 - **Faster-Whisper**: Speech-to-text (modello OpenAI Whisper)
 - **Piper TTS**: Text-to-speech di alta qualità
 
-### Frontend
-- **Next.js 16**: Framework React con rendering lato server
-- **React 19**: Libreria UI con ultime funzionalità
-- **TypeScript 5**: Type safety completa
-- **Tailwind CSS**: Styling utility-first
-- **Radix UI**: Componenti accessibili (WCAG AA)
-- **Zustand**: State management leggero
-- **TanStack Query**: Data fetching e caching
-
 ### Infrastruttura
 - **Docker & Docker Compose**: Containerizzazione e orchestrazione
 
@@ -90,16 +81,14 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 │              (Autenticazione & API Keys)                     │
 └───────────────────────────┬─────────────────────────────────┘
                             │
-                     ┌──────┴──────┐
-                     │             │
-              ┌──────▼──────┐ ┌────▼────────────┐
-              │   Frontend   │ │   Backend API   │
-              │  (Next.js)   │◄┤   (FastAPI)     │
-              │  Porta 3000  │ │   Porta 8001    │
-              └──────────────┘ └────────┬────────┘
-                                        │
-        ┌───────────────────────────────┴─────────────┐
-        │                                               │
+                     ┌──────▼──────┐
+                     │ Backend API │
+                     │  (FastAPI)  │
+                     │ Porta 8001  │
+                     └──────┬──────┘
+                            │
+        ┌───────────────────┴─────────────┐
+        │                                  │
 ┌───────▼────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼─────┐
 │ Server MCP (5) │  │   Ollama     │  │   Qdrant     │  │  PostgreSQL  │
 │  Porte 7001-05 │  │  Porta 11434 │  │  Porta 6333  │  │  Porta 5432  │
@@ -164,8 +153,6 @@ AUTHENTIK_HEADER_NAME=X-Authentik-Api-Key
 AUTHENTIK_URL=https://auth.tuazienda.it
 
 # Network
-FRONTEND_ORIGIN=https://youworker.tuazienda.it
-NEXT_PUBLIC_API_BASE_URL=https://youworker.tuazienda.it:8000
 WHITELISTED_IPS=10.0.0.0/8,192.168.0.0/16
 
 # Modelli AI (personalizzabili)
@@ -214,8 +201,8 @@ docker exec -it postgres psql -U youworker -d youworker -c "\dt"
 
 Apri il browser e naviga a:
 
-- **Frontend**: `http://localhost:3000`
 - **API Health**: `http://localhost:8001/health`
+- **API Documentation**: `http://localhost:8001/docs`
 
 ---
 
@@ -274,16 +261,15 @@ make compose-down
 docker compose -f ops/compose/docker-compose.yml restart api
 
 # Visualizza log in tempo reale
-docker compose -f ops/compose/docker-compose.yml logs -f api frontend
+docker compose -f ops/compose/docker-compose.yml logs -f api
 ```
 
-### Accesso all'Interfaccia
+### Accesso all'API
 
-1. **Autenticazione**: Accedi tramite AUTHENTIK
-2. **Nuova chat**: Clicca su "Nuova Conversazione"
-3. **Upload documenti**: Sezione "Documenti" → "Carica"
-4. **Ricerca semantica**: Usa `@docs` nella chat per interrogare i documenti
-5. **Strumenti**: Gli strumenti MCP sono invocati automaticamente dall'AI
+1. **Autenticazione**: Ottieni un token API tramite AUTHENTIK
+2. **API Documentation**: Accedi a `http://localhost:8001/docs` per la documentazione interattiva
+3. **Health Check**: Verifica lo stato dei servizi con `http://localhost:8001/health`
+4. **Endpoints**: Consulta la documentazione OpenAPI per tutti gli endpoint disponibili
 
 ### Comandi Utili
 
@@ -299,12 +285,10 @@ make clean-volumes
 
 # Aggiornamento dipendenze
 cd apps/api && poetry update
-cd apps/frontend && npm update
 
 # Logs specifici
 docker logs -f youworker-api
 docker logs -f youworker-mcp-web
-docker logs -f youworker-frontend
 ```
 
 ---
@@ -322,11 +306,6 @@ poetry install
 poetry shell
 uvicorn main:app --reload --port 8001
 
-# Frontend (Node.js)
-cd apps/frontend
-npm install
-npm run dev
-
 # MCP Server
 cd apps/mcp_servers/web
 poetry install
@@ -340,12 +319,6 @@ python -m web.server
 make test
 pytest tests/ -v
 
-# Test Frontend
-cd apps/frontend
-npm test              # Vitest (unit)
-npm run test:e2e      # Playwright (E2E)
-npm run test:coverage # Coverage report
-
 # Linting
 make lint
 make format
@@ -356,7 +329,6 @@ make format
 ```
 youworker-fullstack/
 ├── apps/                      # Applicazioni
-│   ├── frontend/             # Next.js frontend
 │   ├── api/                  # FastAPI backend
 │   └── mcp_servers/          # Server MCP
 │       ├── web/              # Strumenti web

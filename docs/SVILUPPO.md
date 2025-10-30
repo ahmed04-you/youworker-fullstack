@@ -9,13 +9,12 @@ Guida per sviluppatori che contribuiscono al progetto YouWorker.
 1. [Setup Ambiente di Sviluppo](#setup-ambiente-di-sviluppo)
 2. [Struttura del Progetto](#struttura-del-progetto)
 3. [Sviluppo Backend](#sviluppo-backend)
-4. [Sviluppo Frontend](#sviluppo-frontend)
-5. [Sviluppo MCP Server](#sviluppo-mcp-server)
-6. [Testing](#testing)
-7. [Debugging](#debugging)
-8. [Best Practices](#best-practices)
-9. [Code Style](#code-style)
-10. [Workflow Git](#workflow-git)
+4. [Sviluppo MCP Server](#sviluppo-mcp-server)
+5. [Testing](#testing)
+6. [Debugging](#debugging)
+7. [Best Practices](#best-practices)
+8. [Code Style](#code-style)
+9. [Workflow Git](#workflow-git)
 
 ---
 
@@ -26,10 +25,6 @@ Guida per sviluppatori che contribuiscono al progetto YouWorker.
 ```bash
 # Python 3.11+
 python3 --version
-
-# Node.js 20+
-node --version
-npm --version
 
 # Poetry (Python package manager)
 curl -sSL https://install.python-poetry.org | python3 -
@@ -48,11 +43,6 @@ cd youworker-fullstack
 # Setup Python environment
 poetry install
 
-# Setup Node environment
-cd apps/frontend
-npm install
-cd ../..
-
 # Copia .env per sviluppo
 cp .env.example .env
 # Modifica .env con configurazione sviluppo
@@ -68,10 +58,7 @@ Installa estensioni:
   "recommendations": [
     "ms-python.python",
     "ms-python.vscode-pylance",
-    "ms-python.black-formatter",
-    "bradlc.vscode-tailwindcss",
-    "esbenp.prettier-vscode",
-    "dbaeumer.vscode-eslint"
+    "ms-python.black-formatter"
   ]
 }
 ```
@@ -89,12 +76,6 @@ Settings (`.vscode/settings.json`):
   },
   "[python]": {
     "editor.defaultFormatter": "ms-python.black-formatter"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
-  },
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
   }
 }
 ```
@@ -105,7 +86,6 @@ Settings (`.vscode/settings.json`):
 2. File → Settings → Project → Python Interpreter
 3. Seleziona Poetry environment
 4. Abilita Black formatter
-5. Abilita ESLint per frontend
 
 ---
 
@@ -120,17 +100,6 @@ youworker-fullstack/
 │   │   ├── middleware/       # Custom middleware
 │   │   ├── services/         # Business logic
 │   │   └── utils/            # Utilità
-│   │
-│   ├── frontend/              # Frontend Next.js
-│   │   ├── src/
-│   │   │   ├── app/          # Next.js App Router
-│   │   │   ├── features/     # Feature modules
-│   │   │   ├── components/   # UI components
-│   │   │   ├── hooks/        # Custom hooks
-│   │   │   ├── lib/          # Utilities
-│   │   │   └── services/     # API clients
-│   │   ├── public/           # Static assets
-│   │   └── tests/            # Tests
 │   │
 │   └── mcp_servers/           # Server MCP
 │       ├── web/              # Web tools
@@ -316,207 +285,6 @@ poetry install
 
 ---
 
-## Sviluppo Frontend
-
-### Avvio in Locale
-
-```bash
-cd apps/frontend
-
-# Installa dipendenze
-npm install
-
-# Avvia dev server
-npm run dev
-
-# Oppure con Makefile
-make dev-frontend
-```
-
-Dev server: `http://localhost:3000`
-
-### Creazione Nuovo Feature Module
-
-Esempio: Creare feature "Tasks"
-
-1. **Struttura directory**:
-
-```bash
-mkdir -p src/features/tasks/{components,hooks,stores,types}
-```
-
-2. **Definisci tipi TypeScript**:
-
-```typescript
-// src/features/tasks/types/index.ts
-export interface Task {
-  id: number;
-  title: string;
-  description?: string;
-  completed: boolean;
-  created_at: string;
-}
-
-export interface CreateTaskInput {
-  title: string;
-  description?: string;
-}
-```
-
-3. **Crea Zustand store**:
-
-```typescript
-// src/features/tasks/stores/useTasksStore.ts
-import { create } from 'zustand';
-import { Task } from '../types';
-
-interface TasksStore {
-  tasks: Task[];
-  setTasks: (tasks: Task[]) => void;
-  addTask: (task: Task) => void;
-  updateTask: (id: number, updates: Partial<Task>) => void;
-  removeTask: (id: number) => void;
-}
-
-export const useTasksStore = create<TasksStore>((set) => ({
-  tasks: [],
-  setTasks: (tasks) => set({ tasks }),
-  addTask: (task) => set((state) => ({
-    tasks: [...state.tasks, task]
-  })),
-  updateTask: (id, updates) => set((state) => ({
-    tasks: state.tasks.map(t =>
-      t.id === id ? { ...t, ...updates } : t
-    )
-  })),
-  removeTask: (id) => set((state) => ({
-    tasks: state.tasks.filter(t => t.id !== id)
-  }))
-}));
-```
-
-4. **Crea custom hook con TanStack Query**:
-
-```typescript
-// src/features/tasks/hooks/useTasks.ts
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/services/api';
-import { Task, CreateTaskInput } from '../types';
-import { useTasksStore } from '../stores/useTasksStore';
-
-export function useTasks() {
-  const queryClient = useQueryClient();
-  const setTasks = useTasksStore(state => state.setTasks);
-
-  const { data: tasks, isLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: async () => {
-      const response = await api.get<Task[]>('/v1/tasks');
-      setTasks(response.data);
-      return response.data;
-    }
-  });
-
-  const createTask = useMutation({
-    mutationFn: (data: CreateTaskInput) =>
-      api.post<Task>('/v1/tasks', data),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-      useTasksStore.getState().addTask(data);
-    }
-  });
-
-  const toggleTask = useMutation({
-    mutationFn: (id: number) =>
-      api.patch<Task>(`/v1/tasks/${id}/toggle`),
-    onMutate: async (id) => {
-      // Optimistic update
-      useTasksStore.getState().updateTask(id, {
-        completed: !tasks?.find(t => t.id === id)?.completed
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] });
-    }
-  });
-
-  return {
-    tasks,
-    isLoading,
-    createTask: createTask.mutate,
-    toggleTask: toggleTask.mutate
-  };
-}
-```
-
-5. **Crea componente UI**:
-
-```typescript
-// src/features/tasks/components/TaskList.tsx
-'use client';
-
-import { useTasks } from '../hooks/useTasks';
-import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
-
-export function TaskList() {
-  const { tasks, isLoading, toggleTask } = useTasks();
-
-  if (isLoading) {
-    return <div>Caricamento...</div>;
-  }
-
-  return (
-    <div className="space-y-2">
-      {tasks?.map(task => (
-        <div key={task.id} className="flex items-center gap-2">
-          <Checkbox
-            checked={task.completed}
-            onCheckedChange={() => toggleTask(task.id)}
-          />
-          <span className={task.completed ? 'line-through' : ''}>
-            {task.title}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-6. **Usa in pagina**:
-
-```typescript
-// src/app/tasks/page.tsx
-import { TaskList } from '@/features/tasks/components/TaskList';
-
-export default function TasksPage() {
-  return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">Le Mie Attività</h1>
-      <TaskList />
-    </div>
-  );
-}
-```
-
-### Aggiungere Dipendenze
-
-```bash
-cd apps/frontend
-
-# Produzione
-npm install <package>
-
-# Sviluppo
-npm install --save-dev <package>
-
-# Aggiorna pacchetti
-npm update
-```
-
----
-
 ## Sviluppo MCP Server
 
 ### Struttura MCP Server
@@ -684,96 +452,6 @@ async def test_create_chat_session(auth_headers):
     assert "external_id" in data
 ```
 
-### Frontend Tests (Vitest)
-
-```bash
-cd apps/frontend
-
-# Unit tests
-npm test
-
-# Watch mode
-npm test -- --watch
-
-# Coverage
-npm run test:coverage
-
-# UI mode
-npm test -- --ui
-```
-
-**Esempio test**:
-
-```typescript
-// src/features/tasks/hooks/useTasks.test.ts
-import { renderHook, waitFor } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useTasks } from './useTasks';
-
-describe('useTasks', () => {
-  it('fetches tasks successfully', async () => {
-    const queryClient = new QueryClient();
-    const wrapper = ({ children }: any) => (
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
-    );
-
-    const { result } = renderHook(() => useTasks(), { wrapper });
-
-    await waitFor(() => expect(result.current.isLoading).toBe(false));
-
-    expect(result.current.tasks).toBeDefined();
-    expect(Array.isArray(result.current.tasks)).toBe(true);
-  });
-});
-```
-
-### E2E Tests (Playwright)
-
-```bash
-cd apps/frontend
-
-# Installa Playwright browsers
-npx playwright install
-
-# Run E2E tests
-npm run test:e2e
-
-# UI mode
-npm run test:e2e -- --ui
-
-# Debug mode
-npm run test:e2e -- --debug
-```
-
-**Esempio test**:
-
-```typescript
-// tests/e2e/chat.spec.ts
-import { test, expect } from '@playwright/test';
-
-test.describe('Chat Flow', () => {
-  test('should create new chat session', async ({ page }) => {
-    await page.goto('http://localhost:3000');
-
-    // Login
-    await page.fill('[name="apiKey"]', process.env.TEST_API_KEY!);
-    await page.click('button[type="submit"]');
-
-    // Crea nuova chat
-    await page.click('text=Nuova Chat');
-    await page.fill('[placeholder="Scrivi un messaggio"]', 'Ciao!');
-    await page.click('button[aria-label="Invia"]');
-
-    // Verifica risposta
-    await expect(page.locator('.message-assistant')).toBeVisible({
-      timeout: 30000
-    });
-  });
-});
-```
-
 ---
 
 ## Debugging
@@ -802,25 +480,6 @@ test.describe('Chat Flow', () => {
       "cwd": "${workspaceFolder}/apps/api"
     }
   ]
-}
-```
-
-### Frontend Debugging (VS Code)
-
-```json
-{
-  "name": "Next.js: debug",
-  "type": "node",
-  "request": "launch",
-  "cwd": "${workspaceFolder}/apps/frontend",
-  "runtimeExecutable": "npm",
-  "runtimeArgs": ["run", "dev"],
-  "console": "integratedTerminal",
-  "serverReadyAction": {
-    "pattern": "started server on .+, url: (https?://.+)",
-    "uriFormat": "%s",
-    "action": "debugWithChrome"
-  }
 }
 ```
 
@@ -901,31 +560,6 @@ target-version = ['py311']
 [tool.flake8]
 max-line-length = 88
 extend-ignore = E203, W503
-```
-
-### TypeScript (Prettier + ESLint)
-
-```bash
-cd apps/frontend
-
-# Format
-npm run format
-
-# Lint
-npm run lint
-
-# Type check
-npm run type-check
-```
-
-**.prettierrc**:
-```json
-{
-  "semi": true,
-  "singleQuote": true,
-  "tabWidth": 2,
-  "trailingComma": "es5"
-}
 ```
 
 ---

@@ -3,18 +3,14 @@
 # Bootstrap everything needed to run the consolidated test suites.
 # - Provisions a local Python runtime (via uv)
 # - Installs backend/runtime + test dependencies
-# - Installs frontend dependencies and optional Playwright tooling
 
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
 VENV_DIR="${ROOT_DIR}/.venv"
-FRONTEND_DIR="${ROOT_DIR}/apps/frontend"
 BOOTSTRAP_DIR="${ROOT_DIR}/.cache/test-bootstrap"
 PYTHON_SENTINEL="${BOOTSTRAP_DIR}/python-ready"
-FRONTEND_SENTINEL="${BOOTSTRAP_DIR}/frontend-ready"
-PLAYWRIGHT_SENTINEL="${BOOTSTRAP_DIR}/playwright-ready"
 
 mkdir -p "${BOOTSTRAP_DIR}"
 
@@ -58,10 +54,9 @@ ensure_uv() {
 }
 
 ensure_uv
-require_command "npm" "Install Node.js (18+) which provides npm." >/dev/null
 
 # Reset sentinels so partial runs do not look successful.
-rm -f "${PYTHON_SENTINEL}" "${FRONTEND_SENTINEL}" "${PLAYWRIGHT_SENTINEL}"
+rm -f "${PYTHON_SENTINEL}"
 
 echo "➡️  Ensuring Python ${PYTHON_VERSION} runtime is available..."
 uv python install "${PYTHON_VERSION}" >/dev/null
@@ -76,35 +71,5 @@ source "${VENV_DIR}/bin/activate"
 echo "➡️  Installing backend dependencies from requirements/dev.txt"
 uv pip install --requirement "${ROOT_DIR}/requirements/dev.txt"
 printf "ok\n" >"${PYTHON_SENTINEL}"
-
-echo "➡️  Installing frontend dependencies"
-pushd "${FRONTEND_DIR}" >/dev/null
-if [ -f "package-lock.json" ]; then
-  npm ci
-else
-  npm install
-fi
-printf "ok\n" >"${FRONTEND_SENTINEL}"
-
-if [ "${INSTALL_PLAYWRIGHT_BROWSERS:-1}" = "1" ]; then
-  echo "➡️  Ensuring Playwright browsers are installed"
-  if npx playwright install --with-deps; then
-    printf "ok\n" >"${PLAYWRIGHT_SENTINEL}"
-  else
-    echo "⚠️  Playwright --with-deps failed (missing privileges or unsupported distro). Falling back to browser-only install."
-    if npx playwright install; then
-      printf "deps-missing\n" >"${PLAYWRIGHT_SENTINEL}"
-      echo "⚠️  Playwright browsers installed, but system dependencies may still be missing."
-    else
-      printf "failed\n" >"${PLAYWRIGHT_SENTINEL}"
-      echo "❌  Playwright browser installation failed."
-      exit 1
-    fi
-  fi
-else
-  printf "skipped\n" >"${PLAYWRIGHT_SENTINEL}"
-  echo "ℹ️  Skipping Playwright browser installation (INSTALL_PLAYWRIGHT_BROWSERS=0)"
-fi
-popd >/dev/null
 
 echo "✅ Test tooling setup complete."

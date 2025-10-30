@@ -25,43 +25,41 @@ YouWorker è un sistema distribuito basato su microservizi, progettato per funzi
 └────────────────────────────┬─────────────────────────────────────┘
                              │ Header forwarding
                              │ X-Authentik-Api-Key
-                      ┌──────┴──────┐
-                      │             │
-             ┌────────▼────────┐  ┌─▼───────────────────────────┐
-             │   FRONTEND      │  │      BACKEND API            │
-             │   (Next.js 16)  │  │      (FastAPI)              │
-             │                 │  │                             │
-             │ - React 19      │◄─┤ - REST API                  │
-             │ - SSR/SSG       │  │ - WebSocket streaming       │
-             │ - TypeScript    │  │ - Async/await               │
-             │ - Tailwind      │  │ - Python 3.11+              │
-             │                 │  │                             │
-             │ Port: 3000      │  │ Port: 8001                  │
-             └─────────────────┘  └──────────┬──────────────────┘
-                                                │
-                         ┌──────────────────────┼────────────────┐
-                         │                      │                │
-                         │                      │                │
-                ┌────────▼─────┐      ┌────────▼──────┐  ┌──────▼──────┐
-                │ MCP SERVERS  │      │    OLLAMA     │  │  PostgreSQL │
-                │  (5 servizi) │      │               │  │             │
-                │              │      │ - LLM Runtime │  │ - Users     │
-                │ Web (7001)   │      │ - GPU accel.  │  │ - Sessions  │
-                │ Semantic     │      │ - Models      │  │ - Messages  │
-                │  (7002)      │      │               │  │ - Documents │
-                │ DateTime     │      │ Port: 11434   │  │             │
-                │  (7003)      │      └───────────────┘  │ Port: 5432  │
-                │ Ingest       │                         └─────────────┘
-                │  (7004)      │                │
-                │ Units        │      ┌─────────▼──────┐
-                │  (7005)      │      │     QDRANT     │
-                │              │      │                │
-                └──────────────┘      │ - Embeddings   │
-                                      │ - Collections  │
-                                      │ - HNSW index   │
-                                      │                │
-                                      │ Port: 6333     │
-                                      └────────────────┘
+                             │
+                      ┌──────▼──────────────────────┐
+                      │      BACKEND API            │
+                      │      (FastAPI)              │
+                      │                             │
+                      │ - REST API                  │
+                      │ - WebSocket streaming       │
+                      │ - Async/await               │
+                      │ - Python 3.11+              │
+                      │                             │
+                      │ Port: 8001                  │
+                      └──────────┬──────────────────┘
+                                 │
+                ┌────────────────┼────────────────┐
+                │                │                │
+                │                │                │
+       ┌────────▼─────┐ ┌───────▼──────┐ ┌──────▼──────┐
+       │ MCP SERVERS  │ │    OLLAMA    │ │  PostgreSQL │
+       │  (5 servizi) │ │              │ │             │
+       │              │ │ - LLM Runtime│ │ - Users     │
+       │ Web (7001)   │ │ - GPU accel. │ │ - Sessions  │
+       │ Semantic     │ │ - Models     │ │ - Messages  │
+       │  (7002)      │ │              │ │ - Documents │
+       │ DateTime     │ │ Port: 11434  │ │             │
+       │  (7003)      │ └──────────────┘ │ Port: 5432  │
+       │ Ingest       │         │        └─────────────┘
+       │  (7004)      │ ┌───────▼──────┐
+       │ Units        │ │    QDRANT    │
+       │  (7005)      │ │              │
+       │              │ │ - Embeddings │
+       └──────────────┘ │ - Collections│
+                        │ - HNSW index │
+                        │              │
+                        │ Port: 6333   │
+                        └──────────────┘
 ```
 
 ---
@@ -87,107 +85,7 @@ Vedi [AUTHENTIK.md](AUTHENTIK.md) per dettagli.
 
 ---
 
-### 2. Frontend (Next.js)
-
-**Architettura:**
-```
-apps/frontend/
-├── src/
-│   ├── app/                    # Next.js App Router
-│   │   ├── layout.tsx         # Layout radice
-│   │   ├── page.tsx           # Homepage
-│   │   ├── chat/              # Interfaccia chat
-│   │   ├── documents/         # Gestione documenti
-│   │   ├── analytics/         # Dashboard analytics
-│   │   ├── sessions/          # Storico conversazioni
-│   │   └── settings/          # Impostazioni utente
-│   │
-│   ├── features/              # Moduli feature
-│   │   ├── chat/
-│   │   │   ├── components/   # Componenti UI
-│   │   │   ├── hooks/        # Custom hooks
-│   │   │   ├── stores/       # Zustand stores
-│   │   │   └── types/        # TypeScript types
-│   │   ├── documents/
-│   │   ├── analytics/
-│   │   └── onboarding/
-│   │
-│   ├── components/            # Componenti condivisi
-│   │   ├── ui/               # Radix UI wrappers
-│   │   ├── dialogs/          # Modal dialogs
-│   │   ├── layouts/          # Layout components
-│   │   └── providers/        # Context providers
-│   │
-│   ├── hooks/                 # Hooks globali
-│   ├── lib/                   # Utilities
-│   ├── services/              # API clients
-│   └── styles/                # Stili globali
-```
-
-**Pattern Architetturali:**
-
-1. **Feature-based organization**: Ogni feature è un modulo autonomo
-2. **Compound components**: Componenti composibili (es. `Dialog.Root`, `Dialog.Content`)
-3. **Render props & hooks**: Logica riutilizzabile
-4. **Server components**: SSR per SEO e performance
-5. **Optimistic updates**: UI reattiva con TanStack Query
-
-**State Management:**
-
-- **Zustand**: State globale leggero
-  - Chat store: Stato conversazioni
-  - UI store: Sidebar, modali, tema
-  - User store: Dati utente
-
-- **TanStack Query**: Server state
-  - Caching automatico
-  - Invalidazione intelligente
-  - Optimistic updates
-  - Retry e stale-while-revalidate
-
-- **React Context**: Providers specializzati
-  - Theme provider (dark/light)
-  - Auth provider (sessione utente)
-  - Toast provider (notifiche)
-
-**Comunicazione con Backend:**
-
-```typescript
-// HTTP (REST)
-import { apiClient } from '@/services/api'
-const sessions = await apiClient.get('/v1/chat/sessions')
-
-// WebSocket (Streaming chat)
-const ws = new WebSocket(`wss://${host}/chat/${sessionId}`)
-ws.send(JSON.stringify({
-  type: 'message',
-  content: 'Ciao!',
-  model: 'gpt-oss:20b',
-  enable_tools: true
-}))
-
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data)
-  if (data.event === 'token') {
-    // Streaming di token
-  } else if (data.event === 'tool') {
-    // Esecuzione tool
-  } else if (data.event === 'done') {
-    // Completamento
-  }
-}
-```
-
-**Accessibilità (WCAG AA):**
-- Navigazione tastiera completa
-- Screen reader support
-- Contrasto colori conforme
-- Focus management
-- ARIA labels e roles
-
----
-
-### 4. Backend API (FastAPI)
+### 2. Backend API (FastAPI)
 
 **Architettura:**
 ```
@@ -283,7 +181,7 @@ async def create_session(request: Request):
 
 ---
 
-### 5. Server MCP (Model Context Protocol)
+### 3. Server MCP (Model Context Protocol)
 
 **Architettura Comune:**
 
@@ -468,7 +366,7 @@ apps/mcp_servers/<name>/
 
 ---
 
-### 6. Ollama (LLM Runtime)
+### 4. Ollama (LLM Runtime)
 
 **Responsabilità:**
 - Hosting modelli LLM localmente
@@ -535,7 +433,7 @@ Runtime: `nvidia-container-runtime`
 
 ---
 
-### 7. Qdrant (Vector Database)
+### 5. Qdrant (Vector Database)
 
 **Responsabilità:**
 - Storage embeddings vettoriali
@@ -606,7 +504,7 @@ for result in results:
 
 ---
 
-### 8. PostgreSQL (Database Relazionale)
+### 6. PostgreSQL (Database Relazionale)
 
 **Responsabilità:**
 - Storage dati strutturati
@@ -735,7 +633,7 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
 
 ---
 
-### 9. Metriche e Analytics
+### 7. Metriche e Analytics
 
 **Metriche persistite in PostgreSQL:**
 - Chat sessions con metadata (modello, tool usati, timestamp)
@@ -780,7 +678,7 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
    ↓
 10. LLM genera risposta finale (con risultati tool)
     ↓
-11. Streaming risposta al frontend (WebSocket)
+11. Streaming risposta al client (WebSocket)
     ↓
 12. Salva messaggio assistente in PostgreSQL
     ↓
@@ -812,7 +710,7 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
    ↓
 9. Salva ingestion_run in PostgreSQL
    ↓
-10. Invia notifica a frontend (documento pronto)
+10. Invia notifica al client (documento pronto)
 ```
 
 ### Flusso 3: Ricerca Semantica (RAG)
@@ -839,7 +737,7 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
    ↓
 8. Risposta include citazioni esplicite
    ↓
-9. Frontend mostra documenti citati
+9. Client riceve risposta con documenti citati
 ```
 
 ---
@@ -894,16 +792,13 @@ CREATE INDEX idx_tool_runs_start ON tool_runs(start_ts);
 
 1. **Connection pooling**: PostgreSQL (max 20 conn)
 2. **WebSocket keep-alive**: Riduce overhead
-3. **Lazy loading**: Frontend carica componenti on-demand
-4. **Response caching**: TanStack Query (5 min TTL)
-5. **GPU acceleration**: CUDA per Ollama
-6. **Index optimization**: PostgreSQL + Qdrant HNSW
-7. **Async I/O**: FastAPI async/await completo
+3. **GPU acceleration**: CUDA per Ollama
+4. **Index optimization**: PostgreSQL + Qdrant HNSW
+5. **Async I/O**: FastAPI async/await completo
 
 ### Scaling Orizzontale
 
 **Servizi scalabili:**
-- Frontend: Replica N istanze dietro load balancer
 - API: Replica N istanze con session affinity
 - MCP Servers: Replica indipendente per tool tipo
 - Ollama: Multi-GPU setup con load balancing
