@@ -234,11 +234,17 @@ services:
     env_file:
       - ../../.env
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       NEXT_INTERNAL_API_BASE_URL: "http://api:8001"
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      # Mount source code for hot-reload in dev mode
+      - ../../apps/frontend-v2:/app:cached
+      # Prevent node_modules and .next from being overwritten by host
+      - /app/node_modules
+      - /app/.next
     depends_on:
       api:
         condition: service_healthy
