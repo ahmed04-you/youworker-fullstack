@@ -7,8 +7,8 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat
 
 # Copy package files
-COPY apps/frontend-v2/package.json apps/frontend-v2/package-lock.json ./
-RUN npm ci
+COPY apps/frontend/package.json apps/frontend/package-lock.json* ./
+RUN npm install
 
 # Set environment variables
 ARG NEXT_PUBLIC_API_URL

@@ -241,7 +241,7 @@ services:
       - "3000:3000"
     volumes:
       # Mount source code for hot-reload in dev mode
-      - ../../apps/frontend-v2:/app:cached
+      - ../../apps/frontend:/app:cached
       # Prevent node_modules and .next from being overwritten by host
       - /app/node_modules
       - /app/.next
