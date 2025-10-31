@@ -34,7 +34,12 @@ class ErrorTracker {
 
   captureMessage(message: string, level: 'info' | 'warning' | 'error' = 'info', context?: ErrorContext): void {
     if (process.env.NODE_ENV === 'development') {
-      console[level](message, context)
+      if (level === 'error') {
+        console.error(message, context)
+      } else if (level === 'warning') {
+        console.warn(message, context)
+      }
+      // Skip info level logs
       return
     }
 

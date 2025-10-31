@@ -4,7 +4,9 @@ import { createContext, useContext, useState, useEffect, ReactNode } from 'react
 import { Locale, i18n as i18nConfig } from './config'
 import { errorTracker } from '@/src/lib/utils'
 
-type Messages = Record<string, string | Messages>
+interface Messages {
+  [key: string]: string | Messages
+}
 
 interface I18nContextType {
   locale: Locale

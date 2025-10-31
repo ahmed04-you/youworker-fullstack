@@ -2,6 +2,7 @@ from .session import init_db, get_async_session
 from .models import (
     Base,
     User,
+    Group,
     ChatSession,
     ChatMessage,
     MCPServer,
@@ -9,10 +10,14 @@ from .models import (
     ToolRun,
     IngestionRun,
     Document,
+    Tag,
+    DocumentTag,
+    IngestionRunTag,
     UserToolAccess,
     DocumentCollection,
     UserCollectionAccess,
     UserDocumentAccess,
+    AuditLog,
 )
 
 # New repository pattern - recommended for new code
@@ -40,6 +45,7 @@ __all__ = [
     "get_async_session",
     "Base",
     "User",
+    "Group",
     "ChatSession",
     "ChatMessage",
     "MCPServer",
@@ -47,10 +53,14 @@ __all__ = [
     "ToolRun",
     "IngestionRun",
     "Document",
+    "Tag",
+    "DocumentTag",
+    "IngestionRunTag",
     "UserToolAccess",
     "DocumentCollection",
     "UserCollectionAccess",
     "UserDocumentAccess",
+    "AuditLog",
     # Repositories (NEW - use these for new code)
     "BaseRepository",
     "UserRepository",

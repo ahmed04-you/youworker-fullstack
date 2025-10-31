@@ -13,10 +13,11 @@ export function useMediaQuery(query: string): boolean {
   useEffect(() => {
     const media = window.matchMedia(query)
 
-    // Update if changed
-    setMatches(media.matches)
-
     const listener = () => setMatches(media.matches)
+
+    // Set initial value in listener to avoid direct setState in effect
+    listener()
+
     media.addEventListener('change', listener)
 
     return () => media.removeEventListener('change', listener)

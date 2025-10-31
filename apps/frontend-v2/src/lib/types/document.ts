@@ -8,18 +8,18 @@ export interface Document {
   updated_at: string
   status: 'processing' | 'ready' | 'failed'
   chunk_count?: number
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface DocumentUploadRequest {
   file: File
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }
 
 export interface DocumentSearchRequest {
   query: string
   limit?: number
-  filters?: Record<string, any>
+  filters?: Record<string, unknown>
 }
 
 export interface DocumentSearchResult {
@@ -27,5 +27,5 @@ export interface DocumentSearchResult {
   chunk_id: string
   content: string
   score: number
-  metadata?: Record<string, any>
+  metadata?: Record<string, unknown>
 }

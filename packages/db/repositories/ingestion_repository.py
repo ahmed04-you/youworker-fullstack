@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import IngestionRun
+from ..models import IngestionRun, Tag
 from .base import BaseRepository
 
 
@@ -22,6 +22,37 @@ class IngestionRepository(BaseRepository[IngestionRun]):
             session: Database session
         """
         super().__init__(session, IngestionRun)
+
+    async def _get_or_create_tags(self, tag_names: list[str]) -> list[Tag]:
+        """
+        Get existing tags or create new ones.
+
+        Args:
+            tag_names: List of tag names
+
+        Returns:
+            List of Tag objects
+        """
+        if not tag_names:
+            return []
+
+        tags: list[Tag] = []
+        for tag_name in tag_names:
+            # Try to get existing tag
+            result = await self.session.execute(
+                select(Tag).where(Tag.name == tag_name)
+            )
+            tag = result.scalar_one_or_none()
+
+            if not tag:
+                # Create new tag
+                tag = Tag(name=tag_name)
+                self.session.add(tag)
+                await self.session.flush()
+
+            tags.append(tag)
+
+        return tags
 
     async def record_ingestion_run(
         self,
@@ -58,12 +89,14 @@ class IngestionRepository(BaseRepository[IngestionRun]):
         Returns:
             Created ingestion run
         """
+        # Get or create tag objects
+        tag_objects = await self._get_or_create_tags(tags or [])
+
         run = IngestionRun(
             user_id=user_id,
             target=target,
             from_web=from_web,
             recursive=recursive,
-            tags={"tags": tags or []},
             collection=collection,
             totals_files=totals_files,
             totals_chunks=totals_chunks,
@@ -73,6 +106,9 @@ class IngestionRepository(BaseRepository[IngestionRun]):
             status=status,
         )
         self.session.add(run)
+        await self.session.flush()
+        # Set tags relationship after ingestion run is flushed
+        run.tags = tag_objects
         await self.session.flush()
         return run
 

@@ -86,7 +86,7 @@ class ChatService(BaseService):
         self,
         db_session: AsyncSession,
         agent_loop: AgentLoop,
-        settings: Any = None,
+        settings_instance: "Settings | None" = None,
     ):
         """
         Initialize chat service.
@@ -94,11 +94,11 @@ class ChatService(BaseService):
         Args:
             db_session: Database session for persistence
             agent_loop: Agent execution engine
-            settings: Application settings
+            settings_instance: Application settings
         """
-        from apps.api.config import settings as app_settings
+        from apps.api.config import settings as app_settings, Settings
 
-        super().__init__(db_session, settings or app_settings)
+        super().__init__(db_session, settings_instance or app_settings)
         self.agent_loop = agent_loop
 
     async def process_text_or_audio_input(

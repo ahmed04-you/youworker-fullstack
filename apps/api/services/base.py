@@ -5,10 +5,9 @@ This module provides a base class that all service classes should inherit from.
 Services encapsulate business logic and are independent of HTTP/API concerns.
 """
 
-from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.api.config import settings
+from apps.api.config import settings, Settings
 
 
 class BaseService:
@@ -26,13 +25,13 @@ class BaseService:
         settings: Application settings
     """
 
-    def __init__(self, db_session: AsyncSession, settings: Any = settings):
+    def __init__(self, db_session: AsyncSession, settings_instance: Settings = settings):
         """
         Initialize base service.
 
         Args:
             db_session: SQLAlchemy async session for database operations
-            settings: Application settings (defaults to global settings)
+            settings_instance: Application settings (defaults to global settings)
         """
         self.db = db_session
-        self.settings = settings
+        self.settings = settings_instance

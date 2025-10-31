@@ -88,7 +88,6 @@ export async function apiRequest<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const {
-    authenticated: _authenticated = true,
     csrfToken,
     retry,
     timeout = APP_CONFIG.api.timeout,

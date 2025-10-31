@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { UserSettings } from '@/src/lib/types'
 import { getDefaultModel } from '@/src/lib/data/models'
 import { errorTracker } from '@/src/lib/utils'
@@ -46,7 +46,6 @@ function saveSettingsToStorage(settings: UserSettings) {
 
 export function useSettings() {
   const [settings, setSettings] = useState<UserSettings>(() => getSettingsFromStorage())
-  const [loading, setLoading] = useState(false)
 
   const updateSettings = (updates: Partial<UserSettings>) => {
     const updatedSettings = { ...settings, ...updates }
@@ -116,7 +115,6 @@ export function useSettings() {
 
   return {
     settings,
-    loading,
     updateSettings,
     resetSettings,
     clearChatHistory,

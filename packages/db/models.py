@@ -336,7 +336,6 @@ class IngestionRun(AsyncAttrs, Base):
     target: Mapped[str] = mapped_column(Text)
     from_web: Mapped[bool] = mapped_column(Boolean, default=False)
     recursive: Mapped[bool] = mapped_column(Boolean, default=False)
-    tags: Mapped[dict | None] = mapped_column(JSONB)
     collection: Mapped[str | None] = mapped_column(String(128))
     totals_files: Mapped[int] = mapped_column(Integer, default=0)
     totals_chunks: Mapped[int] = mapped_column(Integer, default=0)
@@ -347,9 +346,32 @@ class IngestionRun(AsyncAttrs, Base):
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(32), default="success", index=True)
 
+    tags: Mapped[list["Tag"]] = relationship(
+        secondary="ingestion_run_tags", back_populates="ingestion_runs"
+    )
+
     __table_args__ = (
         Index("idx_ingestion_runs_user_started", "user_id", started_at.desc()),
         Index("idx_ingestion_runs_user_status_started", "user_id", "status", started_at.desc()),
+    )
+
+
+class Tag(AsyncAttrs, Base):
+    """Tag for documents and ingestion runs."""
+    __tablename__ = "tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Relationships
+    documents: Mapped[list["Document"]] = relationship(
+        secondary="document_tags", back_populates="tags"
+    )
+    ingestion_runs: Mapped[list["IngestionRun"]] = relationship(
+        secondary="ingestion_run_tags", back_populates="tags"
     )
 
 
@@ -367,7 +389,6 @@ class Document(AsyncAttrs, Base):
     mime: Mapped[str | None] = mapped_column(String(128))
     bytes_size: Mapped[int | None] = mapped_column(BigInteger)
     source: Mapped[str | None] = mapped_column(String(32))
-    tags: Mapped[dict | None] = mapped_column(JSONB)
     collection: Mapped[str | None] = mapped_column(String(128), index=True)
     path_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -377,16 +398,9 @@ class Document(AsyncAttrs, Base):
 
     user: Mapped[User] = relationship("User")
     group: Mapped[Group | None] = relationship("Group", back_populates="documents")
-
-    @validates("tags")
-    def validate_tags(self, key, value):
-        if value:
-            import json
-
-            tags_json = json.dumps(value, ensure_ascii=False)
-            if len(tags_json) > 5000:  # 5KB limit for tags
-                raise ValueError("tags too large (max 5KB)")
-        return value
+    tags: Mapped[list[Tag]] = relationship(
+        secondary="document_tags", back_populates="documents"
+    )
 
     __table_args__ = (
         Index("idx_documents_collection_created", "collection", created_at.desc()),
@@ -430,10 +444,32 @@ class UserDocumentAccess(AsyncAttrs, Base):
     __tablename__ = "user_document_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
 
     __table_args__ = (UniqueConstraint("user_id", "document_id", name="uq_user_document"),)
+
+
+class DocumentTag(AsyncAttrs, Base):
+    """Many-to-many relationship between documents and tags."""
+    __tablename__ = "document_tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"), index=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), index=True)
+
+    __table_args__ = (UniqueConstraint("document_id", "tag_id", name="uq_document_tag"),)
+
+
+class IngestionRunTag(AsyncAttrs, Base):
+    """Many-to-many relationship between ingestion runs and tags."""
+    __tablename__ = "ingestion_run_tags"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ingestion_run_id: Mapped[int] = mapped_column(ForeignKey("ingestion_runs.id", ondelete="CASCADE"), index=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey("tags.id", ondelete="CASCADE"), index=True)
+
+    __table_args__ = (UniqueConstraint("ingestion_run_id", "tag_id", name="uq_ingestion_run_tag"),)
 
 
 class AuditLog(AsyncAttrs, Base):
@@ -515,4 +551,6 @@ class AuditLog(AsyncAttrs, Base):
         Index("idx_audit_logs_user_timestamp", "user_id", "timestamp"),
         Index("idx_audit_logs_action_timestamp", "action", "timestamp"),
         Index("idx_audit_logs_resource", "resource_type", "resource_id"),
+        Index("idx_audit_logs_success_timestamp", "success", timestamp.desc()),
+        Index("idx_audit_logs_correlation", "correlation_id"),
     )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { User } from '@/src/lib/types'
 import { errorTracker } from '@/src/lib/utils'
 
@@ -50,14 +50,7 @@ function generateInitials(name: string): string {
 }
 
 export function useUser() {
-  const [user, setUser] = useState<User>(DEFAULT_USER)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    const loadedUser = getUserFromStorage()
-    setUser(loadedUser)
-    setLoading(false)
-  }, [])
+  const [user, setUser] = useState<User>(() => getUserFromStorage())
 
   const updateUser = (updates: Partial<Omit<User, 'id' | 'initials'>>) => {
     const updatedUser: User = {
@@ -77,7 +70,6 @@ export function useUser() {
 
   return {
     user,
-    loading,
     updateUser,
     logout
   }

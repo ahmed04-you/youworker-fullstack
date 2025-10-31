@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from ..models import Document, DocumentCollection, UserCollectionAccess
+from ..models import Document, DocumentCollection, UserCollectionAccess, Tag
 from .base import BaseRepository
 
 
@@ -22,6 +23,37 @@ class DocumentRepository(BaseRepository[Document]):
             session: Database session
         """
         super().__init__(session, Document)
+
+    async def _get_or_create_tags(self, tag_names: list[str]) -> list[Tag]:
+        """
+        Get existing tags or create new ones.
+
+        Args:
+            tag_names: List of tag names
+
+        Returns:
+            List of Tag objects
+        """
+        if not tag_names:
+            return []
+
+        tags: list[Tag] = []
+        for tag_name in tag_names:
+            # Try to get existing tag
+            result = await self.session.execute(
+                select(Tag).where(Tag.name == tag_name)
+            )
+            tag = result.scalar_one_or_none()
+
+            if not tag:
+                # Create new tag
+                tag = Tag(name=tag_name)
+                self.session.add(tag)
+                await self.session.flush()
+
+            tags.append(tag)
+
+        return tags
 
     async def get_user_documents(
         self,
@@ -87,10 +119,13 @@ class DocumentRepository(BaseRepository[Document]):
         q = select(Document).where(
             Document.user_id == user_id,
             Document.path_hash == path_hash
-        )
+        ).options(selectinload(Document.tags))
         result = await self.session.execute(q)
         doc = result.scalar_one_or_none()
         now = datetime.now(timezone.utc)
+
+        # Get or create tag objects
+        tag_objects = await self._get_or_create_tags(tags or [])
 
         if doc:
             doc.uri = uri or doc.uri
@@ -98,9 +133,10 @@ class DocumentRepository(BaseRepository[Document]):
             doc.mime = mime or doc.mime
             doc.bytes_size = bytes_size or doc.bytes_size
             doc.source = source or doc.source
-            doc.tags = {"tags": tags or []}
             doc.collection = collection or doc.collection
             doc.last_ingested_at = now
+            # Update tags relationship
+            doc.tags = tag_objects
             await self.session.flush()
             return doc
         else:
@@ -112,11 +148,13 @@ class DocumentRepository(BaseRepository[Document]):
                 mime=mime,
                 bytes_size=bytes_size,
                 source=source,
-                tags={"tags": tags or []},
                 collection=collection,
                 last_ingested_at=now,
             )
             self.session.add(doc)
+            await self.session.flush()
+            # Set tags relationship after document is flushed
+            doc.tags = tag_objects
             await self.session.flush()
             return doc
 

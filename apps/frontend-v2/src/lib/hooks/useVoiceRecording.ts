@@ -129,7 +129,7 @@ export function useVoiceRecording({
         }
       }
 
-      mediaRecorder.onerror = (event) => {
+      mediaRecorder.onerror = (_event) => {
         const error = new Error('Recording failed')
         setRecordingState('error')
         if (onError) {
@@ -147,7 +147,14 @@ export function useVoiceRecording({
       // Set max duration timeout
       maxDurationTimeoutRef.current = setTimeout(() => {
         if (mediaRecorderRef.current?.state === 'recording') {
-          stopRecording()
+          setRecordingState('processing')
+          mediaRecorderRef.current.stop()
+
+          // Clear intervals
+          if (durationIntervalRef.current) {
+            clearInterval(durationIntervalRef.current)
+            durationIntervalRef.current = null
+          }
         }
       }, maxDuration)
 
