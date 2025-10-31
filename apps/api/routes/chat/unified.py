@@ -13,9 +13,11 @@ from apps.api.config import settings
 from apps.api.routes.deps import (
     get_current_user_with_collection_access,
     get_chat_service,
+    get_agent_loop,
 )
 from apps.api.utils.error_handling import handle_audio_errors, handle_ollama_errors
 from apps.api.utils.response_formatting import sse_format
+from packages.agent import AgentLoop
 
 from .models import UnifiedChatRequest, UnifiedChatResponse
 

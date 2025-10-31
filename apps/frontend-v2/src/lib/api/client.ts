@@ -3,6 +3,10 @@ import { errorTracker } from '@/src/lib/utils/errorTracking'
 
 const API_BASE_URL = APP_CONFIG.api.baseUrl
 
+// Simulated Authentik API key for development
+// In production, Authentik will inject this header automatically
+const DEV_AUTHENTIK_API_KEY = process.env.NEXT_PUBLIC_API_KEY || ''
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -103,6 +107,14 @@ export async function apiRequest<T>(
     // Add CSRF token for state-changing operations
     if (csrfToken && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(fetchOptions.method || 'GET')) {
       headers['X-CSRF-Token'] = csrfToken
+    }
+
+    // Simulate Authentik headers for development/testing
+    // In production, Authentik proxy will inject these headers automatically
+    if (DEV_AUTHENTIK_API_KEY) {
+      headers['X-Authentik-Api-Key'] = DEV_AUTHENTIK_API_KEY
+      // Optional: simulate username header (defaults to 'root' in backend if not provided)
+      // headers['X-Authentik-Username'] = 'dev-user'
     }
 
     const response = await fetchWithTimeout(

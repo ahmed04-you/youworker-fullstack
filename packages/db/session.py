@@ -244,6 +244,25 @@ async def init_db(settings: Settings) -> None:
         await conn.run_sync(create_tables_sync)
 
 
+def get_async_engine():
+    """
+    Get the async database engine.
+
+    Returns:
+        The initialized async engine
+
+    Raises:
+        DatabaseError: If the database has not been initialized
+    """
+    if _engine is None:
+        raise DatabaseError("DB not initialized")
+    return _engine
+
+
+# Function alias for backward compatibility - call get_async_engine()
+async_engine = get_async_engine
+
+
 @asynccontextmanager
 async def get_async_session() -> AsyncIterator[AsyncSession]:
     """
