@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import AuthPrompt from "./components/AuthPrompt";
 import {
   getOverviewMetrics,
   getTokenTimeline,
@@ -93,14 +92,25 @@ export default function Home() {
     [ingestionStats]
   );
 
+  // Show loading while authenticating
+  if (!isAuthenticated && isLoading) {
+    return (
+      <main className="dashboard-page">
+        <div className="card">
+          <div className="loading-state">Authenticating...</div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show error if authentication failed
   if (!isAuthenticated && !isLoading) {
     return (
       <main className="dashboard-page">
-        <div className="auth-wrapper">
-          <AuthPrompt
-            title="Sign in to view analytics"
-            description="Provide a valid Authentik API key so we can fetch your workspace metrics. The key should match the backend configuration."
-          />
+        <div className="card">
+          <div className="banner banner-error">
+            Authentication failed. Please check your configuration and try again.
+          </div>
         </div>
       </main>
     );

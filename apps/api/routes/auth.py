@@ -90,6 +90,14 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
     # Extract Authentik API key header
     header_value = _extract_header_value(request, settings.authentik_header_name)
 
+    # Debug logging
+    logger.info(
+        "Auto-login attempt - header_name=%s, header_value_length=%d, all_headers=%s",
+        settings.authentik_header_name,
+        len(header_value) if header_value else 0,
+        dict(request.headers)
+    )
+
     if not header_value:
         logger.warning("Authentik SSO header missing - authentication failed")
         raise HTTPException(
@@ -98,7 +106,16 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
         )
 
     # Verify the API key from Authentik
-    if not await verify_api_key(header_value):
+    is_valid = await verify_api_key(header_value)
+    logger.info(
+        "API key verification - key_length=%d, first_10_chars=%s, is_valid=%s, expected_key_length=%d",
+        len(header_value),
+        header_value[:10] if header_value else None,
+        is_valid,
+        len(settings.root_api_key)
+    )
+
+    if not is_valid:
         logger.warning("Authentik SSO header contains invalid API key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

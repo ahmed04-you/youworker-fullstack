@@ -1,9 +1,8 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import ChatComposer from "../components/ChatComposer";
-import AuthPrompt from "../components/AuthPrompt";
 import { getSessions, getSession, deleteSession, sendChatStreaming } from "../../lib/api/chat";
 import type { ChatSession, Message, SSELogEvent, SSEDoneEvent, SSETokenEvent, SSEToolEvent, ToolEvent } from "../../lib/types";
 
@@ -36,7 +35,7 @@ export default function Chats() {
     });
   };
 
-  const buildToolCounts = (events?: Array<SSEToolEvent | ToolEvent>) => {
+  const buildToolCounts = useCallback((events?: Array<SSEToolEvent | ToolEvent>) => {
     const counts: { [key: string]: number } = {};
     if (!events) {
       return counts;
@@ -60,11 +59,11 @@ export default function Chats() {
     });
 
     return counts;
-  };
+  }, []);
 
-  const setToolCountsFromEvents = (events?: Array<SSEToolEvent | ToolEvent>) => {
+  const setToolCountsFromEvents = useCallback((events?: Array<SSEToolEvent | ToolEvent>) => {
     setToolEvents(buildToolCounts(events));
-  };
+  }, [buildToolCounts]);
 
   const incrementToolCount = (toolName?: string) => {
     if (!toolName) {
@@ -87,20 +86,6 @@ export default function Chats() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, streamingContent, streamingStatus]);
 
-  // Load sessions on mount
-  useEffect(() => {
-    if (isAuthenticated && !authLoading) {
-      loadSessions();
-    }
-  }, [isAuthenticated, authLoading]);
-
-  // Load messages when active session changes
-  useEffect(() => {
-    if (activeSessionId !== null) {
-      loadMessages(activeSessionId);
-    }
-  }, [activeSessionId]);
-
   // Update menu position
   useEffect(() => {
     if (activeMenu !== null && actionButtonRefs.current[activeMenu]) {
@@ -119,7 +104,7 @@ export default function Chats() {
     }
   }, [activeMenu, isDrawerOpen]);
 
-  const loadSessions = async (retryCount = 0) => {
+  const loadSessions = useCallback(async (retryCount = 0) => {
     const MAX_RETRIES = 1;
 
     try {
@@ -167,9 +152,9 @@ export default function Chats() {
     } finally {
       setIsLoadingSessions(false);
     }
-  };
+  }, [activeSessionExternalId, activeSessionId, reauthenticate]);
 
-  const loadMessages = async (sessionId: number, retryCount = 0) => {
+  const loadMessages = useCallback(async (sessionId: number, retryCount = 0) => {
     const MAX_RETRIES = 1;
 
     try {
@@ -206,7 +191,21 @@ export default function Chats() {
     } finally {
       setIsLoadingMessages(false);
     }
-  };
+  }, [reauthenticate, setToolCountsFromEvents]);
+
+  // Load sessions on mount
+  useEffect(() => {
+    if (isAuthenticated && !authLoading) {
+      loadSessions();
+    }
+  }, [authLoading, isAuthenticated, loadSessions]);
+
+  // Load messages when active session changes
+  useEffect(() => {
+    if (activeSessionId !== null) {
+      loadMessages(activeSessionId);
+    }
+  }, [activeSessionId, loadMessages]);
 
   const handleSendMessage = async (content: string, retryCount = 0) => {
     const trimmed = content.trim();
@@ -398,12 +397,14 @@ export default function Chats() {
     );
   }
 
-  // Show error if not authenticated
-  if (!isAuthenticated) {
+  // Show error if authentication failed
+  if (!isAuthenticated && !authLoading) {
     return (
       <div className="chats-page">
-        <div className="auth-wrapper">
-          <AuthPrompt title="Sign in to access chat" />
+        <div className="chat-list-card">
+          <div className="banner banner-error">
+            Authentication failed. Please check your configuration and try again.
+          </div>
         </div>
       </div>
     );

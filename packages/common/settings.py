@@ -1,8 +1,17 @@
 """Settings management for the ingestion and processing pipeline."""
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlparse
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional dependency
+    load_dotenv = None  # type: ignore[assignment]
+else:
+    env_path = Path(__file__).resolve().parents[2] / ".env"
+    load_dotenv(env_path, override=False)
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict

@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import AuthPrompt from "../components/AuthPrompt";
 import { listDocuments, deleteDocument } from "../../lib/api/documents";
 import {
   ingestPath,
@@ -206,14 +205,25 @@ export default function LocalDocs() {
     [documents]
   );
 
+  // Show loading while authenticating
+  if (!isAuthenticated && authLoading) {
+    return (
+      <main className="localdocs-page">
+        <div className="card">
+          <div className="loading-state">Authenticating...</div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show error if authentication failed
   if (!isAuthenticated && !authLoading) {
     return (
       <main className="localdocs-page">
-        <div className="auth-wrapper">
-          <AuthPrompt
-            title="Sign in to manage documents"
-            description="Provide a valid Authentik API key to upload and ingest content into your workspace."
-          />
+        <div className="card">
+          <div className="banner banner-error">
+            Authentication failed. Please check your configuration and try again.
+          </div>
         </div>
       </main>
     );

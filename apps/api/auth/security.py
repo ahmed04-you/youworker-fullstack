@@ -182,15 +182,18 @@ async def _verify_api_key_with_session(session: AsyncSession, api_key: str) -> b
     Verify an API key using the provided database session.
     """
     if not api_key:
+        logger.warning("API key verification failed: empty key")
         return False
 
     # Try to find user by API key in database
     try:
         user = await get_user_by_api_key(session, api_key)
         if user:
+            logger.info(f"API key verified via database for user: {user.username}")
             return True
-    except Exception:
+    except Exception as e:
         # User not found in database, continue to fallback logic
+        logger.debug(f"Database lookup failed: {e}")
         pass
 
     # Check if there's a root user with a stored hash
@@ -201,11 +204,23 @@ async def _verify_api_key_with_session(session: AsyncSession, api_key: str) -> b
 
     if stored_hash:
         # Root user exists with a hash, so don't allow plaintext fallback
+        logger.warning("API key verification failed: root user has hash, plaintext not allowed")
         return False
 
     # No users in DB with this key, and no root user with hash
     # Fall back to comparing with ROOT_API_KEY from settings
-    return bool(settings.root_api_key and secrets.compare_digest(api_key, settings.root_api_key))
+    has_root_key = bool(settings.root_api_key)
+    keys_match = secrets.compare_digest(api_key, settings.root_api_key) if has_root_key else False
+
+    logger.info(
+        f"API key fallback verification: key_len={len(api_key)}, "
+        f"expected_len={len(settings.root_api_key) if has_root_key else 0}, "
+        f"has_root_key={has_root_key}, keys_match={keys_match}, "
+        f"key_prefix={api_key[:10] if api_key else 'N/A'}, "
+        f"expected_prefix={settings.root_api_key[:10] if has_root_key else 'N/A'}"
+    )
+
+    return keys_match
 
 
 async def verify_api_key(api_key: str) -> bool:

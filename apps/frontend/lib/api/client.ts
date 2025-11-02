@@ -2,7 +2,10 @@
  * Base API client for making requests to the backend
  */
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001';
+// Use internal URL for server-side requests (SSR in Docker), public URL for client-side (browser)
+const API_BASE_URL = typeof window === 'undefined'
+  ? (process.env.NEXT_INTERNAL_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001')
+  : (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001');
 
 export interface ApiError {
   message: string;

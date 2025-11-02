@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import AuthPrompt from "../components/AuthPrompt";
 import {
   rotateApiKey,
   purgeHistory,
@@ -61,12 +60,6 @@ export default function Settings() {
   const [memberRole, setMemberRole] = useState<"member" | "admin">("member");
 
   useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      void Promise.all([refreshUser(), loadGroups()]);
-    }
-  }, [authLoading, isAuthenticated]);
-
-  useEffect(() => {
     return () => {
       if (exportUrl) {
         URL.revokeObjectURL(exportUrl);
@@ -88,7 +81,20 @@ export default function Settings() {
     return refreshCsrfToken();
   };
 
-  const loadGroups = async () => {
+  const selectGroup = useCallback(async (groupId: number) => {
+    try {
+      setGroupsLoading(true);
+      const groupDetails = await getGroup(groupId);
+      setSelectedGroupId(groupId);
+      setSelectedGroup(groupDetails);
+    } catch (err) {
+      setGroupError(extractError(err));
+    } finally {
+      setGroupsLoading(false);
+    }
+  }, []);
+
+  const loadGroups = useCallback(async () => {
     try {
       setGroupsLoading(true);
       setGroupError(null);
@@ -106,20 +112,13 @@ export default function Settings() {
     } finally {
       setGroupsLoading(false);
     }
-  };
+  }, [selectGroup, selectedGroupId]);
 
-  const selectGroup = async (groupId: number) => {
-    try {
-      setGroupsLoading(true);
-      const groupDetails = await getGroup(groupId);
-      setSelectedGroupId(groupId);
-      setSelectedGroup(groupDetails);
-    } catch (err) {
-      setGroupError(extractError(err));
-    } finally {
-      setGroupsLoading(false);
+  useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      void Promise.all([refreshUser(), loadGroups()]);
     }
-  };
+  }, [authLoading, isAuthenticated, loadGroups, refreshUser]);
 
   const handleRotateApiKey = async () => {
     try {
@@ -358,14 +357,25 @@ export default function Settings() {
 
   const memberCount = useMemo(() => selectedGroup?.members.length ?? 0, [selectedGroup]);
 
+  // Show loading while authenticating
+  if (!isAuthenticated && authLoading) {
+    return (
+      <main className="settings-page">
+        <div className="card">
+          <div className="loading-state">Authenticating...</div>
+        </div>
+      </main>
+    );
+  }
+
+  // Show error if authentication failed
   if (!isAuthenticated && !authLoading) {
     return (
       <main className="settings-page">
-        <div className="auth-wrapper">
-          <AuthPrompt
-            title="Sign in to manage settings"
-            description="Authenticate with a valid Authentik API key to rotate credentials, manage groups, and configure your workspace."
-          />
+        <div className="card">
+          <div className="banner banner-error">
+            Authentication failed. Please check your configuration and try again.
+          </div>
         </div>
       </main>
     );
