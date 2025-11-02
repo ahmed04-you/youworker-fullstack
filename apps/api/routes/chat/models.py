@@ -51,6 +51,7 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     enable_tools: bool = True
     model: str | None = None
+    expect_audio: bool = False
     stream: bool = True
 
 

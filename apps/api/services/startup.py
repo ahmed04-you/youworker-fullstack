@@ -12,10 +12,11 @@ from fastapi import FastAPI
 from apps.api.config import settings
 from packages.agent import MCPRegistry, AgentLoop
 from packages.common.exceptions import ConfigurationError
-from packages.db import init_db as init_database
+from packages.db import init_db as init_database, get_async_session
 from packages.ingestion import IngestionPipeline
 from packages.llm import OllamaClient
 from packages.vectorstore import QdrantStore
+from packages.db.repositories import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,12 @@ class StartupService:
         logger.info("Initializing database...")
         await init_database(settings)  # type: ignore
         logger.info("Database initialized")
+
+        # Ensure root user API key hash matches configured value so Authentik headers validate
+        async with get_async_session() as db:
+            user_repo = UserRepository(db)
+            await user_repo.ensure_root_user(username="root", api_key=settings.root_api_key)
+        logger.info("Root user synchronized with configured API key")
 
         # Initialize Ollama client
         logger.info("Initializing Ollama client...")

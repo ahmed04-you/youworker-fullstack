@@ -572,10 +572,15 @@ class ChatService(BaseService):
         # Synthesize audio if requested
         audio_b64_result = None
         audio_sample_rate_result = None
+        logger.info(f"TTS check: expect_audio={expect_audio}, final_text_length={len(final_text) if final_text else 0}")
         if expect_audio and final_text:
+            logger.info(f"Attempting TTS synthesis for text: {final_text[:100]}")
             audio_result = await self.synthesize_audio(final_text, fallback=True)
             if audio_result:
                 audio_b64_result, audio_sample_rate_result = audio_result
+                logger.info(f"TTS successful: audio_b64_length={len(audio_b64_result)}, sample_rate={audio_sample_rate_result}")
+            else:
+                logger.warning("TTS synthesis returned None")
 
         # Yield final done event with complete response
         # Enrich metadata with session identifiers so the frontend can keep context in sync

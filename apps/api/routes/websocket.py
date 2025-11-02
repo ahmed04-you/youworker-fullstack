@@ -286,7 +286,7 @@ async def websocket_chat_endpoint(
     - Tool execution with progress updates
     - Audio streaming for TTS
     """
-    # Authenticate user via API key (single root user)
+    # Authenticate user via API key (received from Authentik or query param)
     user = None
     auth_error = None
 
@@ -305,20 +305,14 @@ async def websocket_chat_endpoint(
         if not api_key:
             raise ValueError("API key required")
 
-        # Validate API key (ties to root user)
-        from apps.api.auth.security import verify_api_key
+        from apps.api.auth.security import authenticate_authentik_user
 
-        if not await verify_api_key(api_key):
+        user = await authenticate_authentik_user(
+            api_key,
+            websocket.headers.get("X-Authentik-Username"),
+        )
+        if not user:
             raise ValueError("Invalid API key")
-
-        # Tie to root user (single user for now)
-        async with get_async_session() as db:
-            from packages.db.repositories import UserRepository
-
-            user_repo = UserRepository(db)
-            user = await user_repo.ensure_root_user(username="root", api_key=api_key)
-            if not user:
-                raise ValueError("User not found for API key")
 
     except Exception as e:
         logger.error("WebSocket auth error", extra={"error": str(e), "error_type": type(e).__name__})

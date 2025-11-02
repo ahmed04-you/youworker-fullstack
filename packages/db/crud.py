@@ -31,6 +31,7 @@ from .models import (
     Group,
     UserGroupMembership,
 )
+from .repositories.user_repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
@@ -41,20 +42,8 @@ def _hash_api_key(api_key: str) -> str:
 
 async def ensure_root_user(session: AsyncSession, *, username: str, api_key: str) -> User:
     """Ensure root user exists with given credentials."""
-    q = select(User).where(User.username == username)
-    result = await session.execute(q)
-    user = result.scalar_one_or_none()
-    if user:
-        # Update api key hash if changed
-        h = _hash_api_key(api_key)
-        if user.api_key_hash != h:
-            user.api_key_hash = h
-            await session.flush()
-        return user
-    user = User(username=username, is_root=True, api_key_hash=_hash_api_key(api_key))
-    session.add(user)
-    await session.flush()
-    return user
+    repo = UserRepository(session)
+    return await repo.ensure_user_with_api_key(username=username, api_key=api_key, is_root=True)
 
 
 async def get_user_by_api_key(session: AsyncSession, api_key: str) -> User:

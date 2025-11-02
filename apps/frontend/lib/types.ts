@@ -60,6 +60,7 @@ export interface SimpleChatRequest {
   messages?: Message[];
   model?: string;
   enable_tools?: boolean;
+  expect_audio?: boolean;
   max_iterations?: number;
 }
 

@@ -13,10 +13,10 @@ from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
 
 from apps.api.auth.security import (
-    create_access_token,
-    verify_api_key,
-    get_current_user,
     ACCESS_TOKEN_EXPIRE_MINUTES,
+    authenticate_authentik_user,
+    create_access_token,
+    get_current_user,
 )
 from apps.api.config import settings
 from apps.api.csrf import CSRFToken
@@ -89,13 +89,21 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
     """
     # Extract Authentik API key header
     header_value = _extract_header_value(request, settings.authentik_header_name)
+    forwarded_username = None
+    if settings.authentik_forward_user_header:
+        forwarded_username = _extract_header_value(request, settings.authentik_forward_user_header)
+    if not forwarded_username:
+        forwarded_username = _extract_header_value(request, "X-Authentik-Username")
 
     # Debug logging
     logger.info(
-        "Auto-login attempt - header_name=%s, header_value_length=%d, all_headers=%s",
-        settings.authentik_header_name,
-        len(header_value) if header_value else 0,
-        dict(request.headers)
+        "Authentik auto-login attempt",
+        extra={
+            "header_name": settings.authentik_header_name,
+            "api_key_length": len(header_value) if header_value else 0,
+            "api_key_prefix": header_value[:4] if header_value else None,
+            "username_header_present": bool(forwarded_username),
+        },
     )
 
     if not header_value:
@@ -105,29 +113,15 @@ async def auto_login(request: Request, response: Response) -> LoginResponse:
             detail="Authentik SSO required - no authentication header found",
         )
 
-    # Verify the API key from Authentik
-    is_valid = await verify_api_key(header_value)
-    logger.info(
-        "API key verification - key_length=%d, first_10_chars=%s, is_valid=%s, expected_key_length=%d",
-        len(header_value),
-        header_value[:10] if header_value else None,
-        is_valid,
-        len(settings.root_api_key)
-    )
-
-    if not is_valid:
+    user = await authenticate_authentik_user(header_value, forwarded_username)
+    if not user:
         logger.warning("Authentik SSO header contains invalid API key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid Authentik credentials"
         )
 
-    # Extract username from Authentik header (or default to 'root' for simulated dev env)
-    username = "root"
-    if settings.authentik_forward_user_header:
-        forwarded_username = _extract_header_value(request, settings.authentik_forward_user_header)
-        if forwarded_username:
-            username = forwarded_username
+    username = user.username
 
     # Create JWT token for the session
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

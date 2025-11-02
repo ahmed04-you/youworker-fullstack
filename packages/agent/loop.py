@@ -477,12 +477,24 @@ class AgentLoop:
                     )
                 )
 
+                # Check if tool execution had an error
+                tool_status = "end"
+                try:
+                    if isinstance(tool_result, str):
+                        result_json = json.loads(tool_result)
+                        if isinstance(result_json, dict) and "error" in result_json:
+                            tool_status = "error"
+                except (json.JSONDecodeError, ValueError):
+                    # Not JSON or malformed, treat as success
+                    pass
+
                 logger.info(
                     "Tool completed, continuing",
                     extra={
                         "tool_name": tool_call.name,
                         "next_iteration": iterations + 1,
-                        "duration_ms": duration_ms
+                        "duration_ms": duration_ms,
+                        "status": tool_status
                     }
                 )
                 tool_calls_executed += 1
@@ -496,7 +508,7 @@ class AgentLoop:
                     "event": "tool",
                     "data": {
                         "tool": tool_call.name,
-                        "status": "end",
+                        "status": tool_status,
                         "ts": finished_at.isoformat(),
                         "latency_ms": duration_ms,
                         "result_preview": preview,

@@ -11,17 +11,24 @@ import { apiGet, apiPost, ApiClientError } from './client';
 const FALLBACK_API_KEY = 'rotated-dev-root-key';
 const DEV_API_KEY = process.env.NEXT_PUBLIC_API_KEY || FALLBACK_API_KEY;
 const DEV_USERNAME = process.env.NEXT_PUBLIC_AUTHENTIK_USERNAME || 'root';
+const MAX_USERNAME_LENGTH = 128;
 
 // Debug: Log what the browser actually received
 if (typeof window !== 'undefined') {
-  console.log('[Browser] NEXT_PUBLIC_API_KEY:', process.env.NEXT_PUBLIC_API_KEY);
-  console.log('[Browser] DEV_API_KEY length:', DEV_API_KEY?.length);
-  console.log('[Browser] DEV_API_KEY first 10 chars:', DEV_API_KEY?.substring(0, 10));
+  const preview = DEV_API_KEY ? `${DEV_API_KEY.substring(0, 4)}…` : null;
+  console.log('[Browser] DEV_API_KEY length:', DEV_API_KEY?.length ?? 0);
+  console.log('[Browser] DEV_API_KEY preview:', preview);
 }
 
 interface LoginOptions {
   apiKey?: string;
   username?: string;
+}
+
+function normalizeUsername(username?: string | null): string {
+  const trimmed = (username ?? '').trim();
+  const base = trimmed.length > 0 ? trimmed : DEV_USERNAME;
+  return base.length > MAX_USERNAME_LENGTH ? base.substring(0, MAX_USERNAME_LENGTH) : base;
 }
 
 /**
@@ -37,7 +44,7 @@ function buildCandidateList(options: LoginOptions = {}) {
 
   const pushCandidate = (apiKey?: string | null, username?: string | null) => {
     if (!apiKey) return;
-    const normalizedUsername = username && username.trim().length > 0 ? username : DEV_USERNAME;
+    const normalizedUsername = normalizeUsername(username);
     const key = `${apiKey}::${normalizedUsername}`;
     if (seen.has(key)) return;
     seen.add(key);
@@ -98,21 +105,26 @@ export async function autoLogin(options: LoginOptions = {}): Promise<LoginRespon
  */
 async function attemptAutoLogin(apiKey: string, username: string): Promise<LoginResponse> {
   const headers: HeadersInit = {};
+  const normalizedUsername = normalizeUsername(username);
 
   // Set the Authentik API key header (both variations for compatibility)
   if (apiKey) {
     headers['x-authentik-api-key'] = apiKey;
     headers['X-Authentik-Api-Key'] = apiKey;
   }
-  headers['X-Authentik-Username'] = username || DEV_USERNAME;
+  headers['X-Authentik-Username'] = normalizedUsername;
 
   console.log(
-    'Attempting auto-login. username=%s keyLength=%d',
-    headers['X-Authentik-Username'],
-    apiKey?.length || 0
+    'Attempting auto-login. username=%s keyLength=%d keyPreview=%s',
+    normalizedUsername,
+    apiKey?.length || 0,
+    apiKey ? `${apiKey.substring(0, 4)}…` : null
   );
-  console.log('[DEBUG] Headers being sent:', JSON.stringify(headers, null, 2));
-  console.log('[DEBUG] API key first 20 chars:', apiKey?.substring(0, 20));
+  console.log('[DEBUG] Authentik headers prepared', {
+    hasApiKey: Boolean(apiKey),
+    apiKeyLength: apiKey?.length || 0,
+    username: normalizedUsername,
+  });
 
   return apiPost<LoginResponse>('/v1/auth/auto-login', undefined, {
     headers,

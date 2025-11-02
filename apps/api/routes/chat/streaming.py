@@ -66,6 +66,7 @@ async def chat_endpoint(
                     messages=messages_data[:-1] if len(messages_data) > 1 else [],
                     model=chat_request.model,
                     enable_tools=chat_request.enable_tools,
+                    expect_audio=chat_request.expect_audio,
                     max_iterations=settings.max_agent_iterations,
                 ):
                     pad = pad_pending
@@ -147,6 +148,7 @@ async def chat_endpoint(
         messages=messages_data[:-1] if len(messages_data) > 1 else [],
         model=chat_request.model,
         enable_tools=chat_request.enable_tools,
+        expect_audio=chat_request.expect_audio,
         max_iterations=settings.max_agent_iterations,
     )
 

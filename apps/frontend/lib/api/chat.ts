@@ -37,20 +37,42 @@ export async function getSession(sessionId: number | string): Promise<SessionDet
 }
 
 /**
+ * Create a new session (generates external_id without persisting to DB)
+ */
+export async function createSession(csrfToken?: string): Promise<{ external_id: string; message: string }> {
+  const headers: Record<string, string> = {};
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  return apiPost<{ external_id: string; message: string }>('/v1/sessions', {}, { headers });
+}
+
+/**
  * Update a session (e.g., change title)
  */
 export async function updateSession(
   sessionId: number | string,
-  data: UpdateSessionRequest
-): Promise<ChatSession> {
-  return apiPatch<ChatSession>(`/v1/sessions/${sessionId}`, data);
+  data: UpdateSessionRequest,
+  csrfToken?: string
+): Promise<{ success: boolean }> {
+  const headers: Record<string, string> = {};
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  // Backend expects title as query parameter, not in body
+  const queryParams = data.title ? `?title=${encodeURIComponent(data.title)}` : '';
+  return apiPatch<{ success: boolean }>(`/v1/sessions/${sessionId}${queryParams}`, undefined, { headers });
 }
 
 /**
  * Delete a session
  */
-export async function deleteSession(sessionId: number | string): Promise<void> {
-  return apiDelete<void>(`/v1/sessions/${sessionId}`);
+export async function deleteSession(sessionId: number | string, csrfToken?: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
+  return apiDelete<void>(`/v1/sessions/${sessionId}`, { headers });
 }
 
 // ============================================================================
@@ -156,6 +178,7 @@ export async function sendChatStreaming(
       messages: request.messages || [{ role: 'user', content: request.message }],
       session_id: request.session_id,
       enable_tools: request.enable_tools ?? true,
+      expect_audio: request.expect_audio ?? false,
       model: request.model,
       stream: true,
     }),

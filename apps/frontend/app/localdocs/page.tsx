@@ -6,11 +6,11 @@ import { listDocuments, deleteDocument } from "../../lib/api/documents";
 import {
   ingestPath,
   uploadDocuments,
-  listIngestionRuns,
-  deleteIngestionRun,
 } from "../../lib/api/ingestion";
-import type { DocumentRecord, IngestionRun } from "../../lib/types";
+import type { DocumentRecord } from "../../lib/types";
 import { ApiClientError } from "../../lib/api/client";
+
+type IngestTab = "files" | "urls";
 
 export default function LocalDocs() {
   const {
@@ -21,41 +21,33 @@ export default function LocalDocs() {
   } = useAuth();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
-  const [ingestionRuns, setIngestionRuns] = useState<IngestionRun[]>([]);
 
   const [docsLoading, setDocsLoading] = useState(false);
-  const [runsLoading, setRunsLoading] = useState(false);
-  const [pathLoading, setPathLoading] = useState(false);
   const [uploadLoading, setUploadLoading] = useState(false);
+  const [urlLoading, setUrlLoading] = useState(false);
 
   const [docsError, setDocsError] = useState<string | null>(null);
-  const [runsError, setRunsError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(
     null
   );
 
-  const [pathInput, setPathInput] = useState("");
-  const [pathTags, setPathTags] = useState("");
-  const [fromWeb, setFromWeb] = useState(false);
-  const [recursive, setRecursive] = useState(false);
+  const [activeTab, setActiveTab] = useState<IngestTab>("files");
 
+  // Files tab state
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
-  const [uploadTags, setUploadTags] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
+
+  // URLs tab state
+  const [urlInput, setUrlInput] = useState("");
 
   const [hasLoaded, setHasLoaded] = useState(false);
 
   useEffect(() => {
     if (!authLoading && isAuthenticated && !hasLoaded) {
-      void Promise.all([refreshDocuments(), refreshIngestionRuns()]);
+      void refreshDocuments();
       setHasLoaded(true);
     }
   }, [authLoading, isAuthenticated, hasLoaded]);
-
-  const parseTags = (value: string) =>
-    value
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter(Boolean);
 
   const ensureCsrfToken = async (): Promise<string> => {
     if (csrfToken) {
@@ -77,62 +69,11 @@ export default function LocalDocs() {
     }
   };
 
-  const refreshIngestionRuns = async () => {
-    try {
-      setRunsLoading(true);
-      setRunsError(null);
-      const response = await listIngestionRuns({ limit: 25 });
-      setIngestionRuns(response.runs);
-    } catch (err) {
-      setRunsError(extractError(err));
-    } finally {
-      setRunsLoading(false);
-    }
-  };
-
-  const handlePathIngest = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleFilesTabSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!pathInput.trim()) {
-      setFeedback({ type: "error", message: "Please provide a path or URL to ingest." });
-      return;
-    }
 
-    try {
-      setPathLoading(true);
-      setFeedback(null);
-      const token = await ensureCsrfToken();
-      const tags = parseTags(pathTags);
-
-      const result = await ingestPath(
-        {
-          path_or_url: pathInput.trim(),
-          from_web: fromWeb,
-          recursive,
-          tags,
-        },
-        token
-      );
-
-      setFeedback({
-        type: "success",
-        message: `Ingestion started: processed ${result.files_processed} files (${result.chunks_written} chunks).`,
-      });
-      setPathInput("");
-      setPathTags("");
-      setFromWeb(false);
-      setRecursive(false);
-      await Promise.all([refreshDocuments(), refreshIngestionRuns()]);
-    } catch (err) {
-      setFeedback({ type: "error", message: extractError(err) });
-    } finally {
-      setPathLoading(false);
-    }
-  };
-
-  const handleFileUpload = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
     if (!selectedFiles || selectedFiles.length === 0) {
-      setFeedback({ type: "error", message: "Select at least one file to upload." });
+      setFeedback({ type: "error", message: "Please select at least one file to upload." });
       return;
     }
 
@@ -140,11 +81,10 @@ export default function LocalDocs() {
       setUploadLoading(true);
       setFeedback(null);
       const token = await ensureCsrfToken();
-      const tags = parseTags(uploadTags);
 
       const filesArray = Array.from(selectedFiles);
       const response = await uploadDocuments(filesArray, {
-        tags,
+        tags: [],
         csrfToken: token,
       });
 
@@ -153,17 +93,51 @@ export default function LocalDocs() {
         message: `Uploaded ${response.files_processed} file(s) · ${response.chunks_written} chunk(s) created.`,
       });
       setSelectedFiles(null);
-      setUploadTags("");
       // clear file input manually
       const input = document.getElementById("localdocs-file-input") as HTMLInputElement | null;
       if (input) {
         input.value = "";
       }
-      await Promise.all([refreshDocuments(), refreshIngestionRuns()]);
+      await refreshDocuments();
     } catch (err) {
       setFeedback({ type: "error", message: extractError(err) });
     } finally {
       setUploadLoading(false);
+    }
+  };
+
+  const handleUrlIngest = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!urlInput.trim()) {
+      setFeedback({ type: "error", message: "Please provide a URL to ingest." });
+      return;
+    }
+
+    try {
+      setUrlLoading(true);
+      setFeedback(null);
+      const token = await ensureCsrfToken();
+
+      const result = await ingestPath(
+        {
+          path_or_url: urlInput.trim(),
+          from_web: true,
+          recursive: false, // Only the linked page
+          tags: [],
+        },
+        token
+      );
+
+      setFeedback({
+        type: "success",
+        message: `URL ingested: processed ${result.files_processed} page(s) (${result.chunks_written} chunks).`,
+      });
+      setUrlInput("");
+      await refreshDocuments();
+    } catch (err) {
+      setFeedback({ type: "error", message: extractError(err) });
+    } finally {
+      setUrlLoading(false);
     }
   };
 
@@ -182,18 +156,35 @@ export default function LocalDocs() {
     }
   };
 
-  const handleDeleteRun = async (runId: number) => {
-    if (!window.confirm("Remove this ingestion run from history?")) {
-      return;
-    }
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
 
-    try {
-      const token = await ensureCsrfToken();
-      await deleteIngestionRun(runId, token);
-      setFeedback({ type: "success", message: "Ingestion run removed." });
-      await refreshIngestionRuns();
-    } catch (err) {
-      setFeedback({ type: "error", message: extractError(err) });
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      setSelectedFiles(files);
+      const input = document.getElementById("localdocs-file-input") as HTMLInputElement | null;
+      if (input) {
+        input.files = files;
+      }
     }
   };
 
@@ -235,8 +226,7 @@ export default function LocalDocs() {
         <div>
           <h1 className="page-title">Local documents</h1>
           <p className="muted-text">
-            Import new sources, monitor ingestion runs, and manage indexed documents used by the
-            assistant.
+            Import new sources and manage indexed documents used by the assistant.
           </p>
         </div>
         <div className="inline-stats">
@@ -253,93 +243,88 @@ export default function LocalDocs() {
         </div>
       )}
 
-      <section className="two-column">
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Ingest from path or URL</h2>
-              <p className="card-subtitle">
-                Point the pipeline to a directory within the workspace or crawl a remote URL.
-              </p>
-            </div>
+      <section className="card">
+        <div className="card-header">
+          <div>
+            <h2 className="card-title">Ingest Documents</h2>
+            <p className="card-subtitle">
+              Upload files or ingest from a URL.
+            </p>
           </div>
-          <form className="form-grid" onSubmit={handlePathIngest}>
-            <label className="form-field">
-              <span>Path or URL</span>
-              <input
-                type="text"
-                value={pathInput}
-                onChange={(event) => setPathInput(event.target.value)}
-                placeholder="/home/user/docs or https://example.com"
-                required
-              />
-            </label>
-            <label className="form-field">
-              <span>Tags (comma separated)</span>
-              <input
-                type="text"
-                value={pathTags}
-                onChange={(event) => setPathTags(event.target.value)}
-                placeholder="project, roadmap"
-              />
-            </label>
-            <div className="form-switches">
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={fromWeb}
-                  onChange={(event) => setFromWeb(event.target.checked)}
-                />
-                <span>Fetch from web (enables crawling)</span>
-              </label>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={recursive}
-                  onChange={(event) => setRecursive(event.target.checked)}
-                />
-                <span>Process directories recursively</span>
-              </label>
-            </div>
-            <button className="btn btn-primary" type="submit" disabled={pathLoading}>
-              {pathLoading ? "Starting ingestion…" : "Ingest source"}
-            </button>
-          </form>
         </div>
 
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h2 className="card-title">Upload files</h2>
-              <p className="card-subtitle">
-                Supported formats include PDF, Markdown, CSV, plain text, and common audio assets.
-              </p>
-            </div>
-          </div>
-          <form className="form-grid" onSubmit={handleFileUpload}>
-            <label className="form-field">
-              <span>Files</span>
-              <input
-                id="localdocs-file-input"
-                type="file"
-                multiple
-                onChange={(event) => setSelectedFiles(event.target.files)}
-              />
-            </label>
-            <label className="form-field">
-              <span>Tags (comma separated)</span>
-              <input
-                type="text"
-                value={uploadTags}
-                onChange={(event) => setUploadTags(event.target.value)}
-                placeholder="sales, release-notes"
-              />
-            </label>
-            <button className="btn btn-primary" type="submit" disabled={uploadLoading}>
-              {uploadLoading ? "Uploading…" : "Upload & ingest"}
-            </button>
-          </form>
+        <div className="tabs">
+          <button
+            className={`tab ${activeTab === "files" ? "active" : ""}`}
+            onClick={() => setActiveTab("files")}
+          >
+            Files
+          </button>
+          <button
+            className={`tab ${activeTab === "urls" ? "active" : ""}`}
+            onClick={() => setActiveTab("urls")}
+          >
+            URLs
+          </button>
         </div>
+
+        {activeTab === "files" && (
+          <div className="tab-content">
+            <form className="form-grid" onSubmit={handleFilesTabSubmit}>
+              <div
+                className={`dropzone ${isDragging ? "dragging" : ""} ${selectedFiles && selectedFiles.length > 0 ? "has-files" : ""}`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p className="dropzone-text">
+                  {selectedFiles && selectedFiles.length > 0
+                    ? `${selectedFiles.length} file(s) selected`
+                    : "Drag & drop files here or click to browse"}
+                </p>
+                <label className="btn btn-secondary" style={{ marginTop: '12px' }}>
+                  <input
+                    id="localdocs-file-input"
+                    type="file"
+                    multiple
+                    onChange={(event) => setSelectedFiles(event.target.files)}
+                    style={{ display: 'none' }}
+                  />
+                  Browse Files
+                </label>
+              </div>
+
+              <button className="btn btn-primary" type="submit" disabled={uploadLoading} style={{ marginTop: '20px' }}>
+                {uploadLoading ? "Processing…" : "Upload & Ingest"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === "urls" && (
+          <div className="tab-content">
+            <form className="form-grid" onSubmit={handleUrlIngest}>
+              <label className="form-field">
+                <span>URL</span>
+                <input
+                  type="url"
+                  value={urlInput}
+                  onChange={(event) => setUrlInput(event.target.value)}
+                  placeholder="https://example.com/page"
+                  required
+                />
+                <span className="form-hint">Only the specified page will be ingested (no crawling)</span>
+              </label>
+              <button className="btn btn-primary" type="submit" disabled={urlLoading}>
+                {urlLoading ? "Ingesting…" : "Ingest URL"}
+              </button>
+            </form>
+          </div>
+        )}
       </section>
 
       <section className="card table-card">
@@ -368,7 +353,6 @@ export default function LocalDocs() {
                   <th>Document</th>
                   <th>Collection</th>
                   <th>Size</th>
-                  <th>Tags</th>
                   <th>Created</th>
                   <th>Last ingested</th>
                   <th></th>
@@ -383,16 +367,6 @@ export default function LocalDocs() {
                     </td>
                     <td>{doc.collection || "default"}</td>
                     <td>{formatBytes(doc.bytes_size)}</td>
-                    <td>
-                      <div className="tag-list">
-                        {(doc.tags ?? []).length === 0 && <span className="muted-text-small">—</span>}
-                        {(doc.tags ?? []).map((tag) => (
-                          <span className="tag" key={`${doc.id}-${tag}`}>
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
                     <td>{formatDateTime(doc.created_at)}</td>
                     <td>{doc.last_ingested_at ? formatDateTime(doc.last_ingested_at) : "—"}</td>
                     <td className="text-right">
@@ -401,85 +375,6 @@ export default function LocalDocs() {
                         onClick={() => handleDeleteDocument(doc.id)}
                       >
                         Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      <section className="card table-card">
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Ingestion history</h2>
-            <p className="card-subtitle">
-              Recent runs with their status, totals, and execution timestamps.
-            </p>
-          </div>
-          <button className="btn btn-secondary" onClick={() => refreshIngestionRuns()} disabled={runsLoading}>
-            Refresh
-          </button>
-        </div>
-        {runsError && <div className="banner banner-error">{runsError}</div>}
-        {runsLoading ? (
-          <div className="loading-state">Loading ingestion runs…</div>
-        ) : ingestionRuns.length === 0 ? (
-          <div className="empty-state">No ingestion runs recorded yet.</div>
-        ) : (
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Started</th>
-                  <th>Target</th>
-                  <th>Status</th>
-                  <th>Files</th>
-                  <th>Chunks</th>
-                  <th>Tags</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {ingestionRuns.map((run) => (
-                  <tr key={run.id}>
-                    <td>
-                      <div>{formatDateTime(run.started_at)}</div>
-                      <div className="muted-text-small">
-                        {run.finished_at ? `Finished ${formatDateTime(run.finished_at)}` : "In progress"}
-                      </div>
-                    </td>
-                    <td className="ellipsis">{run.target || "—"}</td>
-                    <td>
-                      <span
-                        className={`status-badge ${
-                          run.status === "success"
-                            ? "status-success"
-                            : run.status === "running"
-                            ? "status-info"
-                            : "status-warning"
-                        }`}
-                      >
-                        {run.status}
-                      </span>
-                    </td>
-                    <td>{run.totals_files ?? 0}</td>
-                    <td>{run.totals_chunks ?? 0}</td>
-                    <td>
-                      <div className="tag-list">
-                        {(run.tags ?? []).length === 0 && <span className="muted-text-small">—</span>}
-                        {(run.tags ?? []).map((tag) => (
-                          <span className="tag" key={`${run.id}-tag-${tag}`}>
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="text-right">
-                      <button className="btn btn-text" onClick={() => handleDeleteRun(run.id)}>
-                        Clear
                       </button>
                     </td>
                   </tr>

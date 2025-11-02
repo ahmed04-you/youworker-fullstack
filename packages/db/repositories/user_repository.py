@@ -104,6 +104,56 @@ class UserRepository(BaseRepository[User]):
                 details={"operation": "get_by_api_key"}
             ) from e
 
+    async def ensure_user_with_api_key(self, username: str, api_key: str, *, is_root: bool = False) -> User:
+        """
+        Ensure a user exists and is associated with the provided API key.
+
+        If the API key already exists it takes precedence. Otherwise the user is located
+        by username and updated. A new record is created when both lookups miss.
+        """
+        if not api_key:
+            raise ValidationError("API key is required", code="MISSING_API_KEY")
+
+        normalized_username = (username or "").strip() or "root"
+        hashed_key = _hash_api_key(api_key)
+
+        try:
+            user = await self.get_by_api_key(api_key)
+            updated = False
+            if user.username != normalized_username:
+                user.username = normalized_username
+                updated = True
+            if is_root and not user.is_root:
+                user.is_root = True
+                updated = True
+            if updated:
+                await self.session.flush()
+            return user
+        except ResourceNotFoundError:
+            pass
+
+        existing = await self.get_by_username(normalized_username)
+        if existing:
+            updated = False
+            if existing.api_key_hash != hashed_key:
+                existing.api_key_hash = hashed_key
+                updated = True
+            if is_root and not existing.is_root:
+                existing.is_root = True
+                updated = True
+            if updated:
+                await self.session.flush()
+            return existing
+
+        user = User(
+            username=normalized_username,
+            is_root=is_root,
+            api_key_hash=hashed_key,
+        )
+        self.session.add(user)
+        await self.session.flush()
+        return user
+
     async def ensure_root_user(self, username: str, api_key: str) -> User:
         """
         Ensure root user exists with given credentials.
@@ -118,23 +168,7 @@ class UserRepository(BaseRepository[User]):
         Returns:
             Root user
         """
-        user = await self.get_by_username(username)
-        if user:
-            # Update api key hash if changed
-            h = _hash_api_key(api_key)
-            if user.api_key_hash != h:
-                user.api_key_hash = h
-                await self.session.flush()
-            return user
-
-        user = User(
-            username=username,
-            is_root=True,
-            api_key_hash=_hash_api_key(api_key)
-        )
-        self.session.add(user)
-        await self.session.flush()
-        return user
+        return await self.ensure_user_with_api_key(username=username, api_key=api_key, is_root=True)
 
     async def regenerate_api_key(self, user_id: int) -> str:
         """

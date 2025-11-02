@@ -7,6 +7,8 @@ that can be shared across all MCP servers.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 import logging
 from typing import Any, Callable
@@ -119,7 +121,11 @@ class MCPProtocolHandler:
         self.logger.info("Executing tool", extra={"tool_name": name})
 
         try:
-            result = await tool.handler(**arguments)
+            # Support both sync and async handlers
+            if inspect.iscoroutinefunction(tool.handler) or asyncio.iscoroutinefunction(tool.handler):
+                result = await tool.handler(**arguments)
+            else:
+                result = tool.handler(**arguments)
             return {
                 "content": [
                     {

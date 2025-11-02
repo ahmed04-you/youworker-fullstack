@@ -117,6 +117,25 @@ async def update_session(
         raise HTTPException(status_code=404, detail=str(e))
 
 
+@router.post("/sessions")
+async def create_session(
+    current_user=Depends(get_current_user_with_collection_access),
+):
+    """
+    Create a new session by generating a unique external_id.
+    The session is NOT persisted to the database until the first message is sent.
+    This allows the frontend to have a session ID ready before any conversation starts.
+    """
+    from uuid import uuid4
+
+    external_id = str(uuid4())
+
+    return {
+        "external_id": external_id,
+        "message": "Session ID generated. Session will be created when first message is sent."
+    }
+
+
 # ==================== DOCUMENT ENDPOINTS ====================
 
 
