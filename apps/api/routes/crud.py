@@ -55,7 +55,7 @@ async def list_sessions(
         limit=limit
     )
 
-    return {"sessions": sessions}
+    return {"sessions": sessions, "total": len(sessions)}
 
 
 @router.get("/sessions/{session_id}")
@@ -68,11 +68,11 @@ async def get_session(
     user_id = _extract_user_id(current_user)
 
     try:
-        session = await session_service.get_session(
+        session_result = await session_service.get_session(
             session_id=session_id,
             user_id=user_id
         )
-        return {"session": session}
+        return session_result
     except ResourceNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
 

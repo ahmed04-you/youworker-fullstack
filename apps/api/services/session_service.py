@@ -96,7 +96,7 @@ class SessionService:
             user_id=user_id
         )
 
-        return {
+        session_data = {
             "id": session.id,
             "external_id": session.external_id,
             "title": session.title,
@@ -104,26 +104,35 @@ class SessionService:
             "enable_tools": session.enable_tools,
             "created_at": session.created_at.isoformat(),
             "updated_at": session.updated_at.isoformat(),
-            "messages": [
-                {
-                    "id": m.id,
-                    "role": m.role,
-                    "content": m.content,
-                    "tool_call_name": m.tool_call_name,
-                    "tool_call_id": m.tool_call_id,
-                    "created_at": m.created_at.isoformat(),
-                }
-                for m in session.messages
-            ],
-            "tool_events": [
-                {
-                    "tool": tr.tool_name,
-                    "status": tr.status,
-                    "ts": tr.start_ts.isoformat(),
-                    "latency_ms": tr.latency_ms,
-                }
-                for tr in tool_runs
-            ],
+            "message_count": len(session.messages),
+        }
+
+        messages = [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "tool_call_name": m.tool_call_name,
+                "tool_call_id": m.tool_call_id,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in session.messages
+        ]
+
+        tool_events = [
+            {
+                "tool": tr.tool_name,
+                "status": tr.status,
+                "ts": tr.start_ts.isoformat(),
+                "latency_ms": tr.latency_ms,
+            }
+            for tr in tool_runs
+        ]
+
+        return {
+            "session": session_data,
+            "messages": messages,
+            "tool_events": tool_events,
         }
 
     async def delete_session(

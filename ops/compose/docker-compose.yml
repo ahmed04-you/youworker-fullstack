@@ -230,12 +230,14 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8001}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8001}
+        NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY}
     container_name: youworker-frontend
     env_file:
       - ../../.env
     environment:
       NODE_ENV: development
       NEXT_INTERNAL_API_BASE_URL: "http://api:8001"
+      NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY}
     restart: unless-stopped
     ports:
       - "3000:3000"

@@ -8,6 +8,7 @@ separating concerns from HTTP routing and enabling better testability.
 import base64
 import logging
 from typing import Any, AsyncIterator
+from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -349,13 +350,21 @@ class ChatService(BaseService):
         request_model = model or self.settings.chat_model
         max_iters = max_iterations or self.settings.max_agent_iterations
 
+        # Determine external session identifier (use provided value or generate a stable UUID)
+        session_identifier = str(session_id) if session_id else str(uuid4())
+
         # Get or create session
         chat_session = await self.get_or_create_session(
             user_id=user_id,
-            external_id=session_id or "default",
+            external_id=session_identifier,
             model=request_model,
             enable_tools=enable_tools,
         )
+
+        # Ensure session has a stable external identifier
+        if chat_session.external_id != session_identifier:
+            chat_session.external_id = session_identifier
+            await self.db.flush()
 
         # Prepare conversation
         conversation = await self.prepare_conversation(
@@ -413,6 +422,11 @@ class ChatService(BaseService):
             audio_result = await self.synthesize_audio(final_text, fallback=True)
             if audio_result:
                 audio_b64, audio_sample_rate = audio_result
+
+        metadata.setdefault("session_id", chat_session.id)
+        metadata.setdefault("session_external_id", chat_session.external_id)
+        metadata.setdefault("session_title", chat_session.title)
+        metadata.setdefault("enable_tools", chat_session.enable_tools)
 
         return ChatResponse(
             content=final_text,
@@ -485,13 +499,21 @@ class ChatService(BaseService):
         request_model = model or self.settings.chat_model
         max_iters = max_iterations or self.settings.max_agent_iterations
 
+        # Determine external session identifier (use provided value or generate a stable UUID)
+        session_identifier = str(session_id) if session_id else str(uuid4())
+
         # Get or create session
         chat_session = await self.get_or_create_session(
             user_id=user_id,
-            external_id=session_id or "default",
+            external_id=session_identifier,
             model=request_model,
             enable_tools=enable_tools,
         )
+
+        # Ensure session has a stable external identifier
+        if chat_session.external_id != session_identifier:
+            chat_session.external_id = session_identifier
+            await self.db.flush()
 
         # Prepare conversation
         conversation = await self.prepare_conversation(
@@ -556,6 +578,12 @@ class ChatService(BaseService):
                 audio_b64_result, audio_sample_rate_result = audio_result
 
         # Yield final done event with complete response
+        # Enrich metadata with session identifiers so the frontend can keep context in sync
+        metadata.setdefault("session_id", chat_session.id)
+        metadata.setdefault("session_external_id", chat_session.external_id)
+        metadata.setdefault("session_title", chat_session.title)
+        metadata.setdefault("enable_tools", chat_session.enable_tools)
+
         response = ChatResponse(
             content=final_text,
             metadata=metadata,

@@ -36,10 +36,18 @@ class UnifiedChatResponse(BaseModel):
     logs: list[dict[str, str]] | None = None
 
 
+class ChatMessage(BaseModel):
+    """Chat message model."""
+
+    role: str
+    content: str
+    timestamp: str | None = None
+
+
 class ChatRequest(BaseModel):
     """Request model for streaming chat endpoint."""
 
-    messages: list[dict[str, Any]]
+    messages: list[ChatMessage]
     session_id: str | None = None
     enable_tools: bool = True
     model: str | None = None
@@ -70,11 +78,3 @@ class VoiceTurnResponse(BaseModel):
     stt_language: str | None = None
     tool_events: list[dict[str, Any]] | None = None
     logs: list[dict[str, str]] | None = None
-
-
-class ChatMessage(BaseModel):
-    """Chat message model."""
-
-    role: str
-    content: str
-    timestamp: str | None = None
