@@ -107,10 +107,9 @@ async function attemptAutoLogin(apiKey: string, username: string): Promise<Login
   const headers: HeadersInit = {};
   const normalizedUsername = normalizeUsername(username);
 
-  // Set the Authentik API key header (both variations for compatibility)
+  // Set the Authentik API key header
   if (apiKey) {
     headers['x-authentik-api-key'] = apiKey;
-    headers['X-Authentik-Api-Key'] = apiKey;
   }
   headers['X-Authentik-Username'] = normalizedUsername;
 
