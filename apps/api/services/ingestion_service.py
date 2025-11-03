@@ -262,7 +262,6 @@ class IngestionService(BaseService):
                     },
                 )
                 continue
-            f.content_type = effective_mime
 
             valid_files.append(f)
 
@@ -560,50 +559,55 @@ class IngestionService(BaseService):
             result: Pipeline result object
             error_messages: Formatted error messages
         """
+        from packages.db import get_async_session
+
         try:
             started_at = datetime.now().astimezone()
             finished_at = datetime.now().astimezone()
 
-            # Record ingestion run
-            ingestion_repo = IngestionRepository(self.db)
-            await ingestion_repo.record_ingestion_run(
-                user_id=user_id,
-                target=target,
-                from_web=from_web,
-                recursive=recursive,
-                tags=tags,
-                collection=None,
-                totals_files=result.total_files,
-                totals_chunks=result.total_chunks,
-                errors=error_messages or [],
-                started_at=started_at,
-                finished_at=finished_at,
-                status="success" if not error_messages else "partial",
-            )
-
-            # Record individual documents
-            doc_repo = DocumentRepository(self.db)
-            for f in result.files or []:
-                uri = f.get("uri")
-                path = f.get("path")
-                basis = uri or path or ""
-                path_hash = (
-                    hashlib.sha256(basis.encode("utf-8")).hexdigest()
-                    if basis
-                    else None
-                )
-
-                await doc_repo.upsert_document(
+            # Use a fresh database session to avoid greenlet context issues
+            # after long-running ingestion operations
+            async with get_async_session() as db:
+                # Record ingestion run
+                ingestion_repo = IngestionRepository(db)
+                await ingestion_repo.record_ingestion_run(
                     user_id=user_id,
-                    path_hash=path_hash or "",
-                    uri=uri,
-                    path=path,
-                    mime=f.get("mime"),
-                    bytes_size=f.get("size_bytes"),
-                    source="web" if from_web else "file",
+                    target=target,
+                    from_web=from_web,
+                    recursive=recursive,
                     tags=tags,
                     collection=None,
+                    totals_files=result.total_files,
+                    totals_chunks=result.total_chunks,
+                    errors=error_messages or [],
+                    started_at=started_at,
+                    finished_at=finished_at,
+                    status="success" if not error_messages else "partial",
                 )
+
+                # Record individual documents
+                doc_repo = DocumentRepository(db)
+                for f in result.files or []:
+                    uri = f.get("uri")
+                    path = f.get("path")
+                    basis = uri or path or ""
+                    path_hash = (
+                        hashlib.sha256(basis.encode("utf-8")).hexdigest()
+                        if basis
+                        else None
+                    )
+
+                    await doc_repo.upsert_document(
+                        user_id=user_id,
+                        path_hash=path_hash or "",
+                        uri=uri,
+                        path=path,
+                        mime=f.get("mime"),
+                        bytes_size=f.get("size_bytes"),
+                        source="web" if from_web else "file",
+                        tags=tags,
+                        collection=None,
+                    )
 
         except (ValueError, TypeError, OSError) as persist_exc:
             logger.error(

@@ -87,7 +87,7 @@ def extract(
     Yields DocChunk instances with rich metadata for each content element.
     """
     if not DOCLING_AVAILABLE:
-        logger.debug("docling-not-available", path=str(path))
+        logger.debug("docling-not-available", extra={"path": str(path)})
         if _should_try_excel(path, mime):
             yield from _extract_excel_tables(path, uri=uri, mime=mime, source=source)
         else:
@@ -152,7 +152,7 @@ def extract(
             return
 
     except Exception as exc:
-        logger.warning("docling-extraction-error", path=str(path), error=str(exc))
+        logger.warning("docling-extraction-error", extra={"path": str(path), "error": str(exc)})
         if _should_try_excel(path, mime):
             yield from _extract_excel_tables(path, uri=uri, mime=mime, source=source)
             return
@@ -184,17 +184,21 @@ def _convert_document(path: Path) -> Any:
             converter = _build_converter(choice)
             logger.info(
                 "docling-conversion-start",
-                path=str(path),
-                device=choice.compute_device,
-                accelerator=choice.requested,
-                gpu_available=choice.gpu_available,
+                extra={
+                    "path": str(path),
+                    "device": choice.compute_device,
+                    "accelerator": choice.requested,
+                    "gpu_available": choice.gpu_available,
+                },
             )
             result = converter.convert(str(path))
             if result is None:
                 logger.warning(
                     "docling-conversion-empty",
-                    path=str(path),
-                    device=choice.compute_device,
+                    extra={
+                        "path": str(path),
+                        "device": choice.compute_device,
+                    },
                 )
                 continue
             _set_docling_choice(choice)
@@ -204,24 +208,30 @@ def _convert_document(path: Path) -> Any:
             if choice.using_gpu and cpu_choice is not None:
                 logger.warning(
                     "docling-conversion-gpu-error",
-                    path=str(path),
-                    device=choice.compute_device,
-                    accelerator=choice.requested,
-                    error=str(exc),
+                    extra={
+                        "path": str(path),
+                        "device": choice.compute_device,
+                        "accelerator": choice.requested,
+                        "error": str(exc),
+                    },
                 )
                 logger.info(
                     "docling-conversion-fallback",
-                    path=str(path),
-                    device=cpu_choice.compute_device,
-                    accelerator=cpu_choice.requested,
+                    extra={
+                        "path": str(path),
+                        "device": cpu_choice.compute_device,
+                        "accelerator": cpu_choice.requested,
+                    },
                 )
             else:
                 logger.warning(
                     "docling-conversion-failed",
-                    path=str(path),
-                    device=choice.compute_device,
-                    accelerator=choice.requested,
-                    error=str(exc),
+                    extra={
+                        "path": str(path),
+                        "device": choice.compute_device,
+                        "accelerator": choice.requested,
+                        "error": str(exc),
+                    },
                 )
             continue
 
@@ -283,7 +293,7 @@ def _resolve_docling_precision(choice: AcceleratorChoice) -> str:
         return "float16"
     if preference in {"float32", "fp32"}:
         return "float32"
-    logger.warning("docling-precision-invalid", precision=preference)
+    logger.warning("docling-precision-invalid", extra={"precision": preference})
     return "float16" if choice.using_gpu else "float32"
 
 
@@ -305,9 +315,11 @@ def _safe_assign(target: object, attribute: str, value: object) -> None:
     except Exception as exc:  # pragma: no cover - best effort
         logger.debug(
             "docling-option-assign-failed",
-            attribute=attribute,
-            value=value,
-            error=str(exc),
+            extra={
+                "attribute": attribute,
+                "value": value,
+                "error": str(exc),
+            },
         )
 
 
@@ -337,7 +349,7 @@ def _export_markdown(result: Any) -> str | None:
             except TypeError:
                 continue
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.debug("docling-markdown-export-error", method=method_name, error=str(exc))
+            logger.debug("docling-markdown-export-error", extra={"method": method_name, "error": str(exc)})
             continue
 
         markdown_text = _coerce_markdown(output)
@@ -433,7 +445,7 @@ def _extract_structured_content(result: Any) -> Iterator[dict[str, Any]]:
                     try:
                         text = item.export_to_markdown()
                     except Exception as exc:  # pragma: no cover - defensive
-                        logger.debug("docling-table-export-failed", error=str(exc))
+                        logger.debug("docling-table-export-failed", extra={"error": str(exc)})
                 if hasattr(item, "data") and item.data is not None:
                     metadata["table_data"] = _serialize_table(item.data)
 
@@ -457,7 +469,7 @@ def _extract_structured_content(result: Any) -> Iterator[dict[str, Any]]:
             }
 
         except Exception as exc:
-            logger.warning("docling-item-extraction-error", error=str(exc))
+            logger.warning("docling-item-extraction-error", extra={"error": str(exc)})
             continue
 
 
@@ -484,7 +496,7 @@ def _serialize_table(table_data: Any) -> Any:
         try:
             return table_data.model_dump()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("docling-table-serialize-failed", error=str(exc))
+            logger.debug("docling-table-serialize-failed", extra={"error": str(exc)})
     return table_data
 
 
@@ -500,7 +512,7 @@ def _process_picture_item(
         try:
             caption_text = (item.caption_text(document) or "").strip()
         except Exception as exc:  # pragma: no cover - defensive
-            logger.debug("docling-picture-caption-failed", error=str(exc))
+            logger.debug("docling-picture-caption-failed", extra={"error": str(exc)})
     if not caption_text and hasattr(item, "caption") and isinstance(item.caption, str):
         caption_text = item.caption.strip()
 
@@ -578,7 +590,7 @@ def _extract_picture_image_metadata(item: Any, document: Any) -> dict[str, Any]:
     try:
         pil_image = item.get_image(document)
     except Exception as exc:  # pragma: no cover - defensive
-        logger.debug("docling-picture-get-image-failed", error=str(exc))
+        logger.debug("docling-picture-get-image-failed", extra={"error": str(exc)})
 
     if pil_image is not None:
         image_copy = None
@@ -590,7 +602,7 @@ def _extract_picture_image_metadata(item: Any, document: Any) -> dict[str, Any]:
             try:
                 metadata["image_hash"] = hashlib.sha256(pil_image.tobytes()).hexdigest()
             except Exception as exc:  # pragma: no cover - defensive
-                logger.debug("docling-picture-hash-failed", error=str(exc))
+                logger.debug("docling-picture-hash-failed", extra={"error": str(exc)})
 
             if PYTESSERACT_AVAILABLE:
                 try:
@@ -602,7 +614,7 @@ def _extract_picture_image_metadata(item: Any, document: Any) -> dict[str, Any]:
                         metadata["ocr_engine"] = "tesseract"
                     metadata["ocr_attempted"] = True
                 except Exception as exc:  # pragma: no cover - OCR runtime
-                    logger.warning("docling-picture-ocr-error", error=str(exc))
+                    logger.warning("docling-picture-ocr-error", extra={"error": str(exc)})
                     metadata["ocr_error"] = str(exc)
                     metadata["ocr_attempted"] = True
             else:
@@ -653,14 +665,14 @@ def _extract_excel_tables(
             engine=engine,
         )
     except ImportError as exc:  # pragma: no cover - engine missing
-        logger.warning("excel-extract-engine-missing", path=str(path), error=str(exc))
+        logger.warning("excel-extract-engine-missing", extra={"path": str(path), "error": str(exc)})
         return
     except ValueError as exc:
         # Pandas raises ValueError when the relevant engine is not installed (e.g., xlrd for .xls)
-        logger.warning("excel-extract-engine-error", path=str(path), error=str(exc))
+        logger.warning("excel-extract-engine-error", extra={"path": str(path), "error": str(exc)})
         return
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warning("excel-extract-error", path=str(path), error=str(exc))
+        logger.warning("excel-extract-error", extra={"path": str(path), "error": str(exc)})
         return
 
     if not workbook:
@@ -681,7 +693,8 @@ def _extract_excel_tables(
             frame.to_csv(buffer, index=False)
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning(
-                "excel-sheet-export-error", path=str(path), sheet=sheet_title, error=str(exc)
+                "excel-sheet-export-error",
+                extra={"path": str(path), "sheet": sheet_title, "error": str(exc)},
             )
             continue
 
@@ -734,7 +747,7 @@ def _fallback_pdf_text(
                     )
             return
         except Exception as exc:  # pragma: no cover - pdfplumber runtime errors
-            logger.warning("pdfplumber-text-error", path=str(path), error=str(exc))
+            logger.warning("pdfplumber-text-error", extra={"path": str(path), "error": str(exc)})
 
     # Generic fallback for text-like files.
     try:

@@ -84,7 +84,7 @@ def transcribe(
     configured Whisper model) and preserves the original text without translation.
     """
     if not WHISPER_AVAILABLE:  # pragma: no cover
-        logger.warning("whisper-not-installed", path=str(path))
+        logger.warning("whisper-not-installed", extra={"path": str(path)})
         return
 
     language_hint = _resolve_language_hint(WHISPER_LANGUAGE)
@@ -93,13 +93,15 @@ def transcribe(
 
     logger.info(
         "whisper-transcribe-start",
-        path=str(path),
-        model=WHISPER_MODEL_NAME,
-        device=runtime.compute_device,
-        compute_type=_active_compute_type(runtime),
-        language_hint=language_hint or "auto",
-        accelerator=runtime.requested,
-        gpu_available=runtime.gpu_available,
+        extra={
+            "path": str(path),
+            "model": WHISPER_MODEL_NAME,
+            "device": runtime.compute_device,
+            "compute_type": _active_compute_type(runtime),
+            "language_hint": language_hint or "auto",
+            "accelerator": runtime.requested,
+            "gpu_available": runtime.gpu_available,
+        },
     )
 
     with _demux_to_wav(path) as audio_path:
@@ -113,8 +115,10 @@ def transcribe(
             if runtime.using_gpu:
                 logger.warning(
                     "whisper-transcribe-gpu-error",
-                    path=str(path),
-                    error=str(exc),
+                    extra={
+                        "path": str(path),
+                        "error": str(exc),
+                    },
                 )
                 cpu_choice = resolve_accelerator(preference="cpu")
                 _reset_whisper_model()
@@ -123,16 +127,20 @@ def transcribe(
                 except Exception as model_exc:
                     logger.warning(
                         "whisper-transcribe-error",
-                        path=str(path),
-                        error=str(model_exc),
+                        extra={
+                            "path": str(path),
+                            "error": str(model_exc),
+                        },
                     )
                     return
                 runtime = cpu_choice
                 logger.info(
                     "whisper-transcribe-fallback",
-                    path=str(path),
-                    accelerator=runtime.requested,
-                    device=runtime.compute_device,
+                    extra={
+                        "path": str(path),
+                        "accelerator": runtime.requested,
+                        "device": runtime.compute_device,
+                    },
                 )
                 try:
                     segments, detected_language = _run_transcription(
@@ -143,19 +151,23 @@ def transcribe(
                 except Exception as cpu_exc:
                     logger.warning(
                         "whisper-transcribe-error",
-                        path=str(path),
-                        error=str(cpu_exc),
+                        extra={
+                            "path": str(path),
+                            "error": str(cpu_exc),
+                        },
                     )
                     return
             else:
-                logger.warning("whisper-transcribe-error", path=str(path), error=str(exc))
+                logger.warning("whisper-transcribe-error", extra={"path": str(path), "error": str(exc)})
                 return
 
     logger.info(
         "whisper-transcribe-complete",
-        path=str(path),
-        segments=len(segments),
-        language=detected_language,
+        extra={
+            "path": str(path),
+            "segments": len(segments),
+            "language": detected_language,
+        },
     )
 
     if not segments:
@@ -245,11 +257,13 @@ def _get_whisper_model(
 
         logger.info(
             "whisper-model-load",
-            model=WHISPER_MODEL_NAME,
-            device=candidate.compute_device,
-            compute_type=compute_type,
-            accelerator=candidate.requested,
-            gpu_available=candidate.gpu_available,
+            extra={
+                "model": WHISPER_MODEL_NAME,
+                "device": candidate.compute_device,
+                "compute_type": compute_type,
+                "accelerator": candidate.requested,
+                "gpu_available": candidate.gpu_available,
+            },
         )
         try:
             model = WhisperModel(
@@ -260,11 +274,13 @@ def _get_whisper_model(
             last_error = exc
             logger.warning(
                 "whisper-model-load-failed",
-                model=WHISPER_MODEL_NAME,
-                device=candidate.compute_device,
-                compute_type=compute_type,
-                accelerator=candidate.requested,
-                error=str(exc),
+                extra={
+                    "model": WHISPER_MODEL_NAME,
+                    "device": candidate.compute_device,
+                    "compute_type": compute_type,
+                    "accelerator": candidate.requested,
+                    "error": str(exc),
+                },
             )
             continue
 
@@ -288,7 +304,7 @@ class _DemuxedAudio:
         try:
             self.path.unlink(missing_ok=True)
         except Exception:  # pragma: no cover
-            logger.warning("audio-temp-clean-failed", path=str(self.path))
+            logger.warning("audio-temp-clean-failed", extra={"path": str(self.path)})
 
 
 def _demux_to_wav(path: Path) -> _DemuxedAudio:
@@ -304,7 +320,8 @@ def _demux_to_wav(path: Path) -> _DemuxedAudio:
         )
     except ffmpeg.Error as exc:  # pragma: no cover
         logger.warning(
-            "ffmpeg-demux-error", path=str(path), error=exc.stderr.decode(errors="ignore")
+            "ffmpeg-demux-error",
+            extra={"path": str(path), "error": exc.stderr.decode(errors="ignore")},
         )
         tmp_path.unlink(missing_ok=True)
         raise
@@ -414,22 +431,28 @@ def _run_transcription(
             if language_hint and detected_language and detected_language != language_hint:
                 logger.info(
                     "whisper-language-detected",
-                    hint=language_hint,
-                    detected=detected_language,
-                    attempt=attempt,
+                    extra={
+                        "hint": language_hint,
+                        "detected": detected_language,
+                        "attempt": attempt,
+                    },
                 )
             else:
                 logger.debug(
                     "whisper-language-selected",
-                    language=detected_language or language_hint,
-                    attempt=attempt,
+                    extra={
+                        "language": detected_language or language_hint,
+                        "attempt": attempt,
+                    },
                 )
             break
         logger.info(
             "whisper-transcribe-retry",
-            attempt=attempt,
-            reason="no_segments",
-            attempted_language=candidate or "auto",
+            extra={
+                "attempt": attempt,
+                "reason": "no_segments",
+                "attempted_language": candidate or "auto",
+            },
         )
     else:
         detected_language = language_hint

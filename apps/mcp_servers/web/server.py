@@ -604,9 +604,7 @@ mcp_handler.register_tool(
         "required": ["query"],
         "additionalProperties": False,
     },
-    handler=lambda query, top_k=5, site=None: search_web(
-        query=query, top_k=top_k, site=site
-    ),
+    handler=search_web,
 )
 
 mcp_handler.register_tool(
@@ -633,7 +631,7 @@ mcp_handler.register_tool(
         "required": ["url"],
         "additionalProperties": False,
     },
-    handler=lambda url, max_links=10: fetch_url(url=url, max_links=max_links),
+    handler=fetch_url,
 )
 
 mcp_handler.register_tool(
@@ -658,9 +656,7 @@ mcp_handler.register_tool(
         "required": ["url"],
         "additionalProperties": False,
     },
-    handler=lambda url, follow_redirects=False: head_url(
-        url=url, follow_redirects=follow_redirects
-    ),
+    handler=head_url,
 )
 
 mcp_handler.register_tool(
@@ -692,9 +688,7 @@ mcp_handler.register_tool(
         "required": ["url"],
         "additionalProperties": False,
     },
-    handler=lambda url, include_links=False, max_chars=5000: extract_readable(
-        url=url, include_links=include_links, max_chars=max_chars
-    ),
+    handler=extract_readable,
 )
 
 mcp_handler.register_tool(
@@ -733,9 +727,7 @@ mcp_handler.register_tool(
         "required": ["url"],
         "additionalProperties": False,
     },
-    handler=lambda url, depth=1, max_pages=5, same_host=True: crawl(
-        url=url, depth=depth, max_pages=max_pages, same_host=same_host
-    ),
+    handler=crawl,
 )
 
 

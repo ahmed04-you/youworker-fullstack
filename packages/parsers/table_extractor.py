@@ -49,7 +49,8 @@ def _extract_pdf_tables(
                     tables = page.extract_tables()
                 except Exception as exc:  # pragma: no cover
                     logger.warning(
-                        "pdfplumber-table-error", path=str(path), page=page_idx, error=str(exc)
+                        "pdfplumber-table-error",
+                        extra={"path": str(path), "page": page_idx, "error": str(exc)},
                     )
                     continue
                 for table in tables or []:
@@ -73,7 +74,7 @@ def _extract_pdf_tables(
                         metadata=metadata,
                     )
     except Exception as exc:  # pragma: no cover
-        logger.warning("pdfplumber-open-error", path=str(path), error=str(exc))
+        logger.warning("pdfplumber-open-error", extra={"path": str(path), "error": str(exc)})
 
 
 def _extract_excel_tables(
@@ -90,7 +91,7 @@ def _extract_excel_tables(
     try:
         workbook = pd.read_excel(path, sheet_name=None, dtype=str)
     except Exception as exc:
-        logger.warning("excel-extract-error", path=str(path), error=str(exc))
+        logger.warning("excel-extract-error", extra={"path": str(path), "error": str(exc)})
         return
 
     if not workbook:

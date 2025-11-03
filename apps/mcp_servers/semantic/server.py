@@ -353,9 +353,7 @@ mcp_handler.register_tool(
         "required": ["query"],
         "additionalProperties": False,
     },
-    handler=lambda query, top_k=5, tags=None, collection=None: semantic_query(
-        query=query, top_k=top_k, tags=tags, collection=collection
-    ),
+    handler=semantic_query,
 )
 
 mcp_handler.register_tool(
@@ -399,9 +397,7 @@ mcp_handler.register_tool(
         "required": ["question"],
         "additionalProperties": False,
     },
-    handler=lambda question, top_k=5, tags=None, collection=None: semantic_answer(
-        question=question, top_k=top_k, tags=tags, collection=collection
-    ),
+    handler=semantic_answer,
 )
 
 mcp_handler.register_tool(
@@ -445,16 +441,14 @@ mcp_handler.register_tool(
         "required": ["text"],
         "additionalProperties": False,
     },
-    handler=lambda text, top_k=5, tags=None, collection=None: similar_to_text(
-        text=text, top_k=top_k, tags=tags, collection=collection
-    ),
+    handler=similar_to_text,
 )
 
 mcp_handler.register_tool(
     name="collections",
     description="List all available document collections in the vector store.",
     input_schema={"type": "object", "properties": {}, "additionalProperties": False},
-    handler=lambda: list_collections(),
+    handler=list_collections,
 )
 
 

@@ -105,7 +105,7 @@ def _extract_image(
         try:
             text = run_ocr_image(image)
         except Exception as exc:  # pragma: no cover
-            logger.warning("ocr-image-process-failed", path=str(path), error=str(exc))
+            logger.warning("ocr-image-process-failed", extra={"path": str(path), "error": str(exc)})
             return
         if not text.strip():
             return
@@ -135,7 +135,8 @@ def _extract_scanned_pdf(
                     page_image = page.to_image(resolution=300).original
                 except Exception as exc:  # pragma: no cover
                     logger.warning(
-                        "ocr-page-render-failed", path=str(path), page=idx, error=str(exc)
+                        "ocr-page-render-failed",
+                        extra={"path": str(path), "page": idx, "error": str(exc)},
                     )
                     continue
                 try:
@@ -157,7 +158,7 @@ def _extract_scanned_pdf(
                     metadata={"page": idx, "ocr_used": True, "ocr_engine": "tesseract"},
                 )
     except Exception as exc:  # pragma: no cover
-        logger.warning("ocr-pdf-open-failed", path=str(path), error=str(exc))
+        logger.warning("ocr-pdf-open-failed", extra={"path": str(path), "error": str(exc)})
 
 
 def run_ocr_image(image: Image.Image) -> str:
@@ -171,7 +172,7 @@ def run_ocr_image(image: Image.Image) -> str:
             "pytesseract is not available for OCR. Install it with: uv add pytesseract"
         )
 
-    logger.info("ocr-run", engine="tesseract", device="cpu")
+    logger.info("ocr-run", extra={"engine": "tesseract", "device": "cpu"})
 
     variants = _prepare_image_variants(image)
     configs = ["--oem 3 --psm 6", "--oem 3 --psm 4", "--oem 1 --psm 6"]
@@ -183,7 +184,7 @@ def run_ocr_image(image: Image.Image) -> str:
                 try:
                     candidate = pytesseract.image_to_string(variant, config=config)
                 except pytesseract.pytesseract.TesseractError as exc:  # pragma: no cover
-                    logger.warning("ocr-run-error", config=config, error=str(exc))
+                    logger.warning("ocr-run-error", extra={"config": config, "error": str(exc)})
                     continue
                 candidate = (candidate or "").strip()
                 if candidate and not candidate.isspace():

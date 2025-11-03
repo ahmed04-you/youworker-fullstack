@@ -103,9 +103,11 @@ export default function Chats() {
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [streamingStatus, setStreamingStatus] = useState<string>("");
   const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
+  const [hasToolEvents, setHasToolEvents] = useState(false);
   const [expectAudio, setExpectAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const actionsMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const streamingContentRef = useRef<string>("");
@@ -119,7 +121,7 @@ export default function Chats() {
     });
   };
 
-  const setToolEventsFromList = useCallback((events?: Array<SSEToolEvent | ToolEvent>) => {
+  const setToolEventsFromList = useCallback((events?: Array<SSEToolEvent | ToolEvent>, shouldMerge: boolean = false) => {
     if (!events) {
       setToolEvents([]);
       return;
@@ -132,7 +134,16 @@ export default function Chats() {
       return status === "end" || status === "success" || status === "error";
     });
 
-    setToolEvents(completed as ToolEvent[]);
+    if (shouldMerge) {
+      setToolEvents((prev) => [...prev, ...(completed as ToolEvent[])]);
+    } else {
+      setToolEvents(completed as ToolEvent[]);
+    }
+
+    // Mark that this session has tool events if there are any
+    if (completed.length > 0) {
+      setHasToolEvents(true);
+    }
   }, []);
 
   const addToolEvent = (event?: SSEToolEvent | ToolEvent) => {
@@ -147,6 +158,7 @@ export default function Chats() {
     }
 
     setToolEvents((prev) => [...prev, event as ToolEvent]);
+    setHasToolEvents(true);
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -176,6 +188,34 @@ export default function Chats() {
       }
     }
   }, [activeMenu, isDrawerOpen]);
+
+  // Close actions menu when clicking outside
+  useEffect(() => {
+    if (activeMenu === null) return;
+
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      // Don't close if clicking on the action button itself
+      const activeButton = actionButtonRefs.current[activeMenu];
+      if (activeButton && activeButton.contains(target)) {
+        return;
+      }
+
+      // Don't close if clicking inside the menu
+      if (actionsMenuRef.current && actionsMenuRef.current.contains(target)) {
+        return;
+      }
+
+      // Close the menu
+      setActiveMenu(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [activeMenu]);
 
   const loadSessions = useCallback(async (retryCount = 0) => {
     const MAX_RETRIES = 1;
@@ -402,10 +442,8 @@ export default function Chats() {
               setMessages((prev) => [...prev, assistantMessage]);
             }
 
-            // Refresh tool usage counts from backend payload
-            if (response.tool_events && response.tool_events.length > 0) {
-              setToolEventsFromList(response.tool_events);
-            }
+            // Don't merge tool events from done event - they were already added during streaming
+            // The tool_events in the done event are just a summary of what was already streamed
 
             const metadata = response.metadata || {};
             const sessionIdMeta = metadata.session_id ?? metadata.sessionId;
@@ -690,6 +728,7 @@ export default function Chats() {
         setActiveSessionExternalId(null);
         setMessages([]);
         setToolEvents([]);
+        setHasToolEvents(false);
       }
 
       setActiveMenu(null);
@@ -713,6 +752,7 @@ export default function Chats() {
       setActiveSessionExternalId(external_id);
       setMessages([]);
       setToolEvents([]);
+      setHasToolEvents(false);
       setStreamingContent("");
       setStreamingStatus("");
       setError(null);
@@ -765,6 +805,7 @@ export default function Chats() {
   const handleSessionClick = useCallback((sessionId: number, externalId: string | null) => {
     setActiveSessionId(sessionId);
     setActiveSessionExternalId(externalId);
+    setIsDrawerOpen(false);
   }, []);
 
   const handleMenuToggle = useCallback((sessionId: number, e: React.MouseEvent) => {
@@ -828,6 +869,7 @@ export default function Chats() {
         )}
         {activeMenu !== null && (
           <div
+            ref={actionsMenuRef}
             className="actions-menu"
             style={{
               top: `${menuPosition.top}px`,
@@ -1024,7 +1066,7 @@ export default function Chats() {
         </div>
       </div>
 
-      {showChatDetail && toolEvents.length > 0 && (
+      {showChatDetail && hasToolEvents && (
         <div className="chat-detail-card">
           {isDrawerOpen && (
             <div
