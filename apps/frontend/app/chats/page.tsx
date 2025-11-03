@@ -689,7 +689,7 @@ export default function Chats() {
         setActiveSessionId(null);
         setActiveSessionExternalId(null);
         setMessages([]);
-        setToolEvents({});
+        setToolEvents([]);
       }
 
       setActiveMenu(null);
@@ -712,7 +712,7 @@ export default function Chats() {
       setActiveSessionId(null);
       setActiveSessionExternalId(external_id);
       setMessages([]);
-      setToolEvents({});
+      setToolEvents([]);
       setStreamingContent("");
       setStreamingStatus("");
       setError(null);

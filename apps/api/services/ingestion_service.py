@@ -5,8 +5,10 @@ This service encapsulates all business logic for document ingestion operations,
 separating concerns from HTTP routing and enabling better testability.
 """
 
+from contextlib import suppress
 import hashlib
 import logging
+import mimetypes
 import os
 import uuid
 from datetime import datetime
@@ -83,16 +85,90 @@ class IngestionService(BaseService):
     """
 
     # Allowed MIME types for file uploads
-    ALLOWED_MIME_TYPES = {
+    DOCUMENT_MIME_TYPES = {
         "application/pdf",
+        "application/msword",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+        "application/vnd.openxmlformats-officedocument.presentationml.template",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.template",
+        "application/vnd.ms-word.document.macroenabled.12",
+        "application/vnd.ms-word.template.macroenabled.12",
+        "application/vnd.ms-powerpoint.presentation.macroenabled.12",
+        "application/vnd.ms-powerpoint.template.macroenabled.12",
+        "application/vnd.ms-excel.sheet.macroenabled.12",
+        "application/vnd.ms-excel.sheet.binary.macroenabled.12",
+        "application/vnd.oasis.opendocument.text",
+        "application/vnd.oasis.opendocument.presentation",
+        "application/vnd.oasis.opendocument.spreadsheet",
+        "application/rtf",
+        "text/richtext",
         "text/plain",
         "text/markdown",
+        "text/x-markdown",
         "text/csv",
+        "text/tab-separated-values",
+        "text/yaml",
+        "application/yaml",
+        "application/x-yaml",
         "application/json",
+        "application/xml",
+        "text/xml",
+        "text/html",
+    }
+    IMAGE_MIME_TYPES = {
         "image/png",
         "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+    }
+    AUDIO_MIME_TYPES = {
         "audio/mpeg",
+        "audio/mp3",
         "audio/wav",
+        "audio/x-wav",
+        "audio/flac",
+        "audio/x-flac",
+        "audio/mp4",
+        "audio/aac",
+        "audio/x-m4a",
+        "audio/ogg",
+        "audio/webm",
+    }
+    VIDEO_MIME_TYPES = {
+        "video/mp4",
+        "video/quicktime",
+        "video/x-msvideo",
+        "video/x-matroska",
+        "video/webm",
+        "video/mpeg",
+    }
+    ALLOWED_MIME_TYPES = (
+        DOCUMENT_MIME_TYPES
+        | IMAGE_MIME_TYPES
+        | AUDIO_MIME_TYPES
+        | VIDEO_MIME_TYPES
+    )
+    MIME_ALIASES = {
+        "application/octet-stream": None,
+        "text/plain; charset=utf-8": "text/plain",
+        "text/plain; charset=us-ascii": "text/plain",
+        "text/markdown; charset=utf-8": "text/markdown",
+        "text/x-markdown; charset=utf-8": "text/x-markdown",
+        "application/json; charset=utf-8": "application/json",
+        "audio/x-wav": "audio/wav",
+        "audio/x-flac": "audio/flac",
+        "audio/x-ms-wma": "audio/mpeg",
+        "audio/x-mp3": "audio/mpeg",
+        "video/x-msvideo": "video/x-msvideo",
+        "text/x-yaml": "text/yaml",
+        "application/x-yaml": "application/yaml",
     }
 
     # Maximum file size: 100MB
@@ -175,8 +251,8 @@ class IngestionService(BaseService):
         valid_files = []
 
         for f in files:
-            # Check MIME type
-            if f.content_type not in self.ALLOWED_MIME_TYPES:
+            effective_mime = self._resolve_upload_mime_type(f)
+            if effective_mime is None:
                 logger.warning(
                     "Rejected file with invalid MIME type",
                     extra={
@@ -186,24 +262,14 @@ class IngestionService(BaseService):
                     },
                 )
                 continue
-
-            # Check size if available
-            if f.size and f.size > self.MAX_FILE_SIZE_BYTES:
-                logger.warning(
-                    "Rejected file: size exceeds limit",
-                    extra={
-                        "filename": f.filename,
-                        "size_bytes": f.size,
-                        "max_size_bytes": self.MAX_FILE_SIZE_BYTES,
-                    },
-                )
-                continue
+            f.content_type = effective_mime
 
             valid_files.append(f)
 
         if not valid_files:
             raise ValueError(
-                "No valid files provided. Supported types: PDF, text, CSV, JSON, PNG, JPEG, MP3, WAV. "
+                "No valid files provided. Supported types include PDF, Word, PowerPoint, Excel, Markdown, HTML, CSV/JSON, "
+                "common image formats (PNG, JPEG, GIF, WebP, TIFF), and audio/video files (MP3, WAV, AAC, FLAC, MP4, WebM). "
                 "Max size: 100MB per file."
             )
 
@@ -233,6 +299,7 @@ class IngestionService(BaseService):
 
         saved_paths: list[Path] = []
         for f in files:
+            target_path: Path | None = None
             try:
                 # Sanitize filename
                 name = os.path.basename(f.filename or "uploaded-file")
@@ -249,23 +316,41 @@ class IngestionService(BaseService):
                     counter += 1
 
                 # Write file
+                await f.seek(0)
+                bytes_written = 0
                 with open(target_path, "wb") as out:
                     while True:
                         chunk = await f.read(1024 * 1024)
                         if not chunk:
                             break
+                        bytes_written += len(chunk)
+                        if bytes_written > self.MAX_FILE_SIZE_BYTES:
+                            raise ValueError(f"File {name} exceeds maximum size of 100MB")
                         out.write(chunk)
 
-                await f.close()
                 saved_paths.append(target_path)
 
+            except ValueError as size_exc:
+                logger.warning(
+                    "Rejected file: size exceeds limit",
+                    extra={
+                        "filename": f.filename,
+                        "bytes_written": bytes_written,
+                        "max_size_bytes": self.MAX_FILE_SIZE_BYTES,
+                    },
+                )
+                if target_path is not None:
+                    with suppress(Exception):
+                        target_path.unlink(missing_ok=True)
+                raise size_exc
             except Exception as exc:
-                # Best-effort cleanup
-                try:
+                if target_path is not None:
+                    with suppress(Exception):
+                        target_path.unlink(missing_ok=True)
+                raise RuntimeError(f"Failed to save file {f.filename}: {exc}") from exc
+            finally:
+                with suppress(Exception):
                     await f.close()
-                except Exception:
-                    pass
-                raise RuntimeError(f"Failed to save file {f.filename}: {exc}")
 
         return FileUploadResult(saved_paths=saved_paths, run_dir=run_dir)
 
@@ -530,3 +615,33 @@ class IngestionService(BaseService):
                     "target": target,
                 },
             )
+
+    def _resolve_upload_mime_type(self, upload: UploadFile) -> str | None:
+        declared = (upload.content_type or "").lower()
+        normalized = self._normalize_mime(declared)
+        if normalized in self.ALLOWED_MIME_TYPES:
+            return normalized
+
+        guessed, _ = mimetypes.guess_type(upload.filename or "")
+        guessed_normalized = self._normalize_mime((guessed or "").lower())
+        if guessed_normalized in self.ALLOWED_MIME_TYPES:
+            return guessed_normalized
+
+        if declared and declared in self.MIME_ALIASES and self.MIME_ALIASES[declared]:
+            alias = self.MIME_ALIASES[declared]
+            if alias in self.ALLOWED_MIME_TYPES:
+                return alias
+
+        if guessed and guessed in self.MIME_ALIASES and self.MIME_ALIASES[guessed]:
+            alias = self.MIME_ALIASES[guessed]
+            if alias in self.ALLOWED_MIME_TYPES:
+                return alias
+
+        return None
+
+    def _normalize_mime(self, mime: str | None) -> str | None:
+        if not mime:
+            return None
+        mime = mime.split(";")[0].strip()
+        alias = self.MIME_ALIASES.get(mime, mime)
+        return alias

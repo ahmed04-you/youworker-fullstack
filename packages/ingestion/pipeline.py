@@ -39,6 +39,32 @@ from .metadata_builder import build_chunk_metadata, prune_metadata
 
 logger = get_logger(__name__)
 
+_CUSTOM_MIME_TYPES: tuple[tuple[str, str], ...] = (
+    ("text/markdown", ".md"),
+    ("text/markdown", ".markdown"),
+    ("text/markdown", ".mdx"),
+    ("text/plain", ".rst"),
+    ("text/plain", ".tex"),
+    ("text/yaml", ".yml"),
+    ("text/yaml", ".yaml"),
+    ("application/json", ".jsonl"),
+    ("application/json", ".ndjson"),
+    ("text/tab-separated-values", ".tsv"),
+    ("text/tab-separated-values", ".tab"),
+    ("audio/mp4", ".m4a"),
+    ("audio/mp4", ".m4b"),
+    ("audio/aac", ".aac"),
+    ("audio/ogg", ".oga"),
+    ("audio/webm", ".weba"),
+    ("audio/flac", ".flac"),
+    ("video/mp4", ".m4v"),
+    ("video/webm", ".webm"),
+    ("video/x-msvideo", ".avi"),
+)
+
+for mime, extension in _CUSTOM_MIME_TYPES:
+    mimetypes.add_type(mime, extension, strict=False)
+
 
 @dataclass(slots=True)
 class PipelineConfig:

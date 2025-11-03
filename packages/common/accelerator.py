@@ -13,6 +13,40 @@ class AcceleratorChoice(str, Enum):
     CUDA = "cuda"
     MPS = "mps"  # Apple Silicon
 
+    @property
+    def using_gpu(self) -> bool:
+        """Check if this accelerator uses GPU."""
+        return self in (AcceleratorChoice.CUDA, AcceleratorChoice.MPS)
+
+    @property
+    def device(self) -> str:
+        """Get device string for this accelerator."""
+        return self.value
+
+    @property
+    def device_index(self) -> int | None:
+        """Get device index for GPU accelerators."""
+        return 0 if self.using_gpu else None
+
+    @property
+    def compute_device(self) -> str:
+        """Get compute device string."""
+        return self.value
+
+    @property
+    def requested(self) -> str:
+        """Get requested accelerator type."""
+        return self.value
+
+    @property
+    def gpu_available(self) -> bool:
+        """Check if GPU is available for this accelerator."""
+        if self == AcceleratorChoice.CUDA:
+            return _is_cuda_available()
+        elif self == AcceleratorChoice.MPS:
+            return _is_mps_available()
+        return False
+
 
 def coerce_preference(
     preference: str | None, fallback: str | None = None
