@@ -2,10 +2,7 @@
 MCP server for semantic/vector search over ingested documents.
 
 Tools:
-- query: Semantic search over documents
-- answer: Compose an answer using RAG with citations
-- similar_to_text: Find similar documents to provided text
-- collections: List available collections
+- vector_search: Compose an answer using RAG with citations
 """
 
 import logging
@@ -73,7 +70,7 @@ async def health_check():
     return {"status": "healthy"}
 
 
-async def semantic_query(
+async def _semantic_query(
     query: str,
     top_k: int = 5,
     tags: list[str] | None = None,
@@ -164,28 +161,7 @@ async def semantic_query(
         return {"error": str(e)}
 
 
-async def list_collections() -> dict[str, Any]:
-    """List all collections."""
-    if not vector_store:
-        return {"error": "Vector store not initialized"}
-
-    try:
-        collections = await vector_store.list_collections()
-        logger.info(
-            "Collections listed",
-            extra={"collection_count": len(collections)}
-        )
-        return {"collections": collections}
-
-    except Exception as e:
-        logger.error(
-            "List collections failed",
-            extra={"error": str(e), "error_type": type(e).__name__}
-        )
-        return {"error": str(e)}
-
-
-async def semantic_answer(
+async def vector_search(
     question: str,
     top_k: int = 5,
     tags: list[str] | None = None,
@@ -196,7 +172,7 @@ async def semantic_answer(
         return {"error": "Services not initialized"}
 
     # Validate using same rules as query
-    base = await semantic_query(question, top_k=min(top_k, 5), tags=tags, collection=collection)
+    base = await _semantic_query(question, top_k=min(top_k, 5), tags=tags, collection=collection)
     if "error" in base:
         return base
 
@@ -250,59 +226,6 @@ async def semantic_answer(
     return {"answer": answer_text.strip(), "citations": citations}
 
 
-async def similar_to_text(
-    text: str,
-    top_k: int = 5,
-    tags: list[str] | None = None,
-    collection: str | None = None,
-) -> dict[str, Any]:
-    """Find docs similar to the provided text (not a short query)."""
-    if not vector_store or not ollama_client:
-        return {"error": "Services not initialized"}
-    if not isinstance(text, str) or not text.strip():
-        return {"error": "text must be a non-empty string"}
-    if not isinstance(top_k, int) or top_k < 1 or top_k > SEMANTIC_MAX_TOP_K:
-        return {"error": f"top_k must be between 1 and {SEMANTIC_MAX_TOP_K}"}
-
-    # Validate tags and collection using same regex/patterns
-    if tags is not None:
-        sanitized_tags: list[str] = []
-        for tag in tags:
-            if not isinstance(tag, str):
-                return {"error": "tags must be strings"}
-            candidate = tag.strip()
-            if not candidate or len(candidate) > 64 or not TAG_PATTERN.fullmatch(candidate):
-                return {"error": "tags must match ^[A-Za-z0-9._-]+$ and be <= 64 chars"}
-            sanitized_tags.append(candidate)
-        tags = sanitized_tags
-    if collection:
-        if not isinstance(collection, str):
-            return {"error": "collection must be a string"}
-        collection = collection.strip()
-        if not collection or len(collection) > 128 or not COLLECTION_PATTERN.fullmatch(collection):
-            return {"error": "collection must match ^[A-Za-z0-9._-]+$ and be <= 128 chars"}
-
-    try:
-        embed_model = os.environ.get("EMBED_MODEL", "embeddinggemma:300m")
-        query_embedding = await ollama_client.embed(text, model=embed_model)
-        results = await vector_store.search(
-            query_embedding=query_embedding,
-            top_k=top_k,
-            collection_name=collection,
-            tags=tags,
-        )
-        formatted = [
-            {"id": r.id, "text": r.text, "score": r.score, "metadata": r.metadata} for r in results
-        ]
-        return {"results": formatted}
-    except Exception as e:
-        logger.error(
-            "similar_to_text failed",
-            extra={"error": str(e), "error_type": type(e).__name__}
-        )
-        return {"error": str(e)}
-
-
 # Initialize MCP protocol handler
 mcp_handler = MCPProtocolHandler(
     server_info=MCPServerInfo(
@@ -313,51 +236,7 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="query",
-    description="Perform semantic search over ingested documents. Returns relevant document chunks with similarity scores.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "query": {
-                "type": "string",
-                "description": "The search query",
-                "minLength": QUERY_MIN_LEN,
-                "maxLength": QUERY_MAX_LEN,
-            },
-            "top_k": {
-                "type": "integer",
-                "description": "Number of results to return",
-                "default": 5,
-                "minimum": 1,
-                "maximum": SEMANTIC_MAX_TOP_K,
-            },
-            "tags": {
-                "type": "array",
-                "items": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": r"^[A-Za-z0-9._-]+$",
-                },
-                "description": "Optional tags to filter by",
-                "maxItems": 10,
-            },
-            "collection": {
-                "type": "string",
-                "description": "Optional collection name (defaults to 'documents')",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": r"^[A-Za-z0-9._-]+$",
-            },
-        },
-        "required": ["query"],
-        "additionalProperties": False,
-    },
-    handler=semantic_query,
-)
-
-mcp_handler.register_tool(
-    name="answer",
+    name="vector_search",
     description="RAG answer composer with citations from the vector store.",
     input_schema={
         "type": "object",
@@ -397,58 +276,7 @@ mcp_handler.register_tool(
         "required": ["question"],
         "additionalProperties": False,
     },
-    handler=semantic_answer,
-)
-
-mcp_handler.register_tool(
-    name="similar_to_text",
-    description="Find similar documents to the provided text (not just a short query).",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "text": {
-                "type": "string",
-                "description": "Text body to find similar content for",
-                "minLength": 1,
-                "maxLength": QUERY_MAX_LEN,
-            },
-            "top_k": {
-                "type": "integer",
-                "description": "Number of results to return",
-                "default": 5,
-                "minimum": 1,
-                "maximum": SEMANTIC_MAX_TOP_K,
-            },
-            "tags": {
-                "type": "array",
-                "items": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 64,
-                    "pattern": r"^[A-Za-z0-9._-]+$",
-                },
-                "description": "Optional tags to filter by",
-                "maxItems": 10,
-            },
-            "collection": {
-                "type": "string",
-                "description": "Optional collection name",
-                "minLength": 1,
-                "maxLength": 128,
-                "pattern": r"^[A-Za-z0-9._-]+$",
-            },
-        },
-        "required": ["text"],
-        "additionalProperties": False,
-    },
-    handler=similar_to_text,
-)
-
-mcp_handler.register_tool(
-    name="collections",
-    description="List all available document collections in the vector store.",
-    input_schema={"type": "object", "properties": {}, "additionalProperties": False},
-    handler=list_collections,
+    handler=vector_search,
 )
 
 

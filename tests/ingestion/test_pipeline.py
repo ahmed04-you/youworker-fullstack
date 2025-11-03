@@ -1,6 +1,3 @@
-import asyncio
-from pathlib import Path
-
 import pytest
 
 from packages.ingestion.pipeline import IngestionPipeline
@@ -50,13 +47,17 @@ async def test_process_item_retains_table_metadata(monkeypatch, pipeline_factory
                 DocChunk(
                     id="table-1",
                     chunk_id=1,
-                    text="| A | B |\n| 1 | 2 |",
+                    text="| A | B |\n| --- | --- |\n| 1 | 2 |",
                     uri=uri,
                     mime=mime,
                     source=source,
                     metadata={
                         "content_type": "table",
                         "table_data": {"rows": [["A", "B"], ["1", "2"]]},
+                        "table_markdown": "| A | B |\n| --- | --- |\n| 1 | 2 |",
+                        "table_csv": "A,B\n1,2",
+                        "rows": 2,
+                        "columns": 2,
                         "page": 1,
                     },
                 )
@@ -84,6 +85,10 @@ async def test_process_item_retains_table_metadata(monkeypatch, pipeline_factory
     assert "table_data" in chunk_metadata
     assert chunk_metadata["artifact_summary"]["tables"] == 1
     assert "finance" in chunk_metadata.get("tags", [])
+    table_samples = stats.artifact_summary["artifacts"]["tables"]
+    assert table_samples and table_samples[0]["preview"].startswith("|")
+    assert table_samples[0]["format"] == "markdown"
+    assert chunk_metadata["artifacts_sample"]["tables"][0]["preview"].startswith("|")
 
 
 @pytest.mark.asyncio
@@ -114,13 +119,17 @@ async def test_process_item_adds_table_fallback(monkeypatch, pipeline_factory, t
                 DocChunk(
                     id="tbl-1",
                     chunk_id=1,
-                    text="Revenue,Amount\nQ1,1000",
+                    text="| Revenue | Amount |\n| --- | --- |\n| Q1 | 1000 |",
                     uri=uri,
                     mime=mime,
                     source=source,
                     metadata={
                         "content_type": "table",
                         "table": {"rows": [["Revenue", "Amount"], ["Q1", "1000"]]},
+                        "table_markdown": "| Revenue | Amount |\n| --- | --- |\n| Q1 | 1000 |",
+                        "table_csv": "Revenue,Amount\nQ1,1000",
+                        "rows": 2,
+                        "columns": 2,
                         "page": 2,
                     },
                 )
@@ -146,6 +155,8 @@ async def test_process_item_adds_table_fallback(monkeypatch, pipeline_factory, t
     table_chunks = [meta for meta in holder["metadata"] if meta.get("content_type") == "table"]
     assert table_chunks, "Expected fallback table chunk to be ingested"
     assert table_chunks[0]["table"]
+    table_samples = stats.artifact_summary["artifacts"]["tables"]
+    assert table_samples and table_samples[0]["format"] in {"markdown", "csv"}
 
 
 @pytest.mark.asyncio

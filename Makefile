@@ -108,9 +108,6 @@ dev-mcp-semantic:
 dev-mcp-datetime:
 	PYTHONPATH=. python apps/mcp_servers/datetime/server.py
 
-dev-mcp-ingest:
-	PYTHONPATH=. python apps/mcp_servers/ingest/server.py
-
 dev-mcp-units:
 	PYTHONPATH=. python apps/mcp_servers/units/server.py
 
@@ -131,7 +128,7 @@ setup-env:
 			echo "ROOT_API_KEY=rotated-dev-root-key" >> .env; \
 			echo "JWT_SECRET=dev-jwt-secret" >> .env; \
 			echo "NEXT_PUBLIC_API_KEY=rotated-dev-root-key" >> .env; \
-			echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_ingest:7004,http://mcp_units:7005" >> .env; \
+			echo "MCP_SERVER_URLS=http://mcp_web:7001,http://mcp_semantic:7002,http://mcp_datetime:7003,http://mcp_units:7005" >> .env; \
 		echo "MCP_REFRESH_INTERVAL=90" >> .env; \
 		echo "LOG_LEVEL=INFO" >> .env; \
 		echo ".env file created"; \
@@ -202,4 +199,3 @@ restore:
 list-backups:
 	@chmod +x ops/scripts/restore-backup.sh
 	@./ops/scripts/restore-backup.sh --list
-

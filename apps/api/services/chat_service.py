@@ -13,7 +13,11 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.api.auth.security import sanitize_input
-from apps.api.audio_pipeline import transcribe_audio_pcm16, synthesize_speech
+from apps.api.audio_pipeline import (
+    sanitize_tts_text,
+    synthesize_speech,
+    transcribe_audio_pcm16,
+)
 from packages.agent import AgentLoop
 from packages.llm import ChatMessage
 from packages.db.models import ChatSession
@@ -343,6 +347,14 @@ class ChatService(BaseService):
             sample_rate=sample_rate,
         )
 
+        transcript_info: dict[str, Any] | None = None
+        if input_result.transcript:
+            transcript_info = {
+                "text": input_result.transcript,
+                "language": input_result.stt_language,
+                "confidence": input_result.stt_confidence,
+            }
+
         # Get user ID
         user_id = get_user_id(user)
 
@@ -419,7 +431,9 @@ class ChatService(BaseService):
         audio_b64 = None
         audio_sample_rate = None
         if expect_audio and final_text:
-            audio_result = await self.synthesize_audio(final_text, fallback=True)
+            tts_text = sanitize_tts_text(final_text)
+            candidate_text = tts_text or final_text
+            audio_result = await self.synthesize_audio(candidate_text, fallback=True)
             if audio_result:
                 audio_b64, audio_sample_rate = audio_result
 
@@ -427,6 +441,9 @@ class ChatService(BaseService):
         metadata.setdefault("session_external_id", chat_session.external_id)
         metadata.setdefault("session_title", chat_session.title)
         metadata.setdefault("enable_tools", chat_session.enable_tools)
+
+        if transcript_info:
+            metadata.setdefault("input_transcript", transcript_info)
 
         return ChatResponse(
             content=final_text,
@@ -492,6 +509,14 @@ class ChatService(BaseService):
             sample_rate=sample_rate,
         )
 
+        transcript_info: dict[str, Any] | None = None
+        if input_result.transcript:
+            transcript_info = {
+                "text": input_result.transcript,
+                "language": input_result.stt_language,
+                "confidence": input_result.stt_confidence,
+            }
+
         # Get user ID
         user_id = get_user_id(user)
 
@@ -523,6 +548,45 @@ class ChatService(BaseService):
 
         # Persist user message
         await self.persist_user_message(chat_session, conversation)
+
+        if input_result.transcript:
+            words = input_result.transcript.split()
+            if words:
+                partial = ""
+                for word in words:
+                    partial = f"{partial} {word}".strip()
+                    yield {
+                        "event": "transcript",
+                        "data": {
+                            "text": partial,
+                            "word": word,
+                            "language": input_result.stt_language,
+                            "confidence": input_result.stt_confidence,
+                            "partial": True,
+                            "is_final": False,
+                        },
+                    }
+                yield {
+                    "event": "transcript",
+                    "data": {
+                        "text": input_result.transcript,
+                        "language": input_result.stt_language,
+                        "confidence": input_result.stt_confidence,
+                        "partial": False,
+                        "is_final": True,
+                    },
+                }
+            else:
+                yield {
+                    "event": "transcript",
+                    "data": {
+                        "text": input_result.transcript,
+                        "language": input_result.stt_language,
+                        "confidence": input_result.stt_confidence,
+                        "partial": False,
+                        "is_final": True,
+                    },
+                }
 
         # Execute agent (streaming)
         collected_chunks: list[str] = []
@@ -572,13 +636,23 @@ class ChatService(BaseService):
         # Synthesize audio if requested
         audio_b64_result = None
         audio_sample_rate_result = None
-        logger.info(f"TTS check: expect_audio={expect_audio}, final_text_length={len(final_text) if final_text else 0}")
+        logger.info(
+            "TTS check: expect_audio=%s, final_text_length=%s",
+            expect_audio,
+            len(final_text) if final_text else 0,
+        )
         if expect_audio and final_text:
-            logger.info(f"Attempting TTS synthesis for text: {final_text[:100]}")
-            audio_result = await self.synthesize_audio(final_text, fallback=True)
+            tts_text = sanitize_tts_text(final_text)
+            candidate_text = tts_text or final_text
+            logger.info("Attempting TTS synthesis for text: %s", candidate_text[:100])
+            audio_result = await self.synthesize_audio(candidate_text, fallback=True)
             if audio_result:
                 audio_b64_result, audio_sample_rate_result = audio_result
-                logger.info(f"TTS successful: audio_b64_length={len(audio_b64_result)}, sample_rate={audio_sample_rate_result}")
+                logger.info(
+                    "TTS successful: audio_b64_length=%s, sample_rate=%s",
+                    len(audio_b64_result),
+                    audio_sample_rate_result,
+                )
             else:
                 logger.warning("TTS synthesis returned None")
 
@@ -588,6 +662,9 @@ class ChatService(BaseService):
         metadata.setdefault("session_external_id", chat_session.external_id)
         metadata.setdefault("session_title", chat_session.title)
         metadata.setdefault("enable_tools", chat_session.enable_tools)
+
+        if transcript_info:
+            metadata.setdefault("input_transcript", transcript_info)
 
         response = ChatResponse(
             content=final_text,

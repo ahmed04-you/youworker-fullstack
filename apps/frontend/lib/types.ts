@@ -32,6 +32,7 @@ export interface Message {
   timestamp?: string;
   tool_call_name?: string | null;
   tool_call_id?: string | null;
+  tempId?: string;
 }
 
 export interface ChatSession {
@@ -239,6 +240,15 @@ export interface SSEDoneEvent {
   stt_language?: string;
   tool_events?: ToolEvent[];
   logs?: LogEvent[];
+}
+
+export interface SSETranscriptEvent {
+  text?: string;
+  language?: string | null;
+  confidence?: number | null;
+  word?: string;
+  partial?: boolean;
+  is_final?: boolean;
 }
 
 // ============================================================================

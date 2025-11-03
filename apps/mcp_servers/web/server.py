@@ -4,7 +4,6 @@ MCP server for web research and fetching capabilities.
 Tools:
 - search: Web search via DuckDuckGo HTML
 - fetch: Fetch and extract basic content from URL
-- head: Fast HTTP HEAD metadata probe
 - extract_readable: Extract main article content with readability
 - crawl: Crawl a page and its outgoing links (depth 1–2)
 """
@@ -208,45 +207,6 @@ async def fetch_url(url: str, max_links: int = 10) -> dict[str, Any]:
         extra={"url": url, "text_length": len(text), "link_count": len(links)}
     )
     return {"title": title, "url": url, "text": text[:5000], "links": links}
-
-
-async def head_url(url: str, follow_redirects: bool = False) -> dict[str, Any]:
-    """Perform a fast HEAD request to probe metadata with strict SSRF guard."""
-    if not http_client:
-        return {"error": "HTTP client not initialized"}
-    try:
-        safe_url = await _ensure_safe_url(url)
-    except ValueError as exc:
-        return {"error": str(exc)}
-
-    try:
-        # Tiny timeouts for snappy probes
-        resp = await http_client.request(
-            "HEAD",
-            safe_url,
-            timeout=httpx.Timeout(3.0, connect=3.0, read=3.0),
-            follow_redirects=follow_redirects,
-        )
-        headers = resp.headers
-        result = {
-            "url": str(resp.request.url),
-            "status": resp.status_code,
-            "content_type": headers.get("content-type"),
-            "content_length": headers.get("content-length"),
-            "last_modified": headers.get("last-modified"),
-            "server": headers.get("server"),
-        }
-        # Include redirect location hint if present
-        loc = headers.get("location")
-        if loc:
-            result["location"] = loc
-        return result
-    except Exception as exc:
-        logger.error(
-            "HEAD request failed",
-            extra={"error": str(exc), "error_type": type(exc).__name__, "url": url}
-        )
-        return {"error": f"HEAD request failed: {exc}", "url": url}
 
 
 async def extract_readable(
@@ -632,31 +592,6 @@ mcp_handler.register_tool(
         "additionalProperties": False,
     },
     handler=fetch_url,
-)
-
-mcp_handler.register_tool(
-    name="head",
-    description="Fast HTTP HEAD probe. Returns status and key headers (content-type, length, last-modified, server).",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "description": "The URL to probe",
-                "minLength": 8,
-                "maxLength": 2048,
-                "pattern": r"^https?://.+$",
-            },
-            "follow_redirects": {
-                "type": "boolean",
-                "description": "Whether to follow redirects",
-                "default": False,
-            },
-        },
-        "required": ["url"],
-        "additionalProperties": False,
-    },
-    handler=head_url,
 )
 
 mcp_handler.register_tool(

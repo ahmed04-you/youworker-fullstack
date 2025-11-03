@@ -681,7 +681,7 @@ class ServiceFactory:
 - **Ollama**: LLM inference
 - **Qdrant**: Vector database
 - **Whisper**: Audio transcription
-- **Tesseract**: OCR processing
+- **PaddleOCR (default) / Tesseract fallback**: OCR processing
 
 ### Security
 - **Cryptography**: Fernet encryption

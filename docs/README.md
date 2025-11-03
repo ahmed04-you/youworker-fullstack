@@ -217,7 +217,7 @@ youworker-fullstack/
 
 ### Document Processing
 - PDF, text, CSV, JSON, images, audio
-- OCR with Tesseract
+- OCR with PaddleOCR by default (automatic Tesseract fallback)
 - Audio transcription with Whisper
 - Vector embeddings with Qdrant
 - Semantic search

@@ -150,6 +150,7 @@ export default function ChatComposer({
   };
 
   const handlePushToTalkEnd = () => {
+    setIsPushToTalkActive(false);
     stopRecording();
   };
 

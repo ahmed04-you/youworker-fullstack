@@ -43,6 +43,8 @@ pandas = "^2.2.3"
 pdfplumber = "^0.11.4"
 Pillow = ">=10.4.0,<12.0.0"
 pytesseract = "^0.3.13"
+paddleocr = "^2.9.1"
+paddlepaddle = {version = "^2.6.0", markers = "platform_machine != 'aarch64'"}
 
 # Utilities
 python-dateutil = "^2.9.0"
@@ -136,6 +138,8 @@ module = [
     "ffmpeg.*",
     "bs4.*",
     "pandas.*",
+    "paddleocr.*",
+    "paddlepaddle.*",
 ]
 ignore_missing_imports = true
 

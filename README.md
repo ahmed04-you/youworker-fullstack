@@ -103,9 +103,9 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
         ┌───────────────────┴─────────────┐
         │                                  │
 ┌───────▼────────┐  ┌──────────────┐  ┌──────────────┐  ┌────────▼─────┐
-│ Server MCP (5) │  │   Ollama     │  │   Qdrant     │  │  PostgreSQL  │
-│  Porte 7001-05 │  │  Porta 11434 │  │  Porta 6333  │  │  Porta 5432  │
-└────────────────┘  └──────────────┘  └──────────────┘  └──────────────┘
+│ Server MCP (4) │  │   Ollama     │  │   Qdrant     │  │  PostgreSQL  │
+│ Porte 7001/02/ │  │  Porta 11434 │  │  Porta 6333  │  │  Porta 5432  │
+│        03/05   │  └──────────────┘  └──────────────┘  └──────────────┘
 ```
 
 ### Server MCP
@@ -113,8 +113,7 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 1. **Web MCP Server** (7001): Ricerca web, fetch pagine, crawling
 2. **Semantic MCP Server** (7002): Ricerca semantica, RAG, similarità
 3. **DateTime MCP Server** (7003): Gestione date, orari, timezone
-4. **Ingest MCP Server** (7004): Ingestion documenti da URL o filesystem
-5. **Units MCP Server** (7005): Conversioni unità di misura
+4. **Units MCP Server** (7005): Conversioni unità di misura
 
 ---
 
@@ -504,6 +503,16 @@ curl http://localhost:8001/health/qdrant
 
 # Stato PostgreSQL
 curl http://localhost:8001/health/postgres
+```
+
+### Restart Contenitori
+
+```bash
+# Riavvia API
+docker compose -f ops/compose/docker-compose.yml restart api
+
+# Riavvia Frontend
+docker compose -f ops/compose/docker-compose.yml restart frontend
 ```
 
 ### Log Analysis

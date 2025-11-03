@@ -131,6 +131,19 @@ async function attemptAutoLogin(apiKey: string, username: string): Promise<Login
 }
 
 /**
+ * Manually authenticate using an explicit Authentik API key.
+ * Unlike autoLogin, this requires the caller to supply credentials.
+ */
+export async function loginWithApiKey(apiKey: string, username?: string): Promise<LoginResponse> {
+  const trimmedKey = apiKey?.trim();
+  if (!trimmedKey) {
+    throw new ApiClientError('API key is required', 400, { message: 'Missing API key' });
+  }
+
+  return attemptAutoLogin(trimmedKey, normalizeUsername(username));
+}
+
+/**
  * Get current authenticated user
  */
 export async function getCurrentUser(): Promise<User> {

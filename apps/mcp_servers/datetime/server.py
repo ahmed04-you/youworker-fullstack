@@ -5,7 +5,6 @@ Tools:
 - now: Get current time in specified timezone
 - format: Format an ISO timestamp with custom format and timezone
 - add: Add/subtract time delta from a timestamp
-- parse_natural: Parse natural language dates (e.g., "next Friday 3pm UTC")
 """
 
 import logging
@@ -16,7 +15,6 @@ from typing import Any
 from fastapi import FastAPI, WebSocket
 import pytz
 from dateutil.parser import parse as parse_date
-import dateparser
 
 from packages.mcp.base_handler import (
     MCPProtocolHandler,
@@ -191,43 +189,6 @@ def add_time(iso: str, delta: dict[str, int], tz: str = "UTC") -> dict[str, Any]
         return {"error": str(e)}
 
 
-def parse_natural(text: str, tz: str | None = None) -> dict[str, Any]:
-    """Parse natural language date/time phrases using dateparser.
-
-    Args:
-        text: Expression to parse (e.g., "in two weeks", "next Friday 3pm UTC")
-        tz: Optional timezone name (default UTC)
-
-    Returns:
-        Parsed timestamp and formatted variants, or error
-    """
-    if not isinstance(text, str) or not text.strip():
-        return {"error": "text must be a non-empty string"}
-    tz = (tz or "UTC").strip()
-    if len(tz) > 64 or not TZ_PATTERN.fullmatch(tz):
-        return {"error": r"tz must match ^[A-Za-z0-9._+\-/]+$ and be <= 64 chars"}
-    try:
-        settings = {
-            "TIMEZONE": tz,
-            "RETURN_AS_TIMEZONE_AWARE": True,
-            "PREFER_DATES_FROM": "future",
-            "RELATIVE_BASE": None,
-        }
-        dt = dateparser.parse(text, settings=settings)
-        if dt is None:
-            return {"error": "Could not parse date expression"}
-        # Normalize to requested timezone
-        target_tz = pytz.timezone(tz)
-        dt = dt.astimezone(target_tz)
-        return {
-            "timestamp": dt.isoformat(),
-            "timezone": tz,
-            "formatted": dt.strftime("%Y-%m-%d %H:%M:%S %Z"),
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-
 if __name__ == "__main__":
     import uvicorn
 
@@ -355,34 +316,6 @@ mcp_handler.register_tool(
     },
     handler=lambda iso, delta, tz="UTC": add_time(iso=iso, delta=delta, tz=tz),
 )
-
-mcp_handler.register_tool(
-    name="parse_natural",
-    description="Parse natural language date/time expressions with optional timezone.",
-    input_schema={
-        "type": "object",
-        "properties": {
-            "text": {
-                "type": "string",
-                "description": "Natural language date expression",
-                "minLength": 1,
-                "maxLength": 256,
-            },
-            "tz": {
-                "type": "string",
-                "description": "Timezone name (default UTC)",
-                "default": "UTC",
-                "minLength": 1,
-                "maxLength": 64,
-                "pattern": r"^[A-Za-z0-9._+\-/]+$",
-            },
-        },
-        "required": ["text"],
-        "additionalProperties": False,
-    },
-    handler=lambda text, tz="UTC": parse_natural(text=text, tz=tz),
-)
-
 
 @app.websocket("/mcp")
 async def mcp_socket(ws: WebSocket):

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
+import AuthPrompt from "../components/AuthPrompt";
 import {
   getOverviewMetrics,
   getToolPerformance,
@@ -92,15 +93,11 @@ export default function Analytics() {
     );
   }
 
-  // Show error if authentication failed
+  // Show login prompt if authentication required
   if (!isAuthenticated && !isLoading) {
     return (
       <main className="dashboard-page">
-        <div className="card">
-          <div className="banner banner-error">
-            Authentication failed. Please check your configuration and try again.
-          </div>
-        </div>
+        <AuthPrompt />
       </main>
     );
   }
@@ -142,12 +139,6 @@ export default function Analytics() {
               primary={formatNumber(overview?.messages.total)}
               secondary={`Avg / session: ${formatNumber(overview?.messages.avg_per_session, 1)}`}
               icon="✉️"
-            />
-            <MetricCard
-              title="Tokens processed"
-              primary={formatNumber(overview?.tokens.total)}
-              secondary={`Avg / message: ${formatNumber(overview?.tokens.avg_per_message)}`}
-              icon="🔢"
             />
             <MetricCard
               title="Tool runs"

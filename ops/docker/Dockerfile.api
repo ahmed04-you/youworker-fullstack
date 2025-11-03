@@ -44,19 +44,22 @@ COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
-# Download Piper TTS model during build
+# Download Piper TTS models during build so runtime doesn't require network access
 RUN set -eux; \
     mkdir -p /opt/youworker/tts /app/models/tts; \
-    curl -L \
-      -o /tmp/it_IT-riccardo-x_low.onnx \
-      https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx; \
-    curl -L \
-      -o /tmp/it_IT-riccardo-x_low.onnx.json \
-      https://huggingface.co/rhasspy/piper-voices/resolve/main/it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json; \
-    mv /tmp/it_IT-riccardo-x_low.onnx /app/models/tts/; \
-    mv /tmp/it_IT-riccardo-x_low.onnx.json /app/models/tts/; \
+    download_voice() { \
+      voice_name="$1"; \
+      model_path="$2"; \
+      config_path="$3"; \
+      curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${model_path}" -o "/tmp/${voice_name}.onnx"; \
+      curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${config_path}" -o "/tmp/${voice_name}.onnx.json"; \
+      mv "/tmp/${voice_name}.onnx" "/app/models/tts/"; \
+      mv "/tmp/${voice_name}.onnx.json" "/app/models/tts/"; \
+    }; \
+    download_voice "it_IT-paola-medium" "it/it_IT/paola/medium/it_IT-paola-medium.onnx" "it/it_IT/paola/medium/it_IT-paola-medium.onnx.json"; \
+    download_voice "it_IT-riccardo-x_low" "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx" "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json"; \
     mkdir -p /data/uploads /app/models && \
-    chown -R appuser:appuser /app /data/uploads /app/models
+    chown -R appuser:appuser /app /data/uploads /app/models /app/models/tts
 
 EXPOSE 8001
 

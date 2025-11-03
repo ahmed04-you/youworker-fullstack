@@ -1,29 +1,36 @@
-# Frontend Dockerfile for Next.js development mode
-FROM node:20-alpine
+# Frontend Dockerfile for building and running the Next.js application
+FROM node:20-alpine AS base
 
 WORKDIR /app
 
-# Install dependencies
 RUN apk add --no-cache libc6-compat
 
-# Copy package files
+# Install dependencies (cached when package files unchanged)
 COPY apps/frontend/package.json apps/frontend/package-lock.json* ./
 RUN npm install
 
-# Set environment variables
-ARG NEXT_PUBLIC_API_URL
-ARG NEXT_PUBLIC_WS_URL
-ARG NEXT_PUBLIC_API_KEY
-ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
-ENV NEXT_PUBLIC_API_KEY=$NEXT_PUBLIC_API_KEY
-ENV NEXT_TELEMETRY_DISABLED=1
+# Copy application source
+COPY apps/frontend /app
 
-# Expose dev server port
+# Build-time environment (exposed in browser)
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8001
+ARG NEXT_PUBLIC_WS_URL=ws://localhost:8001
+ARG NEXT_PUBLIC_API_KEY
+
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
+    NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL \
+    NEXT_PUBLIC_API_KEY=$NEXT_PUBLIC_API_KEY \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_ENV=production \
+    PORT=3000 \
+    HOSTNAME="0.0.0.0"
+
+# Build the production bundle
+RUN npm run build
+
+# Remove development dependencies to keep image light
+RUN npm prune --omit=dev
+
 EXPOSE 3000
 
-ENV PORT=3000
-ENV HOSTNAME="0.0.0.0"
-
-# Run in development mode
-CMD ["npm", "run", "dev"]
+CMD ["npm", "run", "start"]

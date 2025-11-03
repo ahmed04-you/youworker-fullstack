@@ -4,8 +4,27 @@ import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import ChatComposer from "../components/ChatComposer";
 import MessageContent from "../components/MessageContent";
-import { getSessions, getSession, deleteSession, sendChatStreaming, sendUnifiedChatStreaming, updateSession, createSession } from "../../lib/api/chat";
-import type { ChatSession, Message, SSELogEvent, SSEDoneEvent, SSETokenEvent, SSEToolEvent, ToolEvent } from "../../lib/types";
+import AuthPrompt from "../components/AuthPrompt";
+import {
+  getSessions,
+  getSession,
+  deleteSession,
+  sendChatStreaming,
+  sendUnifiedChatStreaming,
+  updateSession,
+  createSession,
+} from "../../lib/api/chat";
+import type {
+  ChatSession,
+  Message,
+  SSELogEvent,
+  SSEDoneEvent,
+  SSETokenEvent,
+  SSEToolEvent,
+  SSETranscriptEvent,
+  ToolEvent,
+} from "../../lib/types";
+import { ACTIVE_SESSION_STORAGE_KEY } from "../../lib/constants";
 
 type ToolRunStatus = "running" | "success" | "error";
 
@@ -98,6 +117,55 @@ function integrateToolEvent(
   return updated;
 }
 
+type StoredActiveSession = {
+  id: number | null;
+  externalId: string | null;
+};
+
+const AUTH_REQUIRED_ERROR = "AUTHENTICATION_REQUIRED";
+
+const readStoredActiveSession = (): StoredActiveSession => {
+  if (typeof window === "undefined") {
+    return { id: null, externalId: null };
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(ACTIVE_SESSION_STORAGE_KEY);
+    if (!raw) {
+      return { id: null, externalId: null };
+    }
+
+    const parsed = JSON.parse(raw);
+    return {
+      id: typeof parsed?.id === "number" ? parsed.id : null,
+      externalId: typeof parsed?.externalId === "string" ? parsed.externalId : null,
+    };
+  } catch (error) {
+    console.warn("Failed to parse stored active session", error);
+    return { id: null, externalId: null };
+  }
+};
+
+const persistActiveSession = (id: number | null, externalId: string | null) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (id === null && !externalId) {
+    window.sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      ACTIVE_SESSION_STORAGE_KEY,
+      JSON.stringify({ id, externalId })
+    );
+  } catch (error) {
+    console.warn("Failed to persist active session", error);
+  }
+};
+
 interface SessionItemProps {
   session: ChatSession;
   isActive: boolean;
@@ -177,12 +245,20 @@ const SessionItem = memo(function SessionItem({
 
 export default function Chats() {
   const { isAuthenticated, isLoading: authLoading, csrfToken, reauthenticate } = useAuth();
+  const storedSessionRef = useRef<StoredActiveSession | null>(null);
+  if (storedSessionRef.current === null) {
+    storedSessionRef.current = readStoredActiveSession();
+  }
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState<number | null>(null);
   const [editingSessionId, setEditingSessionId] = useState<number | null>(null);
   const [editingTitle, setEditingTitle] = useState<string>("");
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
-  const [activeSessionExternalId, setActiveSessionExternalId] = useState<string | null>(null);
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(
+    storedSessionRef.current?.id ?? null
+  );
+  const [activeSessionExternalId, setActiveSessionExternalId] = useState<string | null>(
+    storedSessionRef.current?.externalId ?? null
+  );
   const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0 });
   const [showChatDetail, setShowChatDetail] = useState(true);
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -197,12 +273,23 @@ export default function Chats() {
   const [hasToolEvents, setHasToolEvents] = useState(false);
   const [expectAudio, setExpectAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionState, setTranscriptionState] = useState<{
+    tempId: string;
+    text: string;
+    partial: boolean;
+    confidence?: number | null;
+    language?: string | null;
+  } | null>(null);
   const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const streamingContentRef = useRef<string>("");
   const sessionInitializedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    persistActiveSession(activeSessionId, activeSessionExternalId);
+  }, [activeSessionId, activeSessionExternalId]);
 
   const updateStreamingContent = (updater: string | ((prev: string) => string)) => {
     setStreamingContent((prev) => {
@@ -314,18 +401,41 @@ export default function Chats() {
       setSessions(sessionList);
 
       if (sessionList.length === 0) {
-        setActiveSessionExternalId(null);
+        if (activeSessionId !== null) {
+          setActiveSessionId(null);
+          setActiveSessionExternalId(null);
+        }
+        return;
       }
 
-      // Auto-select first session if none selected
-      if (sessionList.length > 0 && activeSessionId === null && activeSessionExternalId === null) {
+      // Auto-select first session if none selected or stored
+      if (activeSessionId === null && activeSessionExternalId === null) {
         const firstSession = sessionList[0];
         setActiveSessionId(firstSession.id);
         setActiveSessionExternalId(firstSession.external_id ?? null);
-      } else if (activeSessionId !== null) {
+        return;
+      }
+
+      // Promote a stored external-id-only session to a full session when it appears
+      if (activeSessionId === null && activeSessionExternalId) {
+        const matchedByExternal = sessionList.find(
+          (session) => session.external_id === activeSessionExternalId
+        );
+        if (matchedByExternal) {
+          setActiveSessionId(matchedByExternal.id);
+          setActiveSessionExternalId(matchedByExternal.external_id ?? activeSessionExternalId);
+        }
+        return;
+      }
+
+      if (activeSessionId !== null) {
         const matchedSession = sessionList.find((session) => session.id === activeSessionId);
         if (matchedSession) {
           setActiveSessionExternalId(matchedSession.external_id ?? activeSessionExternalId);
+        } else {
+          const fallback = sessionList[0];
+          setActiveSessionId(fallback.id);
+          setActiveSessionExternalId(fallback.external_id ?? null);
         }
       }
     } catch (err) {
@@ -343,7 +453,11 @@ export default function Chats() {
           return loadSessions(retryCount + 1);
         } catch (reauthErr) {
           console.error("Re-authentication failed during session load:", reauthErr);
-          setError("Failed to load sessions. Please refresh the page.");
+          if (reauthErr instanceof Error && reauthErr.message === AUTH_REQUIRED_ERROR) {
+            setError("Authentication required. Please sign in again.");
+          } else {
+            setError("Failed to load sessions. Please refresh the page.");
+          }
         }
       } else {
         setError(err instanceof Error ? err.message : "Failed to load sessions");
@@ -387,7 +501,11 @@ export default function Chats() {
           return loadMessages(sessionId, retryCount + 1);
         } catch (reauthErr) {
           console.error("Re-authentication failed during message load:", reauthErr);
-          setError("Failed to load messages. Please refresh the page.");
+          if (reauthErr instanceof Error && reauthErr.message === AUTH_REQUIRED_ERROR) {
+            setError("Authentication required. Please sign in again.");
+          } else {
+            setError("Failed to load messages. Please refresh the page.");
+          }
         }
       } else {
         setError(err instanceof Error ? err.message : "Failed to load messages");
@@ -599,7 +717,11 @@ export default function Chats() {
           return handleSendMessage(content, retryCount + 1);
         } catch (reauthErr) {
           console.error("Re-authentication failed:", reauthErr);
-          setError("Session expired and re-authentication failed. Please refresh the page.");
+          if (reauthErr instanceof Error && reauthErr.message === AUTH_REQUIRED_ERROR) {
+            setError("Authentication required. Please sign in again.");
+          } else {
+            setError("Session expired and re-authentication failed. Please refresh the page.");
+          }
           setIsSending(false);
           updateStreamingContent("");
           setStreamingStatus("");
@@ -626,25 +748,77 @@ export default function Chats() {
   };
 
   const handleAudioSend = async (audioBlob: Blob, shouldExpectAudio: boolean) => {
-    // Show transcribing state
     setIsTranscribing(true);
     setIsSending(true);
     setError(null);
+    updateStreamingContent("");
+    setStreamingStatus("Listening...");
 
-    // Add a placeholder message for transcribing
+    const placeholderId = `transcribing-${Date.now()}`;
+    let liveTranscript = "";
+    let assistantBuffer = "";
+
     const transcribingMessage: Message = {
       role: "user",
       content: "Transcribing...",
+      tempId: placeholderId,
     };
     setMessages((prev) => [...prev, transcribingMessage]);
+    setTranscriptionState({
+      tempId: placeholderId,
+      text: "",
+      partial: true,
+      confidence: null,
+      language: null,
+    });
+
+    const handleTranscriptUpdate = (event?: SSETranscriptEvent) => {
+      if (!event) {
+        return;
+      }
+
+      const incomingText = (event.text ?? "").trim();
+      if (incomingText) {
+        liveTranscript = incomingText;
+      }
+      const isFinal = event.is_final === true || event.partial === false;
+
+      setTranscriptionState((prev) => {
+        if (prev && prev.tempId !== placeholderId) {
+          return prev;
+        }
+
+        const previousText = prev?.text?.trim() ?? "";
+        const nextText = incomingText || liveTranscript || previousText;
+
+        return {
+          tempId: placeholderId,
+          text: nextText,
+          partial: !isFinal,
+          confidence: event.confidence ?? prev?.confidence ?? null,
+          language: event.language ?? prev?.language ?? null,
+        };
+      });
+
+      const updatedText = incomingText || liveTranscript || "";
+      if (updatedText) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.tempId === placeholderId ? { ...msg, content: updatedText } : msg
+          )
+        );
+      }
+
+      if (incomingText || isFinal) {
+        setIsTranscribing(false);
+      }
+    };
 
     try {
-      // Convert Blob to base64
       const reader = new FileReader();
       const audioB64 = await new Promise<string>((resolve, reject) => {
         reader.onloadend = () => {
           const base64 = reader.result as string;
-          // Remove data URL prefix
           const base64Data = base64.split(',')[1];
           resolve(base64Data);
         };
@@ -652,116 +826,87 @@ export default function Chats() {
         reader.readAsDataURL(audioBlob);
       });
 
-      // Capture session context
       const requestSessionId = activeSessionId;
       const requestSessionExternalId = activeSessionExternalId;
 
-      let transcriptedText = "";
-
-      // Send to backend via unified chat endpoint
-      const conversation: Message[] = [...messages];
       await sendUnifiedChatStreaming(
         {
           audio_b64: audioB64,
-          sample_rate: 48000, // WebM audio is usually 48kHz
-          messages: conversation.map(m => ({ role: m.role, content: m.content })),
+          sample_rate: 48000,
+          messages: messages.map((m) => ({ role: m.role, content: m.content })),
           session_id: requestSessionExternalId || undefined,
           enable_tools: true,
           expect_audio: shouldExpectAudio,
           stream: true,
         },
         {
-          onLog: (log: SSELogEvent) => {
-            console.log(`[${log.level}]`, log.msg);
+          onLog: (log) => {
             if (log.level === 'info' && log.msg) {
               setStreamingStatus(log.msg);
             }
           },
-          onToken: (token: SSETokenEvent) => {
-            // First token means transcription has started
-            if (isTranscribing) {
-              setIsTranscribing(false);
-            }
+          onTranscript: (event) => {
+            handleTranscriptUpdate(event);
+          },
+          onToken: (token) => {
+            setIsTranscribing(false);
             if (token?.text) {
-              transcriptedText += token.text;
+              assistantBuffer += token.text;
               updateStreamingContent((prev) => prev + token.text);
             }
           },
-          onTool: (event: SSEToolEvent) => {
+          onTool: (event) => {
             addToolEvent(event);
           },
-          onDone: (response: SSEDoneEvent) => {
+          onDone: (response) => {
             const sessionStillActive =
               (requestSessionId === null && activeSessionId === null) ||
               (requestSessionId !== null && requestSessionId === activeSessionId);
-
             if (!sessionStillActive) {
-              console.log("Session context changed during streaming, ignoring response");
               return;
             }
 
-            // Replace transcribing message with actual transcription
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIndex = updated.length - 1;
-              if (updated[lastIndex]?.content === "Transcribing...") {
-                updated[lastIndex] = {
-                  role: "user",
-                  content: response.transcript || transcriptedText || "...",
-                };
-              }
-              return updated;
-            });
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.tempId === placeholderId
+                  ? {
+                      ...msg,
+                      content: response.transcript || liveTranscript || msg.content || "...",
+                      tempId: undefined,
+                    }
+                  : msg
+              )
+            );
+            setTranscriptionState(null);
 
-            const finalText = streamingContentRef.current || response.content || "";
-
-            if (finalText.trim()) {
-              const assistantMessage: Message = {
-                role: "assistant",
-                content: finalText,
-              };
-              setMessages((prev) => [...prev, assistantMessage]);
+            const finalText = (response.content || assistantBuffer || "").trim();
+            if (finalText) {
+              setMessages((prev) => [...prev, { role: "assistant", content: finalText }]);
             }
 
-            // Handle audio response if present
             if (response.audio_b64 && response.audio_sample_rate) {
               try {
-                // Decode base64 to binary
                 const binaryString = atob(response.audio_b64);
                 const bytes = new Uint8Array(binaryString.length);
                 for (let i = 0; i < binaryString.length; i++) {
                   bytes[i] = binaryString.charCodeAt(i);
                 }
-
-                // Create audio blob and play
                 const blob = new Blob([bytes], { type: "audio/wav" });
                 const audioUrl = URL.createObjectURL(blob);
                 const audio = new Audio(audioUrl);
-
-                audio.onended = () => {
-                  URL.revokeObjectURL(audioUrl);
-                };
-
+                audio.onended = () => URL.revokeObjectURL(audioUrl);
                 audio.onerror = (error) => {
                   console.error("Audio playback error:", error);
                   URL.revokeObjectURL(audioUrl);
                 };
-
                 audio.play().catch((error) => {
                   console.error("Failed to play TTS audio:", error);
                   URL.revokeObjectURL(audioUrl);
                 });
-              } catch (error) {
-                console.error("Failed to decode TTS audio:", error);
+              } catch (err) {
+                console.error("Failed to decode TTS audio:", err);
               }
             }
-
-            updateStreamingContent("");
-            setStreamingStatus("");
-            setIsSending(false);
-            setIsTranscribing(false);
-
-            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
             if (response.metadata) {
               const newSessionId = response.metadata.session_id as number | undefined;
@@ -775,32 +920,40 @@ export default function Chats() {
                 setActiveSessionExternalId(newSessionExternalId);
               }
             }
+
+            setStreamingContent("");
+            setStreamingStatus("");
+            setIsSending(false);
+            messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
           },
-          onError: (err: Error) => {
-            console.error("Error during audio transcription:", err);
-            setError(err.message);
+          onError: (err) => {
+            console.error("Streaming error:", err);
+            setError(err instanceof Error ? err.message : "Streaming failed");
             setIsSending(false);
             setIsTranscribing(false);
-            updateStreamingContent("");
+            setStreamingContent("");
             setStreamingStatus("");
-
-            // Remove transcribing message on error
-            setMessages((prev) => prev.filter((m) => m.content !== "Transcribing..."));
+            setTranscriptionState(null);
+            setMessages((prev) => prev.filter((msg) => msg.tempId !== placeholderId));
           },
           onComplete: () => {
-            // Audio transcription streaming complete
+            setIsSending(false);
+            setIsTranscribing(false);
+            setTranscriptionState(null);
+            setStreamingStatus("");
           },
         },
         csrfToken || undefined
       );
-    } catch (err) {
-      console.error("Failed to process audio:", err);
-      setError(err instanceof Error ? err.message : "Failed to process audio");
+    } catch (error) {
+      console.error("Audio send failed:", error);
+      setError(error instanceof Error ? error.message : "Audio send failed");
       setIsSending(false);
       setIsTranscribing(false);
-
-      // Remove transcribing message on error
-      setMessages((prev) => prev.filter((m) => m.content !== "Transcribing..."));
+      setStreamingContent("");
+      setStreamingStatus("");
+      setTranscriptionState(null);
+      setMessages((prev) => prev.filter((msg) => msg.tempId !== placeholderId));
     }
   };
 
@@ -922,14 +1075,15 @@ export default function Chats() {
     );
   }
 
-  // Show error if authentication failed
+  // Show login prompt if authentication required
   if (!isAuthenticated && !authLoading) {
     return (
       <div className="chats-page">
         <div className="chat-list-card">
-          <div className="banner banner-error">
-            Authentication failed. Please check your configuration and try again.
-          </div>
+          <AuthPrompt
+            title="Authenticate to access chats"
+            description="Enter the simulated Authentik API key to manage your sessions."
+          />
         </div>
       </div>
     );
@@ -1067,33 +1221,44 @@ export default function Chats() {
                   <div className="loading-state">Loading messages...</div>
                 ) : (
                   <>
-                    {messages.map((message, index) => (
-                      <div key={index} className={`message-wrapper ${message.role}`}>
-                        <div className="message-avatar">
-                          {message.role === "user" ? (
-                            <svg className="avatar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                            </svg>
-                          ) : (
-                            <svg className="avatar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="message-content">
-                          {message.content === "Transcribing..." ? (
-                            <div className="transcribing-indicator">
-                              <svg className="transcribing-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                    {messages.map((message, index) => {
+                      const isActiveTranscript = transcriptionState?.tempId === message.tempId;
+                      const activeTranscriptText = isActiveTranscript ? transcriptionState?.text ?? "" : "";
+                      const hasTranscriptText = activeTranscriptText.trim().length > 0;
+                      const displayContent =
+                        isActiveTranscript && hasTranscriptText ? activeTranscriptText : message.content;
+                      const showTranscribingIndicator = isActiveTranscript
+                        ? !hasTranscriptText
+                        : displayContent === "Transcribing...";
+
+                      return (
+                        <div key={index} className={`message-wrapper ${message.role}`}>
+                          <div className="message-avatar">
+                            {message.role === "user" ? (
+                              <svg className="avatar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
-                              <span>Transcribing...</span>
-                            </div>
-                          ) : (
-                            <MessageContent content={message.content} isStreaming={false} />
-                          )}
+                            ) : (
+                              <svg className="avatar-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+                              </svg>
+                            )}
+                          </div>
+                          <div className="message-content">
+                            {showTranscribingIndicator ? (
+                              <div className="transcribing-indicator">
+                                <svg className="transcribing-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                                </svg>
+                                <span>Transcribing...</span>
+                              </div>
+                            ) : (
+                              <MessageContent content={displayContent} isStreaming={false} />
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Show streaming content while assistant is responding */}
                     {streamingContent && (

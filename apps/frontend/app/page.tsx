@@ -1,6 +1,7 @@
 "use client";
 
 import { useAuth } from "../contexts/AuthContext";
+import AuthPrompt from "./components/AuthPrompt";
 
 export default function Home() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -16,15 +17,11 @@ export default function Home() {
     );
   }
 
-  // Show error if authentication failed
+  // Show login form if authentication required
   if (!isAuthenticated) {
     return (
       <main className="dashboard-page">
-        <div className="card">
-          <div className="banner banner-error">
-            Authentication failed. Please check your configuration and try again.
-          </div>
-        </div>
+        <AuthPrompt />
       </main>
     );
   }

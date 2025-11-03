@@ -9,8 +9,14 @@
  */
 
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { autoLogin, getCurrentUser, logout as apiLogout, getCsrfToken } from '../lib/api/auth';
+import {
+  getCurrentUser,
+  logout as apiLogout,
+  getCsrfToken,
+  loginWithApiKey,
+} from '../lib/api/auth';
 import type { User } from '../lib/types';
+import { ACTIVE_SESSION_STORAGE_KEY } from '../lib/constants';
 
 interface AuthContextType {
   user: User | null;
@@ -19,6 +25,7 @@ interface AuthContextType {
   error: string | null;
   csrfToken: string | null;
   logout: () => Promise<void>;
+  login: (apiKey: string, username?: string) => Promise<void>;
   refreshUser: () => Promise<void>;
   refreshCsrfToken: () => Promise<string>;
   reauthenticate: () => Promise<void>;
@@ -46,27 +53,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   /**
-   * Perform automatic login using the API key from Authentik (or environment in dev)
+   * Explicit login flow requiring a manually provided API key.
    */
-  const performLogin = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
+  const login = useCallback(
+    async (apiKey: string, username?: string) => {
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      await autoLogin();
-      const userData = await getCurrentUser();
-      setUser(userData);
-      await refreshCsrfToken();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Authentication failed';
-      setError(message);
-      setUser(null);
-      console.error('Auto-login failed:', err);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [refreshCsrfToken]);
+        await loginWithApiKey(apiKey, username);
+        const userData = await getCurrentUser();
+        setUser(userData);
+        await refreshCsrfToken();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Authentication failed';
+        setError(message);
+        setUser(null);
+        setCsrfToken(null);
+        console.error('Authentication error:', err);
+        throw err;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [refreshCsrfToken]
+  );
 
   /**
    * Logout and clear authentication
@@ -78,6 +89,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setError(null);
       setCsrfToken(null);
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Logout failed';
       setError(message);
@@ -108,19 +122,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
    */
   const reauthenticate = useCallback(async () => {
     try {
-      console.log('Re-authenticating due to expired session...');
-
       setUser(null);
       setCsrfToken(null);
-
-      await performLogin();
-
-      console.log('Re-authentication successful');
+      setIsLoading(false);
+      setError('Session expired. Please sign in again.');
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(ACTIVE_SESSION_STORAGE_KEY);
+      }
+      throw new Error('AUTHENTICATION_REQUIRED');
     } catch (err) {
       console.error('Re-authentication failed:', err);
       throw err;
     }
-  }, [performLogin]);
+  }, []);
 
   /**
    * Auto-login on mount - always attempt authentication using Authentik API key
@@ -146,14 +160,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // No valid session, continue with authentication flow
         }
 
-        // Attempt auto-login with API key from Authentik (or environment in dev)
-        if (!cancelled) {
-          await performLogin();
-        }
       } catch (err) {
         if (!cancelled) {
           console.error('Initial authentication failed:', err);
           setUser(null);
+          setCsrfToken(null);
+          setError(null);
         }
       } finally {
         if (!cancelled) {
@@ -167,7 +179,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [performLogin, refreshCsrfToken]);
+  }, [refreshCsrfToken]);
 
   return (
     <AuthContext.Provider
@@ -178,6 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         error,
         csrfToken,
         logout,
+        login,
         refreshUser,
         refreshCsrfToken,
         reauthenticate,

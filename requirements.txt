@@ -31,6 +31,8 @@ pandas
 pdfplumber
 Pillow
 pytesseract
+paddleocr
+paddlepaddle
 
 # Media processing
 ffmpeg-python

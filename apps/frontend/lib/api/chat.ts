@@ -16,6 +16,7 @@ import type {
   SSEDoneEvent,
   SSETokenEvent,
   SSEToolEvent,
+  SSETranscriptEvent,
 } from '../types';
 
 // ============================================================================
@@ -108,6 +109,7 @@ export interface StreamCallbacks {
   onLog?: (log: SSELogEvent) => void;
   onToken?: (token: SSETokenEvent) => void;
   onTool?: (event: SSEToolEvent) => void;
+  onTranscript?: (event: SSETranscriptEvent) => void;
   onDone?: (response: SSEDoneEvent) => void;
   onError?: (error: Error) => void;
   onComplete?: () => void;
@@ -262,22 +264,19 @@ async function processSSEStream(
 function handleSSEEvent(event: string, data: string, callbacks: StreamCallbacks): void {
   try {
     const parsed = data ? JSON.parse(data) : {};
-
-    switch (event) {
-      case 'log':
-        callbacks.onLog?.(parsed as SSELogEvent);
-        break;
-      case 'token':
-        callbacks.onToken?.(parsed as SSETokenEvent);
-        break;
-      case 'tool':
-        callbacks.onTool?.(parsed as SSEToolEvent);
-        break;
-      case 'done':
-        callbacks.onDone?.(parsed as SSEDoneEvent);
-        break;
-      default:
-        console.warn('Unknown SSE event type:', event);
+    const normalizedEvent = event.replace(/:\s*\d+.*/, '').trim().toLowerCase();
+    if (normalizedEvent.startsWith('transcript')) {
+      callbacks.onTranscript?.(parsed as SSETranscriptEvent);
+    } else if (normalizedEvent.startsWith('token')) {
+      callbacks.onToken?.(parsed as SSETokenEvent);
+    } else if (normalizedEvent.startsWith('tool')) {
+      callbacks.onTool?.(parsed as SSEToolEvent);
+    } else if (normalizedEvent.startsWith('log')) {
+      callbacks.onLog?.(parsed as SSELogEvent);
+    } else if (normalizedEvent.startsWith('done')) {
+      callbacks.onDone?.(parsed as SSEDoneEvent);
+    } else {
+      console.warn('Unknown SSE event type:', event);
     }
   } catch (error) {
     console.error('Failed to parse SSE event:', error);

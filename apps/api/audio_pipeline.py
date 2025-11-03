@@ -2,17 +2,20 @@
 Enhanced audio pipeline with streaming capabilities for real-time STT and TTS.
 """
 
-from __future__ import annotations
-
-import subprocess
-
 import asyncio
+import contextlib
+import html
 import io
 import logging
 import math
 import os
+import re
+import subprocess
+import tempfile
 import wave
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, AsyncGenerator
+from urllib.request import urlretrieve
 
 import numpy as np
 
@@ -46,9 +49,186 @@ except Exception:  # pragma: no cover
 WHISPER_MODEL: WhisperModel | None = None
 WHISPER_LOCK = asyncio.Lock()
 PIPER_VOICE: PiperVoice | None = None
+PIPER_VOICE_NAME: str | None = None
 PIPER_LOCK = asyncio.Lock()
 
 WHISPER_TARGET_SR = 16000
+
+PIPER_BASE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
+PIPER_VOICE_REGISTRY: dict[str, tuple[str, str]] = {
+    "it_IT-riccardo-x_low": (
+        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx",
+        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json",
+    ),
+    "it_IT-paola-medium": (
+        "it/it_IT/paola/medium/it_IT-paola-medium.onnx",
+        "it/it_IT/paola/medium/it_IT-paola-medium.onnx.json",
+    ),
+}
+
+
+MARKDOWN_CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
+MARKDOWN_INLINE_CODE_RE = re.compile(r"`(?P<code>[^`]*)`")
+MARKDOWN_LINK_RE = re.compile(
+    r"!\[(?P<alt>[^\]]*)\]\((?P<image_target>[^)]+)\)|\[(?P<label>[^\]]*)\]\((?P<link_target>[^)]+)\)"
+)
+MARKDOWN_BULLET_RE = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
+MARKDOWN_ORDERED_LIST_RE = re.compile(r"^\s*\d+[\.)]\s+", re.MULTILINE)
+MARKDOWN_HEADING_RE = re.compile(r"^\s*#{1,6}\s*", re.MULTILINE)
+MARKDOWN_BLOCKQUOTE_RE = re.compile(r"^\s*>\s?", re.MULTILINE)
+MARKDOWN_CHECKBOX_RE = re.compile(r"\[(?:x|X| )\]\s*")
+MARKDOWN_TABLE_BORDER_RE = re.compile(r"[|]")
+MARKDOWN_RULE_RE = re.compile(r"^\s*([-_*]\s*){3,}$", re.MULTILINE)
+
+
+def sanitize_tts_text(text: str, *, collapse_whitespace: bool = True) -> str:
+    """
+    Convert markdown-rich text into a friendlier plain string for TTS engines.
+
+    We avoid heavy dependencies by applying fast regex-based transformations and
+    falling back to the original input when cleaning would otherwise result in an
+    empty string (e.g., messages containing only code).
+    """
+
+    if not text:
+        return ""
+
+    cleaned = html.unescape(text)
+    cleaned = MARKDOWN_CODE_BLOCK_RE.sub(" ", cleaned)
+    cleaned = MARKDOWN_INLINE_CODE_RE.sub(lambda m: m.group("code") or "", cleaned)
+
+    def _replace_link(match: re.Match) -> str:
+        label = match.group("label")
+        alt = match.group("alt")
+        link_target = match.group("link_target")
+        image_target = match.group("image_target")
+        # Prefer human-friendly labels/alt text; fall back to URL if needed.
+        return (label or alt or link_target or image_target or "").strip()
+
+    cleaned = MARKDOWN_LINK_RE.sub(_replace_link, cleaned)
+    cleaned = MARKDOWN_BULLET_RE.sub("", cleaned)
+    cleaned = MARKDOWN_ORDERED_LIST_RE.sub("", cleaned)
+    cleaned = MARKDOWN_HEADING_RE.sub("", cleaned)
+    cleaned = MARKDOWN_BLOCKQUOTE_RE.sub("", cleaned)
+    cleaned = MARKDOWN_CHECKBOX_RE.sub("", cleaned)
+    cleaned = MARKDOWN_RULE_RE.sub(" ", cleaned)
+    # Replace table borders with pauses so content is still speakable
+    cleaned = MARKDOWN_TABLE_BORDER_RE.sub(" ", cleaned)
+    # Strip emphasis markers
+    cleaned = re.sub(r"[*_~`]", " ", cleaned)
+    if collapse_whitespace:
+        cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = cleaned.strip()
+
+    if cleaned:
+        return cleaned
+
+    # Fallback: collapse whitespace only, keeping original characters so that
+    # code-heavy answers are still audible rather than silence.
+    fallback = re.sub(r"\s+", " ", text.strip())
+    return fallback
+
+
+def _ensure_pcm16(audio_bytes: bytes, sample_rate: int) -> tuple[bytes, int]:
+    """Decode containerized audio to raw PCM16 using ffmpeg when needed."""
+
+    if not audio_bytes:
+        return audio_bytes, sample_rate
+
+    header = audio_bytes[:4]
+    needs_decode = len(audio_bytes) % 2 == 1
+
+    container_prefixes = (b"OggS", b"\x1aE\xdf\xa3", b"RIFF", b"fLaC")
+    if header in container_prefixes or audio_bytes[:3] == b"ID3":
+        needs_decode = True
+
+    if not needs_decode:
+        return audio_bytes, sample_rate
+
+    cmd = [
+        "ffmpeg",
+        "-loglevel",
+        "error",
+        "-i",
+        "pipe:0",
+        "-f",
+        "s16le",
+        "-ac",
+        "1",
+        "-ar",
+        str(sample_rate),
+        "pipe:1",
+    ]
+
+    try:
+        result = subprocess.run(
+            cmd,
+            input=audio_bytes,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+        return result.stdout, sample_rate
+    except FileNotFoundError:  # pragma: no cover - ffmpeg missing in env
+        logger.warning("ffmpeg not available; assuming raw PCM input")
+    except subprocess.CalledProcessError as exc:  # pragma: no cover
+        logger.warning(
+            "ffmpeg failed to decode audio (%s); falling back to raw PCM", exc
+        )
+
+    return audio_bytes, sample_rate
+
+
+def _ensure_piper_voice_files(voice_name: str, model_dir: str) -> bool:
+    """Ensure Piper voice files are present locally."""
+
+    info = PIPER_VOICE_REGISTRY.get(voice_name)
+    if info is None:
+        logger.warning("Unknown Piper voice '%s'", voice_name)
+        return False
+
+    onnx_rel, json_rel = info
+    target_dir = Path(model_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    onnx_path = target_dir / f"{voice_name}.onnx"
+    json_path = target_dir / f"{voice_name}.onnx.json"
+
+    if onnx_path.exists() and json_path.exists():
+        return True
+
+    onnx_url = f"{PIPER_BASE_URL}/{onnx_rel}"
+    json_url = f"{PIPER_BASE_URL}/{json_rel}"
+    downloads: list[tuple[str, Path]] = [
+        (onnx_url, onnx_path),
+        (json_url, json_path),
+    ]
+
+    def _download(url: str, dest: Path) -> None:
+        temp_file: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, dir=str(dest.parent)) as tmp:
+                temp_file = Path(tmp.name)
+            logger.info("Downloading Piper voice asset '%s' -> %s", url, dest)
+            urlretrieve(url, temp_file)
+            if not temp_file.exists() or temp_file.stat().st_size == 0:
+                raise RuntimeError(f"Empty download from {url}")
+            temp_file.replace(dest)
+        except Exception:
+            if temp_file is not None:
+                with contextlib.suppress(Exception):
+                    temp_file.unlink(missing_ok=True)
+            raise
+
+    try:
+        for url, dest in downloads:
+            _download(url, dest)
+        return True
+    except Exception as exc:  # pragma: no cover - network dependant
+        logger.error("Failed to download Piper voice '%s': %s", voice_name, exc, exc_info=True)
+        with contextlib.suppress(Exception):
+            onnx_path.unlink(missing_ok=True)
+            json_path.unlink(missing_ok=True)
+        return False
 
 
 class StreamingAudioProcessor:
@@ -186,11 +366,18 @@ async def _load_whisper() -> WhisperModel | None:
             if candidate.strip()
         ]
 
-        model_candidates: list[tuple[str, str, str]] = [(model_name, device, compute_type)]
+        model_candidates: list[tuple[str, str, str, str]] = [
+            (model_name, device, compute_type, "primary")
+        ]
 
         if is_cuda_device(device):
             for compute_candidate in compute_fallbacks:
-                candidate_tuple = (model_name, device, compute_candidate)
+                candidate_tuple = (
+                    model_name,
+                    device,
+                    compute_candidate,
+                    f"primary-compute-fallback:{compute_candidate}",
+                )
                 if candidate_tuple not in model_candidates:
                     model_candidates.append(candidate_tuple)
 
@@ -198,19 +385,28 @@ async def _load_whisper() -> WhisperModel | None:
         fallback_device = os.getenv("STT_FALLBACK_DEVICE", "cpu")
         fallback_compute = os.getenv("STT_FALLBACK_COMPUTE_TYPE", "int8")
         if fallback_model_name:
-            fallback_tuple = (fallback_model_name, fallback_device, fallback_compute)
-            if fallback_tuple not in model_candidates:
-                model_candidates.append(fallback_tuple)
+            candidate_tuple = (
+                fallback_model_name,
+                fallback_device,
+                fallback_compute,
+                "fallback-model",
+            )
+            if candidate_tuple not in model_candidates:
+                model_candidates.append(candidate_tuple)
 
         last_error: Exception | None = None
-        for candidate in model_candidates:
+        for candidate_model, candidate_device, candidate_compute, candidate_label in model_candidates:
             try:
-                WHISPER_MODEL = await loop.run_in_executor(None, lambda c=candidate: load_candidate(c))
+                WHISPER_MODEL = await loop.run_in_executor(
+                    None,
+                    lambda c=(candidate_model, candidate_device, candidate_compute): load_candidate(c),
+                )
                 logger.info(
-                    "faster-whisper model ready (model=%s, device=%s, compute_type=%s)",
-                    candidate[0],
-                    candidate[1],
-                    candidate[2],
+                    "faster-whisper model ready (model=%s, device=%s, compute_type=%s, source=%s)",
+                    candidate_model,
+                    candidate_device,
+                    candidate_compute,
+                    candidate_label,
                 )
                 break
             except (RuntimeError, ImportError) as exc:  # pragma: no cover
@@ -219,8 +415,8 @@ async def _load_whisper() -> WhisperModel | None:
                 if "out of memory" in message or "cuda" in message:
                     logger.warning(
                         "Failed to load faster-whisper model %s on %s (%s); trying next candidate",
-                        candidate[0],
-                        candidate[1],
+                        candidate_model,
+                        candidate_device,
                         exc,
                     )
                     continue
@@ -236,6 +432,7 @@ async def _load_whisper() -> WhisperModel | None:
 async def _load_piper_voice() -> PiperVoice | None:
     """Lazy-load Piper TTS voice."""
     global PIPER_VOICE
+    global PIPER_VOICE_NAME
     if not PIPER_AVAILABLE:  # pragma: no cover - dependency optional
         logger.warning("piper not available; TTS disabled")
         return None
@@ -248,30 +445,46 @@ async def _load_piper_voice() -> PiperVoice | None:
             return PIPER_VOICE
 
         loop = asyncio.get_running_loop()
-        voice_name = os.getenv("TTS_VOICE", "it_IT-riccardo-x_low")
+        voice_name = os.getenv("TTS_VOICE", "it_IT-paola-medium")
         model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
         provider = os.getenv("TTS_PROVIDER", "piper")
+        fallback_voice = os.getenv("TTS_FALLBACK_VOICE", "it_IT-riccardo-x_low")
 
         if provider != "piper":
             logger.info("TTS provider set to %s, skipping Piper voice load", provider)
             return None
 
-        model_path = os.path.join(model_dir, f"{voice_name}.onnx")
-        logger.info("Attempting to load Piper model from: %s", model_path)
-        if not os.path.exists(model_path):
-            logger.error("Piper model file missing: %s", model_path)
-            return None
+        async def load_candidate(name: str) -> PiperVoice | None:
+            if not _ensure_piper_voice_files(name, model_dir):
+                return None
 
-        def load() -> PiperVoice:
-            logger.info("Loading Piper TTS voice: %s from %s", voice_name, model_path)
-            return PiperVoice.load(model_path)
+            model_path = os.path.join(model_dir, f"{name}.onnx")
+            logger.info("Loading Piper TTS voice '%s' from %s", name, model_path)
 
-        try:
-            PIPER_VOICE = await loop.run_in_executor(None, load)
-            logger.info("Piper voice loaded successfully")
-        except (RuntimeError, ImportError, FileNotFoundError) as exc:  # pragma: no cover
-            logger.error("Failed to load Piper voice %s: %s", voice_name, exc)
-            PIPER_VOICE = None
+            def _load() -> PiperVoice:
+                return PiperVoice.load(model_path)
+
+            try:
+                return await loop.run_in_executor(None, _load)
+            except (RuntimeError, ImportError, FileNotFoundError) as exc:  # pragma: no cover
+                logger.error("Failed to load Piper voice '%s': %s", name, exc)
+                return None
+
+        for candidate in dict.fromkeys([voice_name, fallback_voice]):  # preserve order, drop dups
+            if not candidate:
+                continue
+            PIPER_VOICE = await load_candidate(candidate)
+            if PIPER_VOICE is not None:
+                PIPER_VOICE_NAME = candidate
+                logger.info("Piper voice ready: %s", candidate)
+                break
+
+        if PIPER_VOICE is None:
+            logger.error(
+                "Unable to initialize any Piper voice (primary=%s fallback=%s)",
+                voice_name,
+                fallback_voice,
+            )
 
     return PIPER_VOICE
 
@@ -413,9 +626,11 @@ async def stream_synthesize_speech(
     Yields:
         Tuples of (audio_chunk, sample_rate)
     """
-    cleaned = text.strip()
+    cleaned = sanitize_tts_text(text)
     if not cleaned:
-        return
+        cleaned = text.strip()
+        if not cleaned:
+            return
 
     voice = await _load_piper_voice()
 
@@ -529,9 +744,17 @@ async def transcribe_audio_pcm16(
         elif "," in language:
             language = language.split(",", 1)[0].strip() or None
 
+    audio_pcm, sample_rate = _ensure_pcm16(audio_pcm, sample_rate)
+
     def _run() -> dict[str, Any]:
         # Convert PCM16 to float32 [-1, 1]
-        arr = np.frombuffer(audio_pcm, dtype=np.int16).astype(np.float32) / 32768
+        padding_length = len(audio_pcm) % 2
+        if padding_length:
+            padded = audio_pcm + b"\x00" * (2 - padding_length)
+        else:
+            padded = audio_pcm
+
+        arr = np.frombuffer(padded, dtype=np.int16).astype(np.float32) / 32768
         processed = _resample_audio(arr, sample_rate, WHISPER_TARGET_SR)
 
         segments, info = model.transcribe(
@@ -576,9 +799,11 @@ async def synthesize_speech(
     Returns:
         (wav_bytes, sample_rate) or None if synthesis not available.
     """
-    cleaned = text.strip()
+    cleaned = sanitize_tts_text(text)
     if not cleaned:
-        return None
+        cleaned = text.strip()
+        if not cleaned:
+            return None
 
     voice = await _load_piper_voice()
 

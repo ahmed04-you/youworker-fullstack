@@ -40,3 +40,4 @@ class IngestionReport:
     files: list[dict[str, Any]]
     errors: list[dict[str, Any]]
     artifact_totals: dict[str, int] | None = None
+    artifact_samples: dict[str, list[dict[str, Any]]] | None = None

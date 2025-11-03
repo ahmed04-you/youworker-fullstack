@@ -58,6 +58,7 @@ def _extract_pdf_tables(
                     if not rows:
                         continue
                     csv_text = _rows_to_csv(rows)
+                    markdown_text = _rows_to_markdown(rows)
                     metadata = {
                         "page": page_idx,
                         "table_idx": table_counter,
@@ -65,12 +66,14 @@ def _extract_pdf_tables(
                         "rows": len(rows),
                         "columns": len(rows[0]) if rows and rows[0] else 0,
                         "table": {"rows": rows},
+                        "table_markdown": markdown_text,
+                        "table_csv": csv_text,
                     }
                     table_counter += 1
                     yield DocChunk(
                         id=str(uuid4()),
                         chunk_id=table_counter,
-                        text=csv_text,
+                        text=markdown_text or csv_text,
                         uri=uri,
                         mime=mime,
                         source=source,
@@ -114,19 +117,26 @@ def _extract_excel_tables(
         if not csv_text:
             continue
 
+        headers = [str(col) for col in frame.columns.tolist()]
+        body_rows = frame.astype(str).values.tolist()
+        markdown_rows = [headers] + body_rows if headers else body_rows
+        markdown_text = _rows_to_markdown(markdown_rows)
+
         table_counter += 1
         metadata = {
             "sheet_name": str(sheet_name),
             "rows": int(frame.shape[0]),
             "columns": int(frame.shape[1]),
             "content_type": "table",
-            "table": {"rows": frame.values.tolist()},
+            "table": {"headers": headers, "rows": body_rows},
+            "table_markdown": markdown_text,
+            "table_csv": csv_text,
         }
 
         yield DocChunk(
             id=str(uuid4()),
             chunk_id=table_counter,
-            text=csv_text,
+            text=markdown_text or csv_text,
             uri=uri,
             mime=mime,
             source=source,
@@ -155,3 +165,31 @@ def _coerce_cell(cell: Any) -> str:
 
 def _rows_to_csv(rows: Sequence[Sequence[str]]) -> str:
     return "\n".join(",".join(cell.replace("\n", " ").strip() for cell in row) for row in rows)
+
+
+def _rows_to_markdown(rows: Sequence[Sequence[str]]) -> str:
+    if not rows:
+        return ""
+
+    width = len(rows[0]) if rows[0] else 0
+    if width == 0:
+        return ""
+
+    def _format(row: Sequence[str]) -> str:
+        cells = list(row)[:width]
+        if len(cells) < width:
+            cells.extend([""] * (width - len(cells)))
+        normalized = [cell.replace("\n", " ").strip() if isinstance(cell, str) else str(cell) for cell in cells]
+        return "| " + " | ".join(normalized) + " |"
+
+    header_line = _format(rows[0])
+    separator = "| " + " | ".join("---" for _ in range(width)) + " |"
+    body_rows = rows[1:]
+    lines = [header_line, separator]
+    if body_rows:
+        for row in body_rows:
+            lines.append(_format(row))
+    else:
+        lines.append("| " + " | ".join("" for _ in range(width)) + " |")
+
+    return "\n".join(lines)

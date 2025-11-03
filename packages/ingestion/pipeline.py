@@ -211,6 +211,11 @@ class IngestionPipeline:
         results.sort(key=lambda entry: entry[0])
 
         aggregate_artifacts: dict[str, int] = {"tables": 0, "images": 0, "charts": 0}
+        aggregate_samples: dict[str, list[dict[str, Any]]] = {
+            "tables": [],
+            "images": [],
+            "charts": [],
+        }
 
         for _, item, stats, error in results:
             if error is not None:
@@ -222,8 +227,18 @@ class IngestionPipeline:
 
             total_chunks += stats.chunk_count
             artifact_counts = stats.artifact_summary.get("counts", {})
+            artifact_samples = stats.artifact_summary.get("artifacts", {})
             for key, value in artifact_counts.items():
                 aggregate_artifacts[key] = aggregate_artifacts.get(key, 0) + int(value or 0)
+
+            for key, entries in (artifact_samples or {}).items():
+                if not isinstance(entries, list):
+                    continue
+                bucket = aggregate_samples.setdefault(key, [])
+                for entry in entries:
+                    if len(bucket) >= 10:
+                        break
+                    bucket.append(entry)
 
             file_reports.append(
                 {
@@ -233,8 +248,11 @@ class IngestionPipeline:
                     "chunks": stats.chunk_count,
                     "size_bytes": item.bytes_size,
                     "artifacts": artifact_counts,
+                    "artifact_samples": artifact_samples,
                 }
             )
+
+        artifact_samples_total = {k: v for k, v in aggregate_samples.items() if v}
 
         report = IngestionReport(
             total_files=len(items),
@@ -242,6 +260,7 @@ class IngestionPipeline:
             files=file_reports,
             errors=errors,
             artifact_totals=aggregate_artifacts if any(aggregate_artifacts.values()) else None,
+            artifact_samples=artifact_samples_total or None,
         )
         self._cleanup_temp_dirs()
         self._active_ingestions = max(0, self._active_ingestions - 1)

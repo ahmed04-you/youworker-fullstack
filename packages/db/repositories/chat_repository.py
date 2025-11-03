@@ -44,18 +44,39 @@ class ChatRepository(BaseRepository[ChatSession]):
             Chat session
         """
         if external_id:
-            q = select(ChatSession).where(
-                ChatSession.user_id == user_id,
-                ChatSession.external_id == external_id
+            q = (
+                select(ChatSession)
+                .where(
+                    ChatSession.user_id == user_id,
+                    ChatSession.external_id == external_id,
+                )
+                .order_by(ChatSession.updated_at.desc())
             )
             result = await self.session.execute(q)
-            cs = result.scalar_one_or_none()
-            if cs:
-                cs.updated_at = datetime.now(timezone.utc)
-                cs.model = model or cs.model
-                cs.enable_tools = enable_tools
+            matches = result.scalars().all()
+            if matches:
+                primary = matches[0]
+                primary.updated_at = datetime.now(timezone.utc)
+                primary.model = model or primary.model
+                primary.enable_tools = enable_tools
+
+                # Soft-merge: reassign messages from duplicate sessions to the primary
+                # and delete duplicates to enforce uniqueness.
+                if len(matches) > 1:
+                    conflict_session_ids = [session.id for session in matches[1:]]
+                    reassign = (
+                        ChatMessage.__table__.update()
+                        .where(ChatMessage.session_id.in_(conflict_session_ids))
+                        .values(session_id=primary.id)
+                    )
+                    await self.session.execute(reassign)
+                    delete_duplicates = delete(ChatSession).where(
+                        ChatSession.id.in_(conflict_session_ids)
+                    )
+                    await self.session.execute(delete_duplicates)
+
                 await self.session.flush()
-                return cs
+                return primary
 
         cs = ChatSession(
             user_id=user_id,

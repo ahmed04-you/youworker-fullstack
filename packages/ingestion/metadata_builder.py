@@ -128,6 +128,8 @@ def collect_artifacts(
         text_preview = text_preview[:500]
 
         if _is_table_chunk(metadata):
+            table_preview_source = metadata.get("table_markdown") or metadata.get("table_csv") or text_preview
+            table_preview = (table_preview_source or "")[:500]
             table_key = _stable_hash(
                 {
                     "table": metadata.get("table_data") or metadata.get("table"),
@@ -141,7 +143,8 @@ def collect_artifacts(
                     tables.append(
                         {
                             "page": page_number,
-                            "preview": text_preview,
+                            "preview": table_preview,
+                            "format": "markdown" if metadata.get("table_markdown") else "csv",
                             "rows": _coerce_int(metadata.get("rows")),
                             "columns": _coerce_int(metadata.get("columns")),
                             "label": label or metadata.get("element_type"),
@@ -170,6 +173,7 @@ def collect_artifacts(
                             "caption": caption or label,
                             "hash": metadata.get("image_hash"),
                             "ocr": metadata.get("ocr_text"),
+                            "uri": (metadata.get("image_ref_info") or {}).get("uri"),
                         }
                     )
                 if page_number is not None:
@@ -185,6 +189,7 @@ def collect_artifacts(
                                 "page": page_number,
                                 "caption": caption or label,
                                 "hash": metadata.get("image_hash"),
+                                "uri": (metadata.get("image_ref_info") or {}).get("uri"),
                             }
                         )
                     if page_number is not None:

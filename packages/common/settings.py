@@ -139,6 +139,14 @@ class IngestionConfig(BaseModel):
     docling_accelerator: str | None = Field(default=None, description="Docling-specific accelerator")
     ocr_accelerator: str | None = Field(default=None, description="OCR-specific accelerator")
     transcription_accelerator: str | None = Field(default=None, description="Transcription-specific accelerator")
+    ocr_engine: Literal["tesseract", "paddle"] = Field(
+        default="paddle",
+        description="Preferred OCR engine for image/PDF extraction (auto-falls back if unavailable)",
+    )
+    ocr_language: str | None = Field(
+        default="en",
+        description="Primary OCR language code (depends on selected engine)",
+    )
 
     # GPU device selection
     gpu_device: str | None = Field(default=None, description="Global GPU device ID")
@@ -446,6 +454,14 @@ class Settings(BaseSettings):
     @property
     def ingest_ocr_device(self) -> str | None:
         return self.ingestion.ocr_device
+
+    @property
+    def ingest_ocr_engine(self) -> str:
+        return self.ingestion.ocr_engine
+
+    @property
+    def ingest_ocr_language(self) -> str | None:
+        return self.ingestion.ocr_language
 
     @property
     def ingest_transcription_device(self) -> str | None:
