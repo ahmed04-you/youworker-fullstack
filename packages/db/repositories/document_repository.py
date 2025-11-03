@@ -81,6 +81,7 @@ class DocumentRepository(BaseRepository[Document]):
 
         result = await self.session.execute(
             query
+            .options(selectinload(Document.tags))
             .order_by(Document.created_at.desc())
             .limit(limit)
             .offset(offset)
@@ -150,11 +151,9 @@ class DocumentRepository(BaseRepository[Document]):
                 source=source,
                 collection=collection,
                 last_ingested_at=now,
+                tags=tag_objects,
             )
             self.session.add(doc)
-            await self.session.flush()
-            # Set tags relationship after document is flushed
-            doc.tags = tag_objects
             await self.session.flush()
             return doc
 

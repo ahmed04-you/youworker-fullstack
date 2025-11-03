@@ -160,20 +160,75 @@ async def _load_whisper() -> WhisperModel | None:
         device = os.getenv("STT_DEVICE", "auto")
         compute_type = os.getenv("STT_COMPUTE_TYPE", "float16")
 
-        def load() -> WhisperModel:
+        def load_candidate(candidate: tuple[str, str, str]) -> WhisperModel:
+            candidate_model, candidate_device, candidate_compute = candidate
             logger.info(
-                "Loading faster-whisper model (model=%s, device=%s, compute_type=%s)",
-                model_name,
-                device,
-                compute_type,
+                "Loading faster-whisper model (model=%s, device=%s, compute_type=%s, primary=%s)",
+                candidate_model,
+                candidate_device,
+                candidate_compute,
+                candidate_model == model_name and candidate_device == device,
             )
-            return WhisperModel(model_name, device=device, compute_type=compute_type)
+            return WhisperModel(
+                candidate_model,
+                device=candidate_device,
+                compute_type=candidate_compute,
+            )
 
-        try:
-            WHISPER_MODEL = await loop.run_in_executor(None, load)
-        except (RuntimeError, ImportError) as exc:  # pragma: no cover
-            logger.error("Failed to load faster-whisper model: %s", exc)
-            WHISPER_MODEL = None
+        def is_cuda_device(dev: str) -> bool:
+            normalized = (dev or "").lower()
+            return normalized.startswith("cuda") or normalized == "gpu"
+
+        compute_fallbacks_env = os.getenv("STT_COMPUTE_FALLBACKS", "int8_float16,int8")
+        compute_fallbacks = [
+            candidate.strip()
+            for candidate in compute_fallbacks_env.split(",")
+            if candidate.strip()
+        ]
+
+        model_candidates: list[tuple[str, str, str]] = [(model_name, device, compute_type)]
+
+        if is_cuda_device(device):
+            for compute_candidate in compute_fallbacks:
+                candidate_tuple = (model_name, device, compute_candidate)
+                if candidate_tuple not in model_candidates:
+                    model_candidates.append(candidate_tuple)
+
+        fallback_model_name = os.getenv("STT_FALLBACK_MODEL")
+        fallback_device = os.getenv("STT_FALLBACK_DEVICE", "cpu")
+        fallback_compute = os.getenv("STT_FALLBACK_COMPUTE_TYPE", "int8")
+        if fallback_model_name:
+            fallback_tuple = (fallback_model_name, fallback_device, fallback_compute)
+            if fallback_tuple not in model_candidates:
+                model_candidates.append(fallback_tuple)
+
+        last_error: Exception | None = None
+        for candidate in model_candidates:
+            try:
+                WHISPER_MODEL = await loop.run_in_executor(None, lambda c=candidate: load_candidate(c))
+                logger.info(
+                    "faster-whisper model ready (model=%s, device=%s, compute_type=%s)",
+                    candidate[0],
+                    candidate[1],
+                    candidate[2],
+                )
+                break
+            except (RuntimeError, ImportError) as exc:  # pragma: no cover
+                last_error = exc
+                message = str(exc).lower()
+                if "out of memory" in message or "cuda" in message:
+                    logger.warning(
+                        "Failed to load faster-whisper model %s on %s (%s); trying next candidate",
+                        candidate[0],
+                        candidate[1],
+                        exc,
+                    )
+                    continue
+                logger.error("Failed to load faster-whisper model: %s", exc)
+                break
+
+        if WHISPER_MODEL is None and last_error is not None:
+            logger.error("Unable to initialize any faster-whisper model: %s", last_error)
 
     return WHISPER_MODEL
 

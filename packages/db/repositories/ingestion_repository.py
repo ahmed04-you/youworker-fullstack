@@ -104,11 +104,9 @@ class IngestionRepository(BaseRepository[IngestionRun]):
             started_at=started_at,
             finished_at=finished_at,
             status=status,
+            tags=tag_objects,
         )
         self.session.add(run)
-        await self.session.flush()
-        # Set tags relationship after ingestion run is flushed
-        run.tags = tag_objects
         await self.session.flush()
         return run
 

@@ -61,6 +61,9 @@ def _extract_pdf_tables(
                     metadata = {
                         "page": page_idx,
                         "table_idx": table_counter,
+                        "content_type": "table",
+                        "rows": len(rows),
+                        "columns": len(rows[0]) if rows and rows[0] else 0,
                         "table": {"rows": rows},
                     }
                     table_counter += 1
@@ -116,6 +119,7 @@ def _extract_excel_tables(
             "sheet_name": str(sheet_name),
             "rows": int(frame.shape[0]),
             "columns": int(frame.shape[1]),
+            "content_type": "table",
             "table": {"rows": frame.values.tolist()},
         }
 

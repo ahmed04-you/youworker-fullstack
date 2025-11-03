@@ -48,8 +48,17 @@ class DocumentService:
             offset=offset
         )
 
-        return {
-            "documents": [
+        def serialize_tags(doc) -> list[str]:
+            tags = []
+            for tag in getattr(doc, "tags", []) or []:
+                name = getattr(tag, "name", None)
+                if isinstance(name, str) and name:
+                    tags.append(name)
+            return tags
+
+        documents_payload = []
+        for d in documents:
+            documents_payload.append(
                 {
                     "id": d.id,
                     "uri": d.uri,
@@ -57,7 +66,7 @@ class DocumentService:
                     "mime": d.mime,
                     "bytes_size": d.bytes_size,
                     "source": d.source,
-                    "tags": d.tags,
+                    "tags": serialize_tags(d),
                     "collection": d.collection,
                     "path_hash": d.path_hash,
                     "created_at": d.created_at.isoformat(),
@@ -67,9 +76,11 @@ class DocumentService:
                         else None
                     ),
                 }
-                for d in documents
-            ],
-            "total": len(documents),
+            )
+
+        return {
+            "documents": documents_payload,
+            "total": len(documents_payload),
         }
 
     async def delete_document(

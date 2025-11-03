@@ -9,7 +9,9 @@ from contextlib import suppress
 import hashlib
 import logging
 import mimetypes
+from numbers import Number
 import os
+import traceback
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -205,6 +207,42 @@ class IngestionService(BaseService):
                 sanitized.append(cleaned)
         return sanitized
 
+    @staticmethod
+    def _normalize_size_bytes(value: Any) -> int:
+        if isinstance(value, Number):
+            try:
+                coerced = int(value)
+            except (TypeError, ValueError):
+                return 0
+            return coerced if coerced >= 0 else 0
+
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return 0
+            try:
+                coerced = int(float(stripped))
+            except (TypeError, ValueError):
+                return 0
+            return coerced if coerced >= 0 else 0
+
+        return 0
+
+    def _prepare_file_summaries(
+        self, files: list[dict[str, Any]] | None
+    ) -> tuple[list[dict[str, Any]], int]:
+        sanitized_files: list[dict[str, Any]] = []
+        total_bytes = 0
+
+        for file_info in files or []:
+            entry = dict(file_info)
+            normalized_size = self._normalize_size_bytes(entry.get("size_bytes"))
+            entry["size_bytes"] = normalized_size
+            total_bytes += normalized_size
+            sanitized_files.append(entry)
+
+        return sanitized_files, total_bytes
+
     def validate_local_path(self, path: str) -> Path:
         """
         Validate that a local path is within allowed directory.
@@ -256,7 +294,7 @@ class IngestionService(BaseService):
                 logger.warning(
                     "Rejected file with invalid MIME type",
                     extra={
-                        "filename": f.filename,
+                        "file_name": f.filename,
                         "mime_type": f.content_type,
                         "allowed_mimes": list(self.ALLOWED_MIME_TYPES),
                     },
@@ -333,7 +371,7 @@ class IngestionService(BaseService):
                 logger.warning(
                     "Rejected file: size exceeds limit",
                     extra={
-                        "filename": f.filename,
+                        "file_name": f.filename,
                         "bytes_written": bytes_written,
                         "max_size_bytes": self.MAX_FILE_SIZE_BYTES,
                     },
@@ -439,17 +477,14 @@ class IngestionService(BaseService):
             error_messages=error_messages,
         )
 
-        # Calculate total bytes
-        total_bytes = sum(
-            f.get("size_bytes", 0) for f in (result.files or [])
-        )
+        files, total_bytes = self._prepare_file_summaries(result.files)
 
         return IngestPathResult(
             success=not error_messages,
             files_processed=result.total_files,
             chunks_written=result.total_chunks,
             total_bytes=total_bytes,
-            files=[dict(file) for file in (result.files or [])],
+            files=files,
             errors=error_messages,
         )
 
@@ -491,13 +526,15 @@ class IngestionService(BaseService):
                 user_id=user_id,
             )
         except Exception as e:
-            logger.error(
+            stack = traceback.format_exc()
+            logger.exception(
                 "Upload ingestion pipeline failed",
                 extra={
                     "error": str(e),
                     "error_type": type(e).__name__,
                     "file_count": len(valid_files),
                     "user_id": user_id,
+                    "stack": stack,
                 },
             )
             raise RuntimeError(f"Upload ingestion failed: {e}")
@@ -523,17 +560,14 @@ class IngestionService(BaseService):
             error_messages=error_messages,
         )
 
-        # Calculate total bytes
-        total_bytes = sum(
-            f.get("size_bytes", 0) for f in (result.files or [])
-        )
+        files, total_bytes = self._prepare_file_summaries(result.files)
 
         return IngestPathResult(
             success=not error_messages,
             files_processed=result.total_files,
             chunks_written=result.total_chunks,
             total_bytes=total_bytes,
-            files=[dict(file) for file in (result.files or [])],
+            files=files,
             errors=error_messages,
         )
 
@@ -561,13 +595,20 @@ class IngestionService(BaseService):
         """
         from packages.db import get_async_session
 
+        logger.info(
+            "Starting database persistence",
+            extra={"user_id": user_id, "target": target, "file_count": result.total_files},
+        )
+
         try:
             started_at = datetime.now().astimezone()
             finished_at = datetime.now().astimezone()
 
             # Use a fresh database session to avoid greenlet context issues
             # after long-running ingestion operations
+            logger.debug("Creating fresh database session", extra={"user_id": user_id})
             async with get_async_session() as db:
+                logger.debug("Database session created", extra={"user_id": user_id})
                 # Record ingestion run
                 ingestion_repo = IngestionRepository(db)
                 await ingestion_repo.record_ingestion_run(
@@ -609,14 +650,21 @@ class IngestionService(BaseService):
                         collection=None,
                     )
 
-        except (ValueError, TypeError, OSError) as persist_exc:
-            logger.error(
+                logger.info(
+                    "Database persistence completed",
+                    extra={"user_id": user_id, "documents_count": len(result.files or [])},
+                )
+
+        except Exception as persist_exc:
+            stack = traceback.format_exc()
+            logger.exception(
                 "Failed to persist ingestion run",
                 extra={
                     "error": str(persist_exc),
                     "error_type": type(persist_exc).__name__,
                     "user_id": user_id,
                     "target": target,
+                    "stack": stack,
                 },
             )
 

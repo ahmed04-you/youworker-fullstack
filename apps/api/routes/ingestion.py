@@ -4,6 +4,7 @@ Ingestion-related API endpoints.
 
 import logging
 from typing import Any
+import traceback
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from pydantic import BaseModel
@@ -158,6 +159,7 @@ async def ingest_upload_endpoint(
 
     except RuntimeError as e:
         # Runtime errors (500)
+        stack = traceback.format_exc()
         logger.error(
             "Upload ingestion failed",
             extra={
@@ -165,12 +167,16 @@ async def ingest_upload_endpoint(
                 "error_type": type(e).__name__,
                 "file_count": len(files),
                 "user_id": _get_user_id(current_user),
+                "stack": stack,
+                "log_marker": "ingest_upload_runtime_error",
             },
+            exc_info=True,
         )
         raise HTTPException(status_code=500, detail=str(e))
 
     except Exception as e:
         # Unexpected errors (500)
+        stack = traceback.format_exc()
         logger.error(
             "Unexpected upload error",
             extra={
@@ -178,6 +184,9 @@ async def ingest_upload_endpoint(
                 "error_type": type(e).__name__,
                 "file_count": len(files),
                 "user_id": _get_user_id(current_user),
+                "stack": stack,
+                "log_marker": "ingest_upload_unexpected_error",
             },
+            exc_info=True,
         )
         raise HTTPException(status_code=500, detail="Internal server error")

@@ -172,6 +172,8 @@ async def ingest_url(
             "started_at": started,
             "finished_at": finished,
             "totals": {"files": report.total_files, "chunks": report.total_chunks},
+            "artifacts": report.artifact_totals or {},
+            "files": report.files or [],
             "errors": errors,
         }
         # Persist ingestion run + docs
@@ -224,6 +226,8 @@ async def ingest_url(
             "started_at": started,
             "finished_at": finished,
             "totals": {"files": 0, "chunks": 0},
+            "artifacts": {},
+            "files": [],
             "errors": [str(exc)],
         }
         _history.append(rec)
@@ -269,6 +273,8 @@ async def ingest_path(
             "started_at": started,
             "finished_at": finished,
             "totals": {"files": report.total_files, "chunks": report.total_chunks},
+            "artifacts": report.artifact_totals or {},
+            "files": report.files or [],
             "errors": errors,
         }
         try:
@@ -320,6 +326,8 @@ async def ingest_path(
             "started_at": started,
             "finished_at": finished,
             "totals": {"files": 0, "chunks": 0},
+            "artifacts": {},
+            "files": [],
             "errors": [str(exc)],
         }
         _history.append(rec)

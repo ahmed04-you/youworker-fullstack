@@ -39,3 +39,4 @@ class IngestionReport:
     total_chunks: int
     files: list[dict[str, Any]]
     errors: list[dict[str, Any]]
+    artifact_totals: dict[str, int] | None = None

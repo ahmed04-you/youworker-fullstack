@@ -7,6 +7,97 @@ import MessageContent from "../components/MessageContent";
 import { getSessions, getSession, deleteSession, sendChatStreaming, sendUnifiedChatStreaming, updateSession, createSession } from "../../lib/api/chat";
 import type { ChatSession, Message, SSELogEvent, SSEDoneEvent, SSETokenEvent, SSEToolEvent, ToolEvent } from "../../lib/types";
 
+type ToolRunStatus = "running" | "success" | "error";
+
+interface ToolRunDisplay {
+  id: string;
+  tool: string;
+  status: ToolRunStatus;
+  latencyMs?: number;
+  runId?: number;
+  startedAt?: number;
+  error?: string;
+}
+
+function normalizeToolStatus(rawStatus?: string): ToolRunStatus {
+  const status = (rawStatus || "").toLowerCase();
+  if (status === "start" || status === "running" || status === "") {
+    return "running";
+  }
+  if (
+    status === "end" ||
+    status === "success" ||
+    status === "completed" ||
+    status === "done" ||
+    status === "complete" ||
+    status === "finished" ||
+    status === "ok"
+  ) {
+    return "success";
+  }
+  return "error";
+}
+
+function formatLatency(latencyMs?: number): string | undefined {
+  if (latencyMs === undefined || latencyMs === null) {
+    return undefined;
+  }
+  if (latencyMs < 1000) {
+    return `${latencyMs} ms`;
+  }
+  const seconds = latencyMs / 1000;
+  return `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`;
+}
+
+function integrateToolEvent(
+  previous: ToolRunDisplay[],
+  event: ToolEvent,
+  now: number
+): ToolRunDisplay[] {
+  const toolName = event.tool || "Unknown Tool";
+  const runId = typeof event.run_id === "number" ? event.run_id : undefined;
+  const status = normalizeToolStatus(event.status);
+  const identifier = runId !== undefined ? `run-${runId}` : `${toolName}-${status}-${now}`;
+
+  const existingIndex = previous.findIndex((entry) =>
+    runId !== undefined ? entry.runId === runId : entry.tool === toolName && entry.status === "running"
+  );
+
+  const updated = [...previous];
+
+  if (existingIndex === -1) {
+    updated.push({
+      id: identifier,
+      tool: toolName,
+      status,
+      runId,
+      startedAt: status === "running" ? now : undefined,
+      latencyMs: status === "success" ? event.latency_ms ?? undefined : undefined,
+      error: status === "error" ? (event.error as string | undefined) : undefined,
+    });
+    return updated;
+  }
+
+  const existing = updated[existingIndex];
+  const startedAt = existing.startedAt ?? (status === "running" ? now : undefined);
+  let latency = existing.latencyMs;
+  if (status !== "running") {
+    const computedLatency = startedAt ? Math.max(0, now - startedAt) : undefined;
+    latency = event.latency_ms ?? latency ?? computedLatency;
+  }
+
+  updated[existingIndex] = {
+    ...existing,
+    status,
+    latencyMs: latency,
+    runId: runId ?? existing.runId,
+    startedAt,
+    error: status === "error" ? (event.error as string | undefined) : undefined,
+  };
+
+  return updated;
+}
+
 interface SessionItemProps {
   session: ChatSession;
   isActive: boolean;
@@ -102,7 +193,7 @@ export default function Chats() {
   const [error, setError] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [streamingStatus, setStreamingStatus] = useState<string>("");
-  const [toolEvents, setToolEvents] = useState<ToolEvent[]>([]);
+  const [toolEvents, setToolEvents] = useState<ToolRunDisplay[]>([]);
   const [hasToolEvents, setHasToolEvents] = useState(false);
   const [expectAudio, setExpectAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -121,44 +212,39 @@ export default function Chats() {
     });
   };
 
-  const setToolEventsFromList = useCallback((events?: Array<SSEToolEvent | ToolEvent>, shouldMerge: boolean = false) => {
-    if (!events) {
-      setToolEvents([]);
-      return;
-    }
+  const setToolEventsFromList = useCallback(
+    (events?: Array<SSEToolEvent | ToolEvent>, shouldMerge: boolean = false) => {
+      if (!events || events.length === 0) {
+        if (!shouldMerge) {
+          setToolEvents([]);
+          setHasToolEvents(false);
+        }
+        return;
+      }
 
-    // Filter for completed tool events only
-    const completed = events.filter((event) => {
-      if (!event || typeof event !== "object") return false;
-      const status = event.status || "";
-      return status === "end" || status === "success" || status === "error";
-    });
-
-    if (shouldMerge) {
-      setToolEvents((prev) => [...prev, ...(completed as ToolEvent[])]);
-    } else {
-      setToolEvents(completed as ToolEvent[]);
-    }
-
-    // Mark that this session has tool events if there are any
-    if (completed.length > 0) {
-      setHasToolEvents(true);
-    }
-  }, []);
+      setToolEvents((prev) => {
+        const base = shouldMerge ? [...prev] : [];
+        const next = events.reduce(
+          (acc, event) => integrateToolEvent(acc, event, Date.now()),
+          base
+        );
+        setHasToolEvents(next.length > 0);
+        return next;
+      });
+    },
+    []
+  );
 
   const addToolEvent = (event?: SSEToolEvent | ToolEvent) => {
     if (!event || typeof event !== "object") {
       return;
     }
 
-    const status = event.status || "";
-    // Only add completed events
-    if (status !== "end" && status !== "success" && status !== "error") {
-      return;
-    }
-
-    setToolEvents((prev) => [...prev, event as ToolEvent]);
-    setHasToolEvents(true);
+    setToolEvents((prev) => {
+      const next = integrateToolEvent([...prev], event, Date.now());
+      setHasToolEvents(next.length > 0);
+      return next;
+    });
   };
 
   // Auto-scroll to bottom when new messages arrive
@@ -1080,26 +1166,33 @@ export default function Chats() {
           <div className="tools-panel">
             <h3 className="tools-title">Tools Used</h3>
             <div className="tools-list">
-              {toolEvents.map((event, index) => {
-                const toolName = event.tool || 'Unknown Tool';
-                const duration = event.latency_ms !== undefined ? `${event.latency_ms}ms` : '';
+              {toolEvents.map((event) => {
+                const toolName = event.tool || "Unknown Tool";
+                const isRunning = event.status === "running";
+                const statusLabel =
+                  event.status === "error"
+                    ? "Failed"
+                    : isRunning
+                      ? "Running"
+                      : "Completed";
+                const latencyLabel = !isRunning ? formatLatency(event.latencyMs) : undefined;
 
                 return (
-                  <div key={`${toolName}-${index}`} className="tool-card">
+                  <div key={event.id} className={`tool-card ${isRunning ? "tool-card-running" : ""}`}>
                     <div className="tool-icon">
-                      {toolName.toLowerCase().includes('search') ? (
+                      {toolName.toLowerCase().includes("search") ? (
                         <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                         </svg>
-                      ) : toolName.toLowerCase().includes('fetch') || toolName.toLowerCase().includes('web') ? (
+                      ) : toolName.toLowerCase().includes("fetch") || toolName.toLowerCase().includes("web") ? (
                         <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                         </svg>
-                      ) : toolName.toLowerCase().includes('time') || toolName.toLowerCase().includes('date') ? (
+                      ) : toolName.toLowerCase().includes("time") || toolName.toLowerCase().includes("date") ? (
                         <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                         </svg>
-                      ) : toolName.toLowerCase().includes('document') || toolName.toLowerCase().includes('file') ? (
+                      ) : toolName.toLowerCase().includes("document") || toolName.toLowerCase().includes("file") ? (
                         <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                         </svg>
@@ -1111,12 +1204,29 @@ export default function Chats() {
                     </div>
                     <div className="tool-info">
                       <div className="tool-name">{toolName}</div>
-                    </div>
-                    {duration && (
-                      <div style={{ marginLeft: 'auto', fontSize: '12px', color: '#666', fontWeight: '500' }}>
-                        {duration}
+                      <div className="tool-status-row">
+                        {isRunning ? (
+                          <span className="tool-status-spinner" aria-hidden="true" />
+                        ) : (
+                          <span className={`tool-status-dot status-${event.status}`} aria-hidden="true" />
+                        )}
+                        <span className="tool-status-text">
+                          {isRunning ? "Running…" : statusLabel}
+                        </span>
                       </div>
-                    )}
+                    </div>
+                    <div className="tool-meta">
+                      {isRunning ? (
+                        <span className="tool-meta-text">Processing…</span>
+                      ) : latencyLabel ? (
+                        <>
+                          <span className="tool-latency">{latencyLabel}</span>
+                          <span className="tool-meta-subtext">Latency</span>
+                        </>
+                      ) : (
+                        <span className="tool-meta-text">{statusLabel}</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}

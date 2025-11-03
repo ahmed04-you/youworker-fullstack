@@ -9,12 +9,16 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from html.parser import HTMLParser
+import hashlib
+import json
 import mimetypes
 import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
+from urllib.parse import urljoin, urlparse
 
 from qdrant_client import QdrantClient
 
@@ -28,6 +32,7 @@ from packages.parsers import (
     media_transcribe,
     ocr_extract,
     should_run_ocr,
+    table_extract,
 )
 from packages.parsers.models import DocChunk, IngestionItem, IngestionReport
 from packages.vectorstore import ensure_collections, get_client
@@ -35,7 +40,7 @@ from packages.vectorstore.schema import DocumentSource
 
 from .chunker import chunk_text_tokens
 from .embedder_integration import embed_chunks, prepare_points, upsert_embedded_chunks
-from .metadata_builder import build_chunk_metadata, prune_metadata
+from .metadata_builder import build_chunk_metadata, collect_artifacts, prune_metadata
 
 logger = get_logger(__name__)
 
@@ -65,6 +70,26 @@ _CUSTOM_MIME_TYPES: tuple[tuple[str, str], ...] = (
 for mime, extension in _CUSTOM_MIME_TYPES:
     mimetypes.add_type(mime, extension, strict=False)
 
+EMBEDDED_ASSET_EXTENSIONS: set[str] = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".bmp",
+    ".tif",
+    ".tiff",
+    ".svg",
+    ".pdf",
+    ".ppt",
+    ".pptx",
+    ".xls",
+    ".xlsx",
+    ".csv",
+}
+MAX_EMBEDDED_ASSETS = 25
+MAX_EMBEDDED_ASSET_BYTES = 8 * 1024 * 1024
+
 
 @dataclass(slots=True)
 class PipelineConfig:
@@ -74,6 +99,14 @@ class PipelineConfig:
     chunk_overlap: int
     recursive: bool = True
     max_concurrency: int = 4
+
+
+@dataclass(slots=True)
+class ProcessedItemResult:
+    """Result details for a processed ingestion item."""
+
+    chunk_count: int
+    artifact_summary: dict[str, Any]
 
 
 class IngestionPipeline:
@@ -171,25 +204,35 @@ class IngestionPipeline:
             for idx, item in enumerate(items)
         ]
 
-        results: list[tuple[int, IngestionItem, int, Exception | None]] = []
+        results: list[tuple[int, IngestionItem, ProcessedItemResult | None, Exception | None]] = []
         for task in asyncio.as_completed(tasks):
             results.append(await task)
 
         results.sort(key=lambda entry: entry[0])
 
-        for _, item, chunk_count, error in results:
+        aggregate_artifacts: dict[str, int] = {"tables": 0, "images": 0, "charts": 0}
+
+        for _, item, stats, error in results:
             if error is not None:
                 errors.append({"path": str(item.path), "error": str(error)})
                 continue
 
-            total_chunks += chunk_count
+            if stats is None:
+                continue
+
+            total_chunks += stats.chunk_count
+            artifact_counts = stats.artifact_summary.get("counts", {})
+            for key, value in artifact_counts.items():
+                aggregate_artifacts[key] = aggregate_artifacts.get(key, 0) + int(value or 0)
+
             file_reports.append(
                 {
                     "path": str(item.path),
                     "uri": item.uri,
                     "mime": item.mime,
-                    "chunks": chunk_count,
+                    "chunks": stats.chunk_count,
                     "size_bytes": item.bytes_size,
+                    "artifacts": artifact_counts,
                 }
             )
 
@@ -198,6 +241,7 @@ class IngestionPipeline:
             total_chunks=total_chunks,
             files=file_reports,
             errors=errors,
+            artifact_totals=aggregate_artifacts if any(aggregate_artifacts.values()) else None,
         )
         self._cleanup_temp_dirs()
         self._active_ingestions = max(0, self._active_ingestions - 1)
@@ -213,13 +257,13 @@ class IngestionPipeline:
         collection_name: str | None = None,
         user_id: int | None = None,
         semaphore: asyncio.Semaphore,
-    ) -> tuple[int, IngestionItem, int, Exception | None]:
+    ) -> tuple[int, IngestionItem, ProcessedItemResult | None, Exception | None]:
         async with semaphore:
             try:
-                chunk_count = await self._process_item(
+                stats = await self._process_item(
                     item, tags=tags, from_web=from_web, collection_name=collection_name, user_id=user_id
                 )
-                return (index, item, chunk_count, None)
+                return (index, item, stats, None)
             except Exception as exc:
                 logger.error(
                     "ingestion-item-error",
@@ -231,7 +275,7 @@ class IngestionPipeline:
                         "user_id": user_id
                     }
                 )
-                return (index, item, 0, exc)
+                return (index, item, None, exc)
 
     async def _process_item(
         self,
@@ -241,7 +285,7 @@ class IngestionPipeline:
         from_web: bool,
         collection_name: str | None = None,
         user_id: int | None = None,
-    ) -> int:
+    ) -> ProcessedItemResult:
         source = self._determine_source(item.mime, from_web=from_web)
         raw_chunks: list[DocChunk] = []
 
@@ -264,7 +308,6 @@ class IngestionPipeline:
                 )
             )
         else:
-            # Docling for documents
             docling_chunks = list(
                 docling_extract(
                     item.path,
@@ -275,7 +318,6 @@ class IngestionPipeline:
             )
             raw_chunks.extend(docling_chunks)
 
-            # OCR fallback if needed
             if should_run_ocr(item.mime, docling_chunks):
                 ocr_chunks = list(
                     ocr_extract(
@@ -287,71 +329,108 @@ class IngestionPipeline:
                 )
                 raw_chunks.extend(ocr_chunks)
 
-            # Table fallback only if no Docling chunks
-            if not docling_chunks:
-                from packages.parsers.table_extractor import extract as table_extract
-
-                table_chunks = list(
-                    table_extract(
-                        item.path,
-                        uri=item.uri,
-                        mime=item.mime,
-                        source=source,
-                    )
-                )
-                raw_chunks.extend(table_chunks)
-
-        if not raw_chunks:
-            return 0
-
-        path_hash = self._path_hash(item)
-
-        # Prepare chunks using chunker
-
-        full_text = "\n\n".join(chunk.text for chunk in raw_chunks if chunk.text.strip())
-        text_chunks = chunk_text_tokens(
-            full_text, self._config.chunk_size, self._config.chunk_overlap
-        )
-
-        prepared_chunks = []
-        for idx, text in enumerate(text_chunks, 1):
-            metadata = {
-                "from_raw_chunks": len(raw_chunks),
-                "source_type": source,
-            }
-            prepared_chunks.append(
-                DocChunk(
-                    id=str(uuid4()),
-                    chunk_id=idx,
-                    text=text,
+            table_chunks = list(
+                table_extract(
+                    item.path,
                     uri=item.uri,
                     mime=item.mime,
                     source=source,
-                    metadata=metadata,
                 )
             )
+            raw_chunks.extend(self._dedupe_table_chunks(raw_chunks, table_chunks))
+
+        artifact_summary = collect_artifacts(raw_chunks)
+
+        if not raw_chunks:
+            return ProcessedItemResult(chunk_count=0, artifact_summary=artifact_summary)
+
+        path_hash = self._path_hash(item)
+        prepared_chunks: list[DocChunk] = []
+
+        for raw_index, raw_chunk in enumerate(raw_chunks, start=1):
+            raw_text = raw_chunk.text or ""
+            segments = chunk_text_tokens(
+                raw_text,
+                self._config.chunk_size,
+                self._config.chunk_overlap,
+            )
+            if not segments:
+                trimmed = raw_text.strip()
+                if not trimmed:
+                    continue
+                segments = [trimmed]
+
+            tag_values = None
+            base_metadata = dict(raw_chunk.metadata or {})
+            if "tags" in base_metadata:
+                tag_values = base_metadata.pop("tags")
+            total_parts = len(segments)
+            for part_index, text in enumerate(segments, start=1):
+                segment_text = text.strip()
+                if not segment_text:
+                    continue
+
+                chunk_tags = set(tags)
+                if isinstance(tag_values, (list, tuple, set)):
+                    chunk_tags.update(tag for tag in tag_values if isinstance(tag, str))
+                combined_tags = sorted(chunk_tags) if chunk_tags else None
+
+                metadata = dict(base_metadata)
+                metadata["source_type"] = metadata.get("source_type") or source
+                metadata["raw_chunk_index"] = raw_index
+                metadata["raw_chunk_part"] = part_index
+                metadata["raw_chunk_parts"] = total_parts
+                if combined_tags:
+                    metadata["__chunk_tags"] = combined_tags
+
+                prepared_chunks.append(
+                    DocChunk(
+                        id=str(uuid4()),
+                        chunk_id=len(prepared_chunks) + 1,
+                        text=segment_text,
+                        uri=raw_chunk.uri or item.uri,
+                        mime=raw_chunk.mime or item.mime,
+                        source=source,
+                        metadata=metadata,
+                    )
+                )
 
         if not prepared_chunks:
-            return 0
-
-        # Embed and upsert
+            return ProcessedItemResult(chunk_count=0, artifact_summary=artifact_summary)
 
         vectors = await embed_chunks(prepared_chunks, self._get_embedder())
 
-        # Build and prune metadata
+        attach_summary = True
+        artifacts_sample = artifact_summary.get("artifacts") or {}
+        pages_metadata = artifact_summary.get("pages") or []
+
         for chunk in prepared_chunks:
             chunk_tags = set(tags)
-            tag_values = chunk.metadata.pop("tags", None)
+            tag_values = chunk.metadata.pop("__chunk_tags", None)
             if isinstance(tag_values, (list, tuple, set)):
                 chunk_tags.update(tag for tag in tag_values if isinstance(tag, str))
-            combined_tags = sorted(chunk_tags)
+            combined_tags = sorted(chunk_tags) if chunk_tags else None
+
+            extra_metadata: dict[str, Any] | None = None
+            pages_payload: Sequence[dict[str, Any]] | None = None
+            if attach_summary:
+                extra_metadata = {
+                    "artifact_summary": artifact_summary.get("counts", {}),
+                    "artifacts_sample": artifacts_sample,
+                }
+                pages_payload = pages_metadata
+                attach_summary = False
+
             chunk.metadata = build_chunk_metadata(
                 chunk=chunk,
                 path_hash=path_hash,
                 original_format=item.mime,
                 output_format="markdown",
                 user_id=user_id,
+                pages=pages_payload,
                 tags=list(combined_tags) if combined_tags else None,
+                base_metadata=chunk.metadata,
+                extra_metadata=extra_metadata,
             )
             chunk.metadata = prune_metadata(chunk.metadata)
 
@@ -364,7 +443,167 @@ class IngestionPipeline:
 
         await upsert_embedded_chunks(points, self._settings)
 
-        return len(prepared_chunks)
+        return ProcessedItemResult(
+            chunk_count=len(prepared_chunks),
+            artifact_summary=artifact_summary,
+        )
+
+    async def _download_embedded_assets(
+        self,
+        client: httpx.AsyncClient,
+        *,
+        html_content: str,
+        base_url: str,
+        tmp_dir: Path,
+    ) -> list[IngestionItem]:
+        asset_urls = self._parse_embedded_asset_urls(html_content)
+        if not asset_urls:
+            return []
+
+        base_parsed = urlparse(base_url)
+        downloaded: list[IngestionItem] = []
+
+        for index, raw_url in enumerate(asset_urls, start=1):
+            if len(downloaded) >= MAX_EMBEDDED_ASSETS:
+                break
+
+            candidate = (raw_url or "").strip()
+            if not candidate or candidate.startswith(("data:", "javascript:", "#")):
+                continue
+
+            absolute = urljoin(base_url, candidate)
+            parsed = urlparse(absolute)
+            if parsed.scheme not in {"http", "https"}:
+                continue
+            if parsed.netloc and parsed.netloc != base_parsed.netloc:
+                continue
+            if not self._is_supported_asset_path(parsed.path):
+                continue
+
+            try:
+                response = await client.get(absolute)
+                response.raise_for_status()
+            except Exception as exc:  # pragma: no cover - network failure
+                logger.debug(
+                    "ingestion-asset-download-error",
+                    extra={"asset_url": absolute, "error": str(exc)},
+                )
+                continue
+
+            content = response.content
+            if not content:
+                continue
+            if len(content) > MAX_EMBEDDED_ASSET_BYTES:
+                logger.debug(
+                    "ingestion-asset-too-large",
+                    extra={"asset_url": absolute, "size": len(content)},
+                )
+                continue
+
+            mime = response.headers.get("content-type")
+            if mime:
+                mime = mime.split(";")[0].strip()
+
+            suffix = Path(parsed.path).suffix
+            if not suffix and mime:
+                suffix = mimetypes.guess_extension(mime) or ""
+            suffix = suffix or ""
+
+            filename = self._unique_asset_filename(tmp_dir, index, suffix)
+            asset_path = tmp_dir / filename
+            try:
+                asset_path.write_bytes(content)
+            except Exception as exc:  # pragma: no cover - filesystem failure
+                logger.debug(
+                    "ingestion-asset-write-error",
+                    extra={"path": str(asset_path), "error": str(exc)},
+                )
+                continue
+
+            inferred_mime = mime or mimetypes.guess_type(asset_path.name)[0]
+            downloaded.append(
+                IngestionItem(
+                    path=asset_path,
+                    uri=absolute,
+                    mime=inferred_mime,
+                    bytes_size=len(content),
+                )
+            )
+
+        return downloaded
+
+    @staticmethod
+    def _parse_embedded_asset_urls(html_content: str) -> list[str]:
+        parser = _AssetHTMLParser()
+        try:
+            parser.feed(html_content)
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.debug("ingestion-asset-parse-error", extra={"error": str(exc)})
+        seen: set[str] = set()
+        results: list[str] = []
+        for url in parser.urls:
+            cleaned = (url or "").strip()
+            if not cleaned or cleaned in seen:
+                continue
+            seen.add(cleaned)
+            results.append(cleaned)
+        return results
+
+    @staticmethod
+    def _is_supported_asset_path(path: str) -> bool:
+        suffix = Path(path).suffix.lower()
+        return suffix in EMBEDDED_ASSET_EXTENSIONS
+
+    @staticmethod
+    def _unique_asset_filename(tmp_dir: Path, index: int, suffix: str) -> str:
+        suffix = suffix if suffix.startswith(".") or not suffix else f".{suffix}"
+        suffix = suffix if suffix else ""
+        stem = f"asset-{index}"
+        candidate = f"{stem}{suffix}"
+        counter = 1
+        while (tmp_dir / candidate).exists():
+            counter += 1
+            candidate = f"{stem}-{counter}{suffix}"
+        return candidate
+
+    def _dedupe_table_chunks(
+        self,
+        existing_chunks: Sequence[DocChunk],
+        candidate_chunks: Sequence[DocChunk],
+    ) -> list[DocChunk]:
+        if not candidate_chunks:
+            return []
+
+        seen_keys: set[str] = set()
+        for chunk in existing_chunks:
+            key = self._table_chunk_key(chunk)
+            if key:
+                seen_keys.add(key)
+
+        deduped: list[DocChunk] = []
+        for chunk in candidate_chunks:
+            key = self._table_chunk_key(chunk)
+            if not key or key in seen_keys:
+                continue
+            seen_keys.add(key)
+            metadata = dict(chunk.metadata or {})
+            metadata.setdefault("content_type", "table")
+            chunk.metadata = metadata
+            deduped.append(chunk)
+
+        return deduped
+
+    @staticmethod
+    def _table_chunk_key(chunk: DocChunk) -> str | None:
+        metadata = chunk.metadata or {}
+        payload = metadata.get("table_data") or metadata.get("table") or chunk.text
+        if not payload:
+            return None
+        try:
+            encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+        except TypeError:
+            encoded = repr(payload)
+        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def _enumerate_local(self, path: Path, *, recursive: bool) -> list[IngestionItem]:
         if not path.exists():
@@ -417,22 +656,30 @@ class IngestionPipeline:
         ) as client:
             response = await client.get(url)
             response.raise_for_status()
+            final_url = str(response.url) if response.url else url
+            html_content = response.text or ""
 
-        html_content = response.text
-        if not html_content:
-            return []
+            page_path = tmp_dir / "page-0.html"
+            page_path.write_text(html_content, encoding="utf-8")
 
-        target = tmp_dir / "page-0.html"
-        target.write_text(html_content, encoding="utf-8")
-        final_url = str(response.url) if response.url else url
-        return [
-            IngestionItem(
-                path=target,
-                uri=final_url,
-                mime="text/html",
-                bytes_size=target.stat().st_size,
+            items: list[IngestionItem] = [
+                IngestionItem(
+                    path=page_path,
+                    uri=final_url,
+                    mime="text/html",
+                    bytes_size=page_path.stat().st_size,
+                )
+            ]
+
+            asset_items = await self._download_embedded_assets(
+                client,
+                html_content=html_content,
+                base_url=final_url,
+                tmp_dir=tmp_dir,
             )
-        ]
+            items.extend(asset_items)
+
+        return items
 
     @staticmethod
     def _determine_source(mime: str | None, *, from_web: bool) -> DocumentSource:
@@ -476,3 +723,35 @@ class IngestionPipeline:
         if self._settings.ingest_accelerator == "gpu":
             configured = min(configured, 2)  # Limit for GPU memory
         return max(1, min(configured, cpu_limit, 18))
+
+
+class _AssetHTMLParser(HTMLParser):
+    """Lightweight HTML parser to collect embedded asset URLs."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.urls: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_map = dict(attrs)
+
+        def _push(value: str | None) -> None:
+            if value:
+                self.urls.append(value)
+
+        tag = tag.lower()
+        if tag == "img":
+            _push(attr_map.get("src"))
+            _push(attr_map.get("data-src"))
+            _push(attr_map.get("data-original"))
+        elif tag in {"source", "track"}:
+            _push(attr_map.get("src"))
+        elif tag == "object":
+            _push(attr_map.get("data"))
+        elif tag in {"embed", "video"}:
+            _push(attr_map.get("src"))
+            _push(attr_map.get("poster"))
+        elif tag == "a":
+            _push(attr_map.get("href"))
+        elif tag == "link":
+            _push(attr_map.get("href"))
