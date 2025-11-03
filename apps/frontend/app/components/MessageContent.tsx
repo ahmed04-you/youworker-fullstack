@@ -34,7 +34,7 @@ function MessageContent({ content, isStreaming = false }: MessageContentProps) {
   const [renderedContent, setRenderedContent] = useState("");
   const contentRef = useRef(content);
   const lastUpdateRef = useRef(0);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     contentRef.current = content;

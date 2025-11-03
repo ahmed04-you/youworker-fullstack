@@ -7,7 +7,7 @@ interface ChatComposerProps {
   onSend?: (message: string) => void;
   onAudioSend?: (audioBlob: Blob, expectAudio: boolean) => void;
   isLoading?: boolean;
-  scrollContainerRef?: React.RefObject<HTMLDivElement>;
+  scrollContainerRef?: React.RefObject<HTMLDivElement | null>;
   hasMessages?: boolean;
   expectAudio?: boolean;
   onExpectAudioChange?: (enabled: boolean) => void;
