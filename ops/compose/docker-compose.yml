@@ -208,29 +208,6 @@ services:
       api:
         condition: service_healthy
 
-  frontend:
-    build:
-      context: ../..
-      dockerfile: ops/docker/Dockerfile.frontend
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8001}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8001}
-        NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-}
-    container_name: youworker-frontend
-    restart: unless-stopped
-    env_file:
-      - ../../.env
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8001}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-ws://localhost:8001}
-      NEXT_PUBLIC_API_KEY: ${NEXT_PUBLIC_API_KEY:-}
-      NODE_ENV: production
-    ports:
-      - "3000:3000"
-    depends_on:
-      api:
-        condition: service_healthy
-
 networks:
   default:
     name: youworker-network

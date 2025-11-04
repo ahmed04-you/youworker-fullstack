@@ -702,7 +702,7 @@ async def stream_audio_response(connection_id: str, text: str):
         )
 
         # Generate audio (non-streaming for now)
-        audio_result = await synthesize_speech(text, fallback=True)
+        audio_result = await synthesize_speech(text)
         if audio_result:
             wav_bytes, sample_rate = audio_result
             # Encode as base64
@@ -831,7 +831,7 @@ async def unified_chat_endpoint(
     audio_sample_rate = None
     if request.expect_audio and final_text:
         try:
-            synth_result = await synthesize_speech(final_text, fallback=True)
+            synth_result = await synthesize_speech(final_text)
             if synth_result:
                 wav_bytes, sr = synth_result
                 audio_b64 = base64.b64encode(wav_bytes).decode("ascii")

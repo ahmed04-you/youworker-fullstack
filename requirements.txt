@@ -23,8 +23,9 @@ tenacity
 
 # Voice mode dependencies
 numpy
-faster-whisper
-piper-tts
+faster-whisper>=1.1.0  # Updated for RTX 5080 / Blackwell support
+ctranslate2>=4.6.0     # Latest stable version
+kokoro-onnx
 
 # Document parsing
 pandas

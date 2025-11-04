@@ -2,10 +2,91 @@
  * Base API client for making requests to the backend
  */
 
+const FALLBACK_INTERNAL_URL = 'http://api:8001';
+const FALLBACK_PUBLIC_URL = 'http://localhost:8001';
+
+const LOCAL_HOSTNAME_PATTERNS = [
+  /^localhost$/i,
+  /^127\./,
+  /^0\.0\.0\.0$/,
+  /\.local$/i,
+];
+
+function parseHostname(url?: string | null): string | null {
+  if (!url) {
+    return null;
+  }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function isLocalHostname(hostname?: string | null): boolean {
+  if (!hostname) {
+    return false;
+  }
+  return LOCAL_HOSTNAME_PATTERNS.some((pattern) => pattern.test(hostname));
+}
+
+function resolveBrowserBaseUrl(envBase?: string): string | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  const origin = window.location.origin;
+  const envHost = parseHostname(envBase);
+  const originHost = parseHostname(origin);
+
+  if (!envBase) {
+    return origin;
+  }
+
+  if (envHost && originHost && isLocalHostname(envHost) && !isLocalHostname(originHost)) {
+    return origin;
+  }
+
+  return envBase;
+}
+
+function resolveServerBaseUrl(envInternal?: string, envPublic?: string): string {
+  const candidate = envInternal || envPublic;
+  const nodeEnv = typeof process !== 'undefined' ? process.env.NODE_ENV : undefined;
+
+  if (candidate) {
+    const candidateHost = parseHostname(candidate);
+    if (candidateHost && !isLocalHostname(candidateHost)) {
+      return candidate;
+    }
+
+    if (candidateHost && isLocalHostname(candidateHost) && nodeEnv === 'production') {
+      return FALLBACK_INTERNAL_URL;
+    }
+
+    if (!candidateHost) {
+      return candidate;
+    }
+  }
+
+  if (envInternal && isLocalHostname(parseHostname(envInternal))) {
+    return FALLBACK_INTERNAL_URL;
+  }
+
+  return candidate || FALLBACK_INTERNAL_URL;
+}
+
 // Use internal URL for server-side requests (SSR in Docker), public URL for client-side (browser)
-const API_BASE_URL = typeof window === 'undefined'
-  ? (process.env.NEXT_INTERNAL_API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001')
-  : (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8001');
+const API_BASE_URL = (() => {
+  const envInternal = process.env.NEXT_INTERNAL_API_BASE_URL;
+  const envPublic = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+  if (typeof window === 'undefined') {
+    return resolveServerBaseUrl(envInternal, envPublic);
+  }
+
+  return resolveBrowserBaseUrl(envPublic) || FALLBACK_PUBLIC_URL;
+})();
 
 export interface ApiError {
   message: string;

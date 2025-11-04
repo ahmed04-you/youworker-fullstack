@@ -7,7 +7,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 
-from apps.api.audio_pipeline import FW_AVAILABLE as STT_AVAILABLE, PIPER_AVAILABLE as TTS_AVAILABLE
+from apps.api.audio_pipeline import (
+    FW_AVAILABLE as STT_AVAILABLE,
+    KOKORO_AVAILABLE as TTS_AVAILABLE,
+)
 from apps.api.routes.deps import (
     get_agent_loop_optional,
     get_ollama_client_optional,

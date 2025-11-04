@@ -4,6 +4,24 @@ from __future__ import annotations
 
 import logging
 
+PLACEHOLDER_VALUES = {
+    "transcribing...",
+    "transcribing audio...",
+}
+
+def _normalize_message_content(content: str | None) -> str | None:
+    """
+    Replace transcription placeholder text with a clearer fallback message.
+    """
+    if content is None:
+        return None
+
+    normalized = content.strip()
+    if normalized.lower() in PLACEHOLDER_VALUES:
+        return "Audio message (transcription unavailable)"
+
+    return content
+
 from packages.common.exceptions import ResourceNotFoundError
 from packages.db.repositories import ChatRepository, ToolRepository
 
@@ -111,7 +129,7 @@ class SessionService:
             {
                 "id": m.id,
                 "role": m.role,
-                "content": m.content,
+                "content": _normalize_message_content(m.content),
                 "tool_call_name": m.tool_call_name,
                 "tool_call_id": m.tool_call_id,
                 "created_at": m.created_at.isoformat(),

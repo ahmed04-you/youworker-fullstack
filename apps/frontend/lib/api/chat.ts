@@ -17,6 +17,7 @@ import type {
   SSETokenEvent,
   SSEToolEvent,
   SSETranscriptEvent,
+  SSEAudioEvent,
 } from '../types';
 
 // ============================================================================
@@ -110,6 +111,7 @@ export interface StreamCallbacks {
   onToken?: (token: SSETokenEvent) => void;
   onTool?: (event: SSEToolEvent) => void;
   onTranscript?: (event: SSETranscriptEvent) => void;
+  onAudio?: (event: SSEAudioEvent) => void;
   onDone?: (response: SSEDoneEvent) => void;
   onError?: (error: Error) => void;
   onComplete?: () => void;
@@ -273,6 +275,8 @@ function handleSSEEvent(event: string, data: string, callbacks: StreamCallbacks)
       callbacks.onTool?.(parsed as SSEToolEvent);
     } else if (normalizedEvent.startsWith('log')) {
       callbacks.onLog?.(parsed as SSELogEvent);
+    } else if (normalizedEvent.startsWith('audio')) {
+      callbacks.onAudio?.(parsed as SSEAudioEvent);
     } else if (normalizedEvent.startsWith('done')) {
       callbacks.onDone?.(parsed as SSEDoneEvent);
     } else {

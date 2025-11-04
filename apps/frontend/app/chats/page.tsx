@@ -68,6 +68,24 @@ function formatLatency(latencyMs?: number): string | undefined {
   return `${seconds.toFixed(seconds >= 10 ? 0 : 1)} s`;
 }
 
+const TRANSCRIBING_PLACEHOLDER = "Transcribing...";
+const TRANSCRIBING_AUDIO_PLACEHOLDER = "Transcribing audio...";
+const AUDIO_TRANSCRIPTION_FALLBACK = "Audio message (transcription unavailable)";
+
+function normalizeMessageContent(message: Message): Message {
+  const raw = (message.content ?? "").trim();
+  if (
+    message.role === "user" &&
+    (raw === TRANSCRIBING_PLACEHOLDER || raw === TRANSCRIBING_AUDIO_PLACEHOLDER)
+  ) {
+    return {
+      ...message,
+      content: AUDIO_TRANSCRIPTION_FALLBACK,
+    };
+  }
+  return message;
+}
+
 function integrateToolEvent(
   previous: ToolRunDisplay[],
   event: ToolEvent,
@@ -116,6 +134,14 @@ function integrateToolEvent(
 
   return updated;
 }
+
+type TranscriptionState = {
+  tempId: string;
+  text: string;
+  partial: boolean;
+  confidence: number | null;
+  language: string | null;
+};
 
 type StoredActiveSession = {
   id: number | null;
@@ -273,23 +299,28 @@ export default function Chats() {
   const [hasToolEvents, setHasToolEvents] = useState(false);
   const [expectAudio, setExpectAudio] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionState, setTranscriptionState] = useState<{
-    tempId: string;
-    text: string;
-    partial: boolean;
-    confidence?: number | null;
-    language?: string | null;
-  } | null>(null);
+  const [transcriptionState, setTranscriptionState] = useState<TranscriptionState | null>(null);
+  const transcriptionStateRef = useRef<TranscriptionState | null>(null);
   const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const streamingContentRef = useRef<string>("");
   const sessionInitializedRef = useRef<boolean>(false);
+  const skipNextLoadRef = useRef<boolean>(false);
 
   useEffect(() => {
     persistActiveSession(activeSessionId, activeSessionExternalId);
   }, [activeSessionId, activeSessionExternalId]);
+
+  useEffect(() => {
+    transcriptionStateRef.current = transcriptionState;
+  }, [transcriptionState]);
+
+  const clearTranscriptionState = useCallback(() => {
+    transcriptionStateRef.current = null;
+    setTranscriptionState(null);
+  }, []);
 
   const updateStreamingContent = (updater: string | ((prev: string) => string)) => {
     setStreamingContent((prev) => {
@@ -474,7 +505,8 @@ export default function Chats() {
       setIsLoadingMessages(true);
       setError(null);
       const response = await getSession(sessionId);
-      setMessages(response.messages || []);
+      const sanitizedMessages = (response.messages || []).map(normalizeMessageContent);
+      setMessages(sanitizedMessages);
       setToolEventsFromList(response.tool_events);
 
       const externalId = response.session?.external_id ?? null;
@@ -551,13 +583,26 @@ export default function Chats() {
   useEffect(() => {
     console.log("activeSessionId changed to:", activeSessionId);
 
+    // Don't reload messages while sending to avoid overwriting streamed content
+    if (isSending) {
+      console.log("Skipping message load - send in progress");
+      return;
+    }
+
+    // Skip next load if we just finished streaming (to avoid overwriting local state)
+    if (skipNextLoadRef.current) {
+      console.log("Skipping message load - just finished streaming");
+      skipNextLoadRef.current = false;
+      return;
+    }
+
     if (activeSessionId !== null) {
       console.log("Loading messages for session:", activeSessionId);
       loadMessages(activeSessionId);
     } else {
       console.log("activeSessionId is null, not loading messages");
     }
-  }, [activeSessionId, loadMessages]);
+  }, [activeSessionId, loadMessages, isSending]);
 
   const handleSendMessage = async (content: string, retryCount = 0) => {
     const trimmed = content.trim();
@@ -658,19 +703,52 @@ export default function Chats() {
               sessionExternalMeta
             });
 
-            if (sessionIdMeta !== undefined && sessionIdMeta !== null) {
+            // Only update session IDs if they've actually changed
+            // to avoid triggering unnecessary message reloads
+            const sessionIdChanged = sessionIdMeta !== undefined &&
+                                    sessionIdMeta !== null &&
+                                    Number(sessionIdMeta) !== requestSessionId;
+
+            if (sessionIdChanged) {
               const numericId = Number(sessionIdMeta);
               if (!Number.isNaN(numericId)) {
+                // Set flag to skip the next message load since we already have the messages
+                skipNextLoadRef.current = true;
                 setActiveSessionId(numericId);
               }
             }
 
-            if (sessionExternalMeta) {
+            if (sessionExternalMeta && sessionExternalMeta !== requestSessionExternalId) {
               setActiveSessionExternalId(String(sessionExternalMeta));
             }
 
             // Update session ID if this was a new conversation
             void loadSessions(); // Refresh sessions list
+
+            // Play TTS audio if available
+            if (response.audio_b64 && response.audio_sample_rate) {
+              try {
+                const binaryString = atob(response.audio_b64);
+                const bytes = new Uint8Array(binaryString.length);
+                for (let i = 0; i < binaryString.length; i++) {
+                  bytes[i] = binaryString.charCodeAt(i);
+                }
+                const blob = new Blob([bytes], { type: "audio/wav" });
+                const audioUrl = URL.createObjectURL(blob);
+                const audio = new Audio(audioUrl);
+                audio.onended = () => URL.revokeObjectURL(audioUrl);
+                audio.onerror = (error) => {
+                  console.error("Audio playback error:", error);
+                  URL.revokeObjectURL(audioUrl);
+                };
+                audio.play().catch((error) => {
+                  console.error("Failed to play TTS audio:", error);
+                  URL.revokeObjectURL(audioUrl);
+                });
+              } catch (err) {
+                console.error("Failed to decode TTS audio:", err);
+              }
+            }
 
             updateStreamingContent("");
             setStreamingStatus("");
@@ -760,16 +838,20 @@ export default function Chats() {
 
     const transcribingMessage: Message = {
       role: "user",
-      content: "Transcribing...",
+      content: "",
       tempId: placeholderId,
     };
     setMessages((prev) => [...prev, transcribingMessage]);
-    setTranscriptionState({
-      tempId: placeholderId,
-      text: "",
-      partial: true,
-      confidence: null,
-      language: null,
+    setTranscriptionState(() => {
+      const next: TranscriptionState = {
+        tempId: placeholderId,
+        text: "",
+        partial: true,
+        confidence: null,
+        language: null,
+      };
+      transcriptionStateRef.current = next;
+      return next;
     });
 
     const handleTranscriptUpdate = (event?: SSETranscriptEvent) => {
@@ -791,20 +873,32 @@ export default function Chats() {
         const previousText = prev?.text?.trim() ?? "";
         const nextText = incomingText || liveTranscript || previousText;
 
-        return {
+        const next: TranscriptionState = {
           tempId: placeholderId,
           text: nextText,
           partial: !isFinal,
           confidence: event.confidence ?? prev?.confidence ?? null,
           language: event.language ?? prev?.language ?? null,
         };
+        transcriptionStateRef.current = next;
+        return next;
       });
 
       const updatedText = incomingText || liveTranscript || "";
       if (updatedText) {
         setMessages((prev) =>
           prev.map((msg) =>
-            msg.tempId === placeholderId ? { ...msg, content: updatedText } : msg
+            msg.tempId === placeholderId
+              ? normalizeMessageContent({ ...msg, content: updatedText })
+              : msg
+          )
+        );
+      } else if (isFinal) {
+        setMessages((prev) =>
+          prev.map((msg) =>
+            msg.tempId === placeholderId
+              ? { ...msg, content: AUDIO_TRANSCRIPTION_FALLBACK }
+              : msg
           )
         );
       }
@@ -866,22 +960,55 @@ export default function Chats() {
               return;
             }
 
+            const metadataTranscript = (() => {
+              const meta = response.metadata as Record<string, unknown> | undefined;
+              if (!meta) {
+                return "";
+              }
+              const raw = meta.input_transcript as Record<string, unknown> | undefined;
+              if (raw && typeof raw === "object") {
+                const textValue = raw.text;
+                if (typeof textValue === "string") {
+                  return textValue;
+                }
+              }
+              return "";
+            })();
+            const activeTranscript = transcriptionStateRef.current?.text ?? "";
+            const resolvedTranscript = (
+              response.transcript
+              || metadataTranscript
+              || liveTranscript
+              || activeTranscript
+              || ""
+            ).trim();
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.tempId === placeholderId
-                  ? {
-                      ...msg,
-                      content: response.transcript || liveTranscript || msg.content || "...",
-                      tempId: undefined,
-                    }
-                  : msg
-              )
+              prev.map((msg) => {
+                if (msg.tempId !== placeholderId) {
+                  return msg;
+                }
+                const existing = (msg.content ?? "").trim();
+                const nextContent = resolvedTranscript
+                  || (existing &&
+                      existing !== TRANSCRIBING_PLACEHOLDER &&
+                      existing !== TRANSCRIBING_AUDIO_PLACEHOLDER
+                    ? existing
+                    : AUDIO_TRANSCRIPTION_FALLBACK);
+                return normalizeMessageContent({
+                  ...msg,
+                  content: nextContent,
+                  tempId: undefined,
+                });
+              })
             );
-            setTranscriptionState(null);
+            clearTranscriptionState();
 
             const finalText = (response.content || assistantBuffer || "").trim();
             if (finalText) {
-              setMessages((prev) => [...prev, { role: "assistant", content: finalText }]);
+              setMessages((prev) => [
+                ...prev,
+                normalizeMessageContent({ role: "assistant", content: finalText }),
+              ]);
             }
 
             if (response.audio_b64 && response.audio_sample_rate) {
@@ -913,6 +1040,8 @@ export default function Chats() {
               const newSessionExternalId = response.metadata.session_external_id as string | undefined;
 
               if (newSessionId && !requestSessionId) {
+                // Set flag to skip the next message load since we already have the messages
+                skipNextLoadRef.current = true;
                 setActiveSessionId(newSessionId);
                 void loadSessions();
               }
@@ -933,13 +1062,13 @@ export default function Chats() {
             setIsTranscribing(false);
             setStreamingContent("");
             setStreamingStatus("");
-            setTranscriptionState(null);
+            clearTranscriptionState();
             setMessages((prev) => prev.filter((msg) => msg.tempId !== placeholderId));
           },
           onComplete: () => {
             setIsSending(false);
             setIsTranscribing(false);
-            setTranscriptionState(null);
+            clearTranscriptionState();
             setStreamingStatus("");
           },
         },
@@ -952,7 +1081,7 @@ export default function Chats() {
       setIsTranscribing(false);
       setStreamingContent("");
       setStreamingStatus("");
-      setTranscriptionState(null);
+      clearTranscriptionState();
       setMessages((prev) => prev.filter((msg) => msg.tempId !== placeholderId));
     }
   };
@@ -1222,14 +1351,16 @@ export default function Chats() {
                 ) : (
                   <>
                     {messages.map((message, index) => {
-                      const isActiveTranscript = transcriptionState?.tempId === message.tempId;
+                      const transcriptTempId = transcriptionState?.tempId;
+                      const messageTempId = message.tempId;
+                      const isActiveTranscript = Boolean(
+                        transcriptTempId && messageTempId && transcriptTempId === messageTempId
+                      );
                       const activeTranscriptText = isActiveTranscript ? transcriptionState?.text ?? "" : "";
                       const hasTranscriptText = activeTranscriptText.trim().length > 0;
                       const displayContent =
                         isActiveTranscript && hasTranscriptText ? activeTranscriptText : message.content;
-                      const showTranscribingIndicator = isActiveTranscript
-                        ? !hasTranscriptText
-                        : displayContent === "Transcribing...";
+                      const showTranscribingIndicator = isActiveTranscript && !hasTranscriptText;
 
                       return (
                         <div key={index} className={`message-wrapper ${message.role}`}>

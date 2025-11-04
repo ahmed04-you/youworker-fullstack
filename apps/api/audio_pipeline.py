@@ -21,12 +21,12 @@ import numpy as np
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
-    from piper import PiperVoice
+    from kokoro_onnx import Kokoro
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Optional dependencies (faster-whisper for STT, piper for TTS)
+# Optional dependencies (faster-whisper for STT, Kokoro for TTS)
 # ---------------------------------------------------------------------------
 
 try:  # pragma: no cover - optional dependency
@@ -37,34 +37,30 @@ except Exception:  # pragma: no cover
     FW_AVAILABLE = False
 
 try:  # pragma: no cover - optional dependency
-    from piper import PiperVoice  # type: ignore
+    from kokoro_onnx import Kokoro  # type: ignore
 
-    PIPER_AVAILABLE = True
+    KOKORO_AVAILABLE = True
 except Exception:  # pragma: no cover
-    PIPER_AVAILABLE = False
+    KOKORO_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Globals for lazy-loading heavy models
 # ---------------------------------------------------------------------------
 WHISPER_MODEL: WhisperModel | None = None
 WHISPER_LOCK = asyncio.Lock()
-PIPER_VOICE: PiperVoice | None = None
-PIPER_VOICE_NAME: str | None = None
-PIPER_LOCK = asyncio.Lock()
+KOKORO_ENGINE: "Kokoro | None" = None
+KOKORO_VOICE_NAME: str | None = None
+KOKORO_LOCK = asyncio.Lock()
 
 WHISPER_TARGET_SR = 16000
 
-PIPER_BASE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
-PIPER_VOICE_REGISTRY: dict[str, tuple[str, str]] = {
-    "it_IT-riccardo-x_low": (
-        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx",
-        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json",
-    ),
-    "it_IT-paola-medium": (
-        "it/it_IT/paola/medium/it_IT-paola-medium.onnx",
-        "it/it_IT/paola/medium/it_IT-paola-medium.onnx.json",
-    ),
-}
+KOKORO_RELEASE_VERSION = os.getenv("KOKORO_RELEASE_VERSION", "v1.0.0")
+KOKORO_ASSETS_BASE = os.getenv(
+    "KOKORO_ASSETS_BASE_URL",
+    f"https://github.com/nazdridoy/kokoro-tts/releases/download/{KOKORO_RELEASE_VERSION}",
+)
+KOKORO_MODEL_FILENAME_DEFAULT = "kokoro-v1.0.onnx"
+KOKORO_VOICES_FILENAME_DEFAULT = "voices-v1.0.bin"
 
 
 MARKDOWN_CODE_BLOCK_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -116,6 +112,16 @@ def sanitize_tts_text(text: str, *, collapse_whitespace: bool = True) -> str:
     cleaned = MARKDOWN_TABLE_BORDER_RE.sub(" ", cleaned)
     # Strip emphasis markers
     cleaned = re.sub(r"[*_~`]", " ", cleaned)
+    # Normalize newlines into natural speech pauses
+    cleaned = cleaned.replace("\r\n", "\n")
+
+    def _newline_to_pause(match: re.Match) -> str:
+        trimmed = match.string[: match.start()].rstrip()
+        if trimmed and trimmed[-1] in ".?!;:,":
+            return " "
+        return ". "
+
+    cleaned = re.sub(r"\n+", _newline_to_pause, cleaned)
     if collapse_whitespace:
         cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.strip()
@@ -179,36 +185,43 @@ def _ensure_pcm16(audio_bytes: bytes, sample_rate: int) -> tuple[bytes, int]:
     return audio_bytes, sample_rate
 
 
-def _ensure_piper_voice_files(voice_name: str, model_dir: str) -> bool:
-    """Ensure Piper voice files are present locally."""
+def _ensure_kokoro_assets(model_dir: str) -> tuple[Path, Path] | None:
+    """Ensure Kokoro model and voices files are present locally."""
 
-    info = PIPER_VOICE_REGISTRY.get(voice_name)
-    if info is None:
-        logger.warning("Unknown Piper voice '%s'", voice_name)
-        return False
+    model_path_env = os.getenv("KOKORO_MODEL_PATH")
+    voices_path_env = os.getenv("KOKORO_VOICES_PATH")
 
-    onnx_rel, json_rel = info
     target_dir = Path(model_dir)
     target_dir.mkdir(parents=True, exist_ok=True)
-    onnx_path = target_dir / f"{voice_name}.onnx"
-    json_path = target_dir / f"{voice_name}.onnx.json"
 
-    if onnx_path.exists() and json_path.exists():
-        return True
+    model_filename = os.getenv("KOKORO_MODEL_FILENAME", KOKORO_MODEL_FILENAME_DEFAULT)
+    voices_filename = os.getenv("KOKORO_VOICES_FILENAME", KOKORO_VOICES_FILENAME_DEFAULT)
 
-    onnx_url = f"{PIPER_BASE_URL}/{onnx_rel}"
-    json_url = f"{PIPER_BASE_URL}/{json_rel}"
-    downloads: list[tuple[str, Path]] = [
-        (onnx_url, onnx_path),
-        (json_url, json_path),
-    ]
+    model_path = Path(model_path_env) if model_path_env else target_dir / model_filename
+    voices_path = Path(voices_path_env) if voices_path_env else target_dir / voices_filename
+
+    downloads: list[tuple[str, Path]] = []
+
+    if not model_path.exists():
+        if model_path_env:
+            logger.error("Kokoro model not found at configured path: %s", model_path)
+            return None
+        model_url = os.getenv("KOKORO_MODEL_URL") or f"{KOKORO_ASSETS_BASE}/{model_filename}"
+        downloads.append((model_url, model_path))
+
+    if not voices_path.exists():
+        if voices_path_env:
+            logger.error("Kokoro voices file not found at configured path: %s", voices_path)
+            return None
+        voices_url = os.getenv("KOKORO_VOICES_URL") or f"{KOKORO_ASSETS_BASE}/{voices_filename}"
+        downloads.append((voices_url, voices_path))
 
     def _download(url: str, dest: Path) -> None:
         temp_file: Path | None = None
         try:
             with tempfile.NamedTemporaryFile(delete=False, dir=str(dest.parent)) as tmp:
                 temp_file = Path(tmp.name)
-            logger.info("Downloading Piper voice asset '%s' -> %s", url, dest)
+            logger.info("Downloading Kokoro asset '%s' -> %s", url, dest)
             urlretrieve(url, temp_file)
             if not temp_file.exists() or temp_file.stat().st_size == 0:
                 raise RuntimeError(f"Empty download from {url}")
@@ -219,16 +232,18 @@ def _ensure_piper_voice_files(voice_name: str, model_dir: str) -> bool:
                     temp_file.unlink(missing_ok=True)
             raise
 
-    try:
-        for url, dest in downloads:
-            _download(url, dest)
-        return True
-    except Exception as exc:  # pragma: no cover - network dependant
-        logger.error("Failed to download Piper voice '%s': %s", voice_name, exc, exc_info=True)
-        with contextlib.suppress(Exception):
-            onnx_path.unlink(missing_ok=True)
-            json_path.unlink(missing_ok=True)
-        return False
+    if downloads:
+        try:
+            for url, dest in downloads:
+                _download(url, dest)
+        except Exception as exc:  # pragma: no cover - network dependant
+            logger.error("Failed to download Kokoro assets: %s", exc, exc_info=True)
+            with contextlib.suppress(Exception):
+                model_path.unlink(missing_ok=True)
+                voices_path.unlink(missing_ok=True)
+            return None
+
+    return model_path, voices_path
 
 
 class StreamingAudioProcessor:
@@ -429,64 +444,143 @@ async def _load_whisper() -> WhisperModel | None:
     return WHISPER_MODEL
 
 
-async def _load_piper_voice() -> PiperVoice | None:
-    """Lazy-load Piper TTS voice."""
-    global PIPER_VOICE
-    global PIPER_VOICE_NAME
-    if not PIPER_AVAILABLE:  # pragma: no cover - dependency optional
-        logger.warning("piper not available; TTS disabled")
+KOKORO_VOICE_PRIORITY = ["if_sara", "im_nicola"]
+
+
+def _resolve_kokoro_voice(engine: "Kokoro") -> str | None:
+    """Determine which Kokoro voice to use, preferring high-quality Italian options."""
+    requested_voice = (os.getenv("TTS_VOICE") or "").strip()
+    available = set(engine.get_voices())
+
+    if requested_voice and requested_voice in available:
+        return requested_voice
+
+    if requested_voice and requested_voice not in available:
+        logger.warning(
+            "Requested Kokoro voice '%s' unavailable; searching for Italian alternatives",
+            requested_voice,
+        )
+
+    for candidate in KOKORO_VOICE_PRIORITY:
+        if candidate in available:
+            if requested_voice and requested_voice != candidate:
+                logger.info("Falling back to Kokoro voice '%s'", candidate)
+            return candidate
+
+    if available:
+        fallback = sorted(available)[0]
+        logger.warning(
+            "No preferred Kokoro Italian voice available; falling back to '%s'", fallback
+        )
+        return fallback
+
+    logger.error("No Kokoro voices available in loaded assets")
+    return None
+
+
+def _resolve_kokoro_language() -> str:
+    language = (os.getenv("TTS_LANGUAGE") or "").strip().lower()
+    if not language:
+        language = "it"
+    return language
+
+
+def _resolve_kokoro_speed() -> float:
+    speed_env = os.getenv("TTS_SPEED", "1.0")
+    try:
+        speed = float(speed_env)
+    except ValueError:
+        logger.warning("Invalid TTS_SPEED '%s'; defaulting to 1.0", speed_env)
+        speed = 1.0
+    return max(0.5, min(2.0, speed))
+
+
+async def _load_kokoro_engine() -> "Kokoro | None":
+    """Lazy-load Kokoro TTS engine and ensure assets exist."""
+    global KOKORO_ENGINE
+    global KOKORO_VOICE_NAME
+
+    if not KOKORO_AVAILABLE:  # pragma: no cover - dependency optional
+        logger.warning("kokoro-onnx not available; TTS disabled")
         return None
 
-    if PIPER_VOICE is not None:
-        return PIPER_VOICE
+    if KOKORO_ENGINE is not None:
+        return KOKORO_ENGINE
 
-    async with PIPER_LOCK:
-        if PIPER_VOICE is not None:
-            return PIPER_VOICE
+    async with KOKORO_LOCK:
+        if KOKORO_ENGINE is not None:
+            return KOKORO_ENGINE
 
         loop = asyncio.get_running_loop()
-        voice_name = os.getenv("TTS_VOICE", "it_IT-paola-medium")
-        model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
-        provider = os.getenv("TTS_PROVIDER", "piper")
-        fallback_voice = os.getenv("TTS_FALLBACK_VOICE", "it_IT-riccardo-x_low")
-
-        if provider != "piper":
-            logger.info("TTS provider set to %s, skipping Piper voice load", provider)
+        provider = (os.getenv("TTS_PROVIDER") or "kokoro").strip().lower()
+        if provider not in {"kokoro", "kokoro-onnx"}:
+            logger.info("TTS provider set to %s, skipping Kokoro load", provider)
             return None
 
-        async def load_candidate(name: str) -> PiperVoice | None:
-            if not _ensure_piper_voice_files(name, model_dir):
-                return None
+        model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
+        assets = _ensure_kokoro_assets(model_dir)
+        if assets is None:
+            logger.error("Unable to prepare Kokoro assets; TTS disabled")
+            return None
 
-            model_path = os.path.join(model_dir, f"{name}.onnx")
-            logger.info("Loading Piper TTS voice '%s' from %s", name, model_path)
+        model_path, voices_path = assets
+        logger.info("Loading Kokoro TTS (model=%s, voices=%s)", model_path, voices_path)
 
-            def _load() -> PiperVoice:
-                return PiperVoice.load(model_path)
+        def _load() -> Kokoro:
+            return Kokoro(str(model_path), str(voices_path))
 
-            try:
-                return await loop.run_in_executor(None, _load)
-            except (RuntimeError, ImportError, FileNotFoundError) as exc:  # pragma: no cover
-                logger.error("Failed to load Piper voice '%s': %s", name, exc)
-                return None
+        try:
+            KOKORO_ENGINE = await loop.run_in_executor(None, _load)
+        except (RuntimeError, ImportError, FileNotFoundError, AssertionError) as exc:  # pragma: no cover
+            logger.error("Failed to initialize Kokoro TTS engine: %s", exc)
+            KOKORO_ENGINE = None
+            return None
 
-        for candidate in dict.fromkeys([voice_name, fallback_voice]):  # preserve order, drop dups
-            if not candidate:
-                continue
-            PIPER_VOICE = await load_candidate(candidate)
-            if PIPER_VOICE is not None:
-                PIPER_VOICE_NAME = candidate
-                logger.info("Piper voice ready: %s", candidate)
-                break
+        voice_name = _resolve_kokoro_voice(KOKORO_ENGINE)
+        if not voice_name:
+            KOKORO_ENGINE = None
+            return None
 
-        if PIPER_VOICE is None:
-            logger.error(
-                "Unable to initialize any Piper voice (primary=%s fallback=%s)",
-                voice_name,
-                fallback_voice,
-            )
+        KOKORO_VOICE_NAME = voice_name
+        logger.info(
+            "Kokoro TTS ready with voice '%s' (language=%s, speed=%.2f)",
+            voice_name,
+            _resolve_kokoro_language(),
+            _resolve_kokoro_speed(),
+        )
 
-    return PIPER_VOICE
+    return KOKORO_ENGINE
+
+
+def _generate_kokoro_wav(engine: "Kokoro", text: str) -> tuple[bytes, int]:
+    """Generate WAV bytes using the Kokoro engine."""
+    global KOKORO_VOICE_NAME
+
+    voice_name = _resolve_kokoro_voice(engine)
+    if not voice_name:
+        raise RuntimeError("No Kokoro voice available for synthesis")
+
+    if KOKORO_VOICE_NAME != voice_name:
+        KOKORO_VOICE_NAME = voice_name
+
+    language = _resolve_kokoro_language()
+    speed = _resolve_kokoro_speed()
+
+    preview = text[:100] + "..." if len(text) > 100 else text
+    logger.info(
+        "Starting Kokoro synthesis (voice=%s, lang=%s, speed=%.2f, text=%s)",
+        voice_name,
+        language,
+        speed,
+        preview,
+    )
+
+    audio, sample_rate = engine.create(text, voice=voice_name, lang=language, speed=speed)
+    clipped = np.clip(audio, -1.0, 1.0)
+    pcm16 = (clipped * 32767.0).astype(np.int16).tobytes()
+    wav_bytes = _pcm16_to_wav(pcm16, int(sample_rate))
+    logger.info("Generated Kokoro WAV: %d bytes at %d Hz", len(wav_bytes), int(sample_rate))
+    return wav_bytes, int(sample_rate)
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -613,15 +707,13 @@ async def stream_synthesize_speech(
     text: str,
     *,
     chunk_size: int = 1024,
-    fallback: bool = True,
 ) -> AsyncGenerator[tuple[bytes, int], None]:
     """
-    Stream speech synthesis in chunks.
+    Stream speech synthesis in chunks using Kokoro TTS.
 
     Args:
         text: Text to synthesize
         chunk_size: Size of audio chunks to yield
-        fallback: Whether to use fallback synthesis
 
     Yields:
         Tuples of (audio_chunk, sample_rate)
@@ -632,75 +724,27 @@ async def stream_synthesize_speech(
         if not cleaned:
             return
 
-    voice = await _load_piper_voice()
-
-    if voice:
-
-        def _synthesize_stream():
-            logger.info(
-                "Starting Piper synthesis for text: %s",
-                cleaned[:100] + "..." if len(cleaned) > 100 else cleaned,
-            )
-
-            # Use synthesize method to get audio chunks
-            audio_chunks = []
-            sample_rate = (
-                voice.config.sample_rate
-                if hasattr(voice, "config") and hasattr(voice.config, "sample_rate")
-                else 22050
-            )
-
-            # Generate full audio first
-            with io.BytesIO() as wav_buffer:
-                with wave.open(wav_buffer, "wb") as wav_file:
-                    voice.synthesize_wav(cleaned, wav_file)
-                wav_bytes = wav_buffer.getvalue()
-
-            # Split into chunks
-            for i in range(0, len(wav_bytes), chunk_size):
-                chunk = wav_bytes[i : i + chunk_size]
-                audio_chunks.append((chunk, sample_rate))
-
-            return audio_chunks
-
-        loop = asyncio.get_running_loop()
-        try:
-            chunks = await loop.run_in_executor(None, _synthesize_stream)
-            for chunk in chunks:
-                yield chunk
-        except (RuntimeError, ValueError) as exc:  # pragma: no cover
-            logger.error("Piper synthesis failed: %s", exc, exc_info=True)
-
-    if not fallback:
+    engine = await _load_kokoro_engine()
+    if not engine:
+        logger.error("Kokoro engine not available, cannot synthesize speech")
         return
 
-    # Fallback: use espeak-ng for TTS
+    def _synthesize_stream():
+        wav_bytes, sample_rate = _generate_kokoro_wav(engine, cleaned)
+        audio_chunks: list[tuple[bytes, int]] = []
+        for i in range(0, len(wav_bytes), chunk_size):
+            chunk = wav_bytes[i : i + chunk_size]
+            audio_chunks.append((chunk, sample_rate))
+        return audio_chunks
+
+    loop = asyncio.get_running_loop()
     try:
-        result = subprocess.run(
-            ["espeak", "-v", "it", "-w", "-", cleaned], capture_output=True, check=True, timeout=10
-        )
-        if result.returncode == 0:
-            wav_bytes = result.stdout
-            sr = 22050  # espeak default
-            # Chunk the WAV bytes
-            for i in range(0, len(wav_bytes), chunk_size):
-                chunk = wav_bytes[i : i + chunk_size]
-                yield (chunk, sr)
-            return
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("espeak fallback failed: %s", e)
-
-    # Final fallback: generate sine wave tone in chunks
-    duration = max(0.4, min(len(cleaned) * 0.03, 3.0))
-    sample_rate = 24000
-    total_samples = int(sample_rate * duration)
-
-    for i in range(0, total_samples, chunk_size):
-        end_sample = min(i + chunk_size, total_samples)
-        t = np.linspace(i / sample_rate, end_sample / sample_rate, end_sample - i)
-        waveform = 0.08 * np.sin(2 * math.pi * 440.0 * t)
-        pcm = (waveform * 32767.0).astype(np.int16).tobytes()
-        yield (pcm, sample_rate)
+        chunks = await loop.run_in_executor(None, _synthesize_stream)
+        for chunk in chunks:
+            yield chunk
+    except (RuntimeError, ValueError) as exc:  # pragma: no cover
+        logger.error("Kokoro synthesis failed: %s", exc, exc_info=True)
+        return
 
 
 async def transcribe_audio_pcm16(
@@ -790,11 +834,9 @@ async def transcribe_audio_pcm16(
 
 async def synthesize_speech(
     text: str,
-    *,
-    fallback: bool = True,
 ) -> tuple[bytes, int] | None:
     """
-    Generate PCM16 mono audio for the provided text.
+    Generate PCM16 mono audio for the provided text using Kokoro TTS.
 
     Returns:
         (wav_bytes, sample_rate) or None if synthesis not available.
@@ -805,63 +847,24 @@ async def synthesize_speech(
         if not cleaned:
             return None
 
-    voice = await _load_piper_voice()
-
-    if voice:
-
-        def _run_voice() -> tuple[bytes, int]:
-            logger.info(
-                "Starting Piper synthesis for text: %s",
-                cleaned[:100] + "..." if len(cleaned) > 100 else cleaned,
-            )
-            # Use synthesize_wav method to write directly to a WAV file
-            with io.BytesIO() as wav_buffer:
-                with wave.open(wav_buffer, "wb") as wav_file:
-                    voice.synthesize_wav(cleaned, wav_file)
-                wav_bytes = wav_buffer.getvalue()
-
-            sr = (
-                voice.config.sample_rate
-                if hasattr(voice, "config") and hasattr(voice.config, "sample_rate")
-                else 22050
-            )
-            logger.info("Generated WAV: %d bytes at %d Hz", len(wav_bytes), sr)
-            return wav_bytes, int(sr)
-
-        loop = asyncio.get_running_loop()
-        try:
-            return await loop.run_in_executor(None, _run_voice)
-        except (RuntimeError, ValueError) as exc:  # pragma: no cover
-            logger.error("Piper synthesis failed: %s", exc, exc_info=True)
-
-    if not fallback:
+    engine = await _load_kokoro_engine()
+    if not engine:
+        logger.error("Kokoro engine not available, cannot synthesize speech")
         return None
 
-    # Fallback: use espeak-ng for TTS
+    loop = asyncio.get_running_loop()
     try:
-        result = subprocess.run(
-            ["espeak", "-v", "it", "-w", "-", cleaned], capture_output=True, check=True, timeout=10
-        )
-        if result.returncode == 0:
-            wav_bytes = result.stdout
-            sr = 22050  # espeak default
-            return wav_bytes, sr
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError) as e:
-        logger.warning("espeak fallback failed: %s", e)
+        return await loop.run_in_executor(None, _generate_kokoro_wav, engine, cleaned)
+    except (RuntimeError, ValueError) as exc:  # pragma: no cover
+        logger.error("Kokoro synthesis failed: %s", exc, exc_info=True)
+        return None
 
-    # Final fallback: short sine wave tone
-    duration = max(0.4, min(len(cleaned) * 0.03, 3.0))
-    sample_rate = 24000
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    waveform = 0.08 * np.sin(2 * math.pi * 440.0 * t)
-    pcm = (waveform * 32767.0).astype(np.int16).tobytes()
-    wav_bytes = _pcm16_to_wav(pcm, sample_rate)
-    return wav_bytes, sample_rate
+    return None
 
 
 __all__ = [
     "FW_AVAILABLE",
-    "PIPER_AVAILABLE",
+    "KOKORO_AVAILABLE",
     "StreamingAudioProcessor",
     "stream_transcribe_audio",
     "stream_synthesize_speech",

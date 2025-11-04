@@ -238,14 +238,12 @@ class ChatService(BaseService):
     async def synthesize_audio(
         self,
         text: str,
-        fallback: bool = True,
     ) -> tuple[str, int] | None:
         """
-        Synthesize speech from text.
+        Synthesize speech from text using Piper TTS.
 
         Args:
             text: Text to synthesize
-            fallback: Whether to allow fallback beep
 
         Returns:
             Tuple of (base64_audio, sample_rate) or None if failed
@@ -254,7 +252,7 @@ class ChatService(BaseService):
             return None
 
         try:
-            synth_result = await synthesize_speech(text, fallback=fallback)
+            synth_result = await synthesize_speech(text)
             if synth_result:
                 wav_bytes, sr = synth_result
                 audio_b64 = base64.b64encode(wav_bytes).decode("ascii")
@@ -433,7 +431,7 @@ class ChatService(BaseService):
         if expect_audio and final_text:
             tts_text = sanitize_tts_text(final_text)
             candidate_text = tts_text or final_text
-            audio_result = await self.synthesize_audio(candidate_text, fallback=True)
+            audio_result = await self.synthesize_audio(candidate_text)
             if audio_result:
                 audio_b64, audio_sample_rate = audio_result
 
@@ -645,7 +643,7 @@ class ChatService(BaseService):
             tts_text = sanitize_tts_text(final_text)
             candidate_text = tts_text or final_text
             logger.info("Attempting TTS synthesis for text: %s", candidate_text[:100])
-            audio_result = await self.synthesize_audio(candidate_text, fallback=True)
+            audio_result = await self.synthesize_audio(candidate_text)
             if audio_result:
                 audio_b64_result, audio_sample_rate_result = audio_result
                 logger.info(

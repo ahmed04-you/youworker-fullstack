@@ -251,6 +251,12 @@ export interface SSETranscriptEvent {
   is_final?: boolean;
 }
 
+export interface SSEAudioEvent {
+  audio_data?: string;
+  sample_rate?: number;
+  metadata?: Record<string, unknown>;
+}
+
 // ============================================================================
 // Tool Types
 // ============================================================================
