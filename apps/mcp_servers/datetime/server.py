@@ -206,13 +206,13 @@ mcp_handler = MCPProtocolHandler(
 # Register tools
 mcp_handler.register_tool(
     name="time_now",
-    description="Get the current date and time in the specified timezone. Returns ISO format timestamp.",
+    description="Get current date and time in any timezone. Returns ISO timestamp and formatted string.",
     input_schema={
         "type": "object",
         "properties": {
             "tz": {
                 "type": "string",
-                "description": "Timezone name (e.g., 'UTC', 'America/New_York', 'Europe/London')",
+                "description": "Timezone (e.g., 'UTC', 'America/New_York', 'Europe/Rome')",
                 "default": "UTC",
                 "minLength": 1,
                 "maxLength": 64,
@@ -226,13 +226,13 @@ mcp_handler.register_tool(
 
 mcp_handler.register_tool(
     name="time_format",
-    description="Format a timestamp with a custom format string and timezone. Uses Python strftime format codes.",
+    description="Format a timestamp with custom format and timezone. Uses Python strftime codes.",
     input_schema={
         "type": "object",
         "properties": {
             "iso": {
                 "type": "string",
-                "description": "ISO format timestamp to format",
+                "description": "ISO timestamp to format",
                 "minLength": ISO_MIN_LEN,
                 "maxLength": ISO_MAX_LEN,
             },
@@ -260,7 +260,7 @@ mcp_handler.register_tool(
 
 mcp_handler.register_tool(
     name="time_add_delta",
-    description="Add or subtract a time delta from a timestamp. Returns ISO format timestamp.",
+    description="Add or subtract time from a timestamp. Use negative values to subtract. Returns ISO timestamp.",
     input_schema={
         "type": "object",
         "properties": {

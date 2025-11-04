@@ -1,7 +1,6 @@
 FROM python:3.11-slim AS base
 
 ARG ENABLE_GPU_TORCH=0
-ARG PIPER_VOICE="it_IT-paola-medium"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -22,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxrender1 \
     libxext6 \
     curl \
+    git \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
@@ -46,18 +46,9 @@ COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
-# Download Piper TTS voice during build so runtime doesn't require network access
-RUN set -eux; \
-    mkdir -p /opt/youworker/tts /app/models/tts; \
-    case "$PIPER_VOICE" in \
-      it_IT-paola-medium) onnx_rel="it/it_IT/paola/medium/it_IT-paola-medium.onnx"; cfg_rel="it/it_IT/paola/medium/it_IT-paola-medium.onnx.json" ;; \
-      it_IT-riccardo-x_low) onnx_rel="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx"; cfg_rel="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json" ;; \
-      *) echo "Unsupported PIPER_VOICE '$PIPER_VOICE'"; exit 1 ;; \
-    esac; \
-    curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${onnx_rel}" -o "/app/models/tts/${PIPER_VOICE}.onnx"; \
-    curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${cfg_rel}" -o "/app/models/tts/${PIPER_VOICE}.onnx.json"; \
-    mkdir -p /data/uploads /app/models && \
-    chown -R appuser:appuser /app /data/uploads /app/models /app/models/tts
+# MeloTTS models are automatically downloaded at runtime when first needed
+RUN mkdir -p /data/uploads /app/models && \
+    chown -R appuser:appuser /app /data/uploads /app/models
 
 EXPOSE 8001
 

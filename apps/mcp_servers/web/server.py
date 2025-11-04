@@ -536,13 +536,13 @@ mcp_handler = MCPProtocolHandler(
 # Register tools
 mcp_handler.register_tool(
     name="web_search",
-    description="Search the web for information. Returns a list of search results with titles, URLs, and snippets.",
+    description="Search the web via DuckDuckGo. Returns titles, URLs, and snippets.",
     input_schema={
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "The search query",
+                "description": "Search query",
                 "minLength": QUERY_MIN_LEN,
                 "maxLength": QUERY_MAX_LEN,
             },
@@ -555,7 +555,7 @@ mcp_handler.register_tool(
             },
             "site": {
                 "type": "string",
-                "description": "Optional site restriction (e.g., 'wikipedia.org')",
+                "description": "Restrict to specific site (e.g., 'wikipedia.org')",
                 "minLength": 3,
                 "maxLength": 128,
                 "pattern": r"^[A-Za-z0-9.-]+$",
@@ -569,20 +569,20 @@ mcp_handler.register_tool(
 
 mcp_handler.register_tool(
     name="web_fetch",
-    description="Fetch and extract content from a URL. Returns the page title, URL, main text content, and links.",
+    description="Fetch page content from URL. Returns title, text, and links.",
     input_schema={
         "type": "object",
         "properties": {
             "url": {
                 "type": "string",
-                "description": "The URL to fetch",
+                "description": "URL to fetch",
                 "minLength": 8,
                 "maxLength": 2048,
                 "pattern": r"^https?://.+$",
             },
             "max_links": {
                 "type": "integer",
-                "description": "Maximum number of links to return",
+                "description": "Maximum links to extract",
                 "default": 10,
                 "minimum": 1,
                 "maximum": MAX_FETCH_LINKS,
@@ -596,25 +596,25 @@ mcp_handler.register_tool(
 
 mcp_handler.register_tool(
     name="web_extract_article",
-    description="Extract main article content and metadata from a URL using readability.",
+    description="Extract clean article content from URL using readability algorithm. Best for news articles and blogs.",
     input_schema={
         "type": "object",
         "properties": {
             "url": {
                 "type": "string",
-                "description": "The URL to extract",
+                "description": "Article URL",
                 "minLength": 8,
                 "maxLength": 2048,
                 "pattern": r"^https?://.+$",
             },
             "include_links": {
                 "type": "boolean",
-                "description": "Include hyperlinks from the main content",
+                "description": "Include links from article",
                 "default": False,
             },
             "max_chars": {
                 "type": "integer",
-                "description": "Maximum number of characters of text to return",
+                "description": "Maximum characters to return",
                 "default": 5000,
                 "minimum": 200,
                 "maximum": 50000,
@@ -628,7 +628,7 @@ mcp_handler.register_tool(
 
 mcp_handler.register_tool(
     name="web_crawl",
-    description="Crawl a page and outgoing links up to depth 1–2; returns titles, URLs, and readable snippets.",
+    description="Crawl website starting from URL. Follows links up to specified depth. Returns pages with titles and snippets.",
     input_schema={
         "type": "object",
         "properties": {
@@ -641,21 +641,21 @@ mcp_handler.register_tool(
             },
             "depth": {
                 "type": "integer",
-                "description": "Maximum crawl depth (0=current page only)",
+                "description": "Crawl depth (0=only starting page, 1=1 link away, 2=2 links away)",
                 "default": 1,
                 "minimum": 0,
                 "maximum": CRAWL_MAX_DEPTH,
             },
             "max_pages": {
                 "type": "integer",
-                "description": "Maximum pages to visit",
+                "description": "Maximum pages to crawl",
                 "default": 5,
                 "minimum": 1,
                 "maximum": CRAWL_MAX_PAGES,
             },
             "same_host": {
                 "type": "boolean",
-                "description": "Restrict crawl to the same host",
+                "description": "Only crawl pages on the same domain",
                 "default": True,
             },
         },

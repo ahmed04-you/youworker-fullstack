@@ -167,6 +167,7 @@ async def process_tracked_agent_events(
     user_id: int,
     session_id: int,
     stream: bool = True,
+    disable_web: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """
     Process agent loop events with tool tracking, handling persistence.
@@ -183,6 +184,7 @@ async def process_tracked_agent_events(
         enable_tools=enable_tools,
         max_iterations=max_iterations,
         model=model,
+        disable_web=disable_web,
     ):
         event_type = event.get("event")
         data = event.get("data", {}) or {}

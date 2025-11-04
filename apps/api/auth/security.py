@@ -22,7 +22,9 @@ logger = logging.getLogger(__name__)
 
 # JWT Configuration
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# Token expiration: 10 years (effectively unlimited for user sessions)
+# Tokens are session-based and should persist until explicitly revoked
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 365 * 10  # 10 years in minutes
 
 # HTTP Bearer scheme
 security = HTTPBearer(auto_error=False)

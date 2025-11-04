@@ -298,6 +298,7 @@ export default function Chats() {
   const [toolEvents, setToolEvents] = useState<ToolRunDisplay[]>([]);
   const [hasToolEvents, setHasToolEvents] = useState(false);
   const [expectAudio, setExpectAudio] = useState(false);
+  const [enableWeb, setEnableWeb] = useState(true);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionState, setTranscriptionState] = useState<TranscriptionState | null>(null);
   const transcriptionStateRef = useRef<TranscriptionState | null>(null);
@@ -649,6 +650,7 @@ export default function Chats() {
           session_id: requestSessionExternalId || undefined,
           enable_tools: true,
           expect_audio: expectAudio,
+          disable_web: !enableWeb,
         },
         {
           onLog: (log: SSELogEvent) => {
@@ -933,6 +935,7 @@ export default function Chats() {
           session_id: requestSessionExternalId || undefined,
           enable_tools: true,
           expect_audio: shouldExpectAudio,
+          disable_web: !enableWeb,
           stream: true,
         },
         {
@@ -1446,6 +1449,8 @@ export default function Chats() {
             hasMessages={messages.length > 0}
             expectAudio={expectAudio}
             onExpectAudioChange={setExpectAudio}
+            enableWeb={enableWeb}
+            onEnableWebChange={setEnableWeb}
           />
         </div>
       </div>

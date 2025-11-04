@@ -34,7 +34,6 @@ AGENT_SYSTEM_PROMPT = """Sei YouWorker, l'assistente AI professionale di YouCo s
 
 ## Gerarchia delle fonti
 1. **Conoscenza locale (`local_rag_search`)**: Prima di considerare qualunque fonte esterna, interroga il database vettoriale locale. Puoi richiamare `local_rag_search` più volte con parametri diversi (es. `top_k`, `tags`) per coprire la richiesta. Riporta le citazioni usando i numeri restituiti (es. [1], [2]) e descrivi sinteticamente cosa proviene da ciascuna fonte.
-2. **Fonti web (`web_search`, `web_fetch`, `web_extract_article`, `web_crawl`)**: Usale solo se la conoscenza locale non risponde alla domanda o se l'utente chiede esplicitamente contenuti esterni. Spiega perché la ricerca web è necessaria e limita le chiamate al minimo utile.
 3. **Altri strumenti**: Consulta e combina gli altri tool MCP presenti nello schema (ingestion, conversioni, ecc.) solo quando servono davvero per completare il compito.
 
 ## Gestione del tempo
@@ -49,7 +48,7 @@ AGENT_SYSTEM_PROMPT = """Sei YouWorker, l'assistente AI professionale di YouCo s
 ## Stile di risposta
 - Mantieni le risposte concise ma complete. Usa elenchi o tabelle solo se migliorano la leggibilità.
 - Specifica sempre il contesto rilevante per codice, file o percorsi. Quando utilizzi output di strumenti, spiegane il significato prima di trarre conclusioni.
-- Riporta le fonti con le citazioni fornite da `local_rag_search`; per fonti web cita l’URL o il titolo rilevante.
+- Riporta le fonti con le citazioni fornite da `local_rag_search`;
 - Evidenzia limiti, ipotesi o incertezze e suggerisci i migliori passi successivi.
 
 ## Flusso operativo sintetico
@@ -57,7 +56,6 @@ AGENT_SYSTEM_PROMPT = """Sei YouWorker, l'assistente AI professionale di YouCo s
 2. Recupera prima la conoscenza locale con `local_rag_search`.
 3. Se serve contesto temporale, chiama `datetime.now` (fuso predefinito: Europe/Rome).
 4. Usa al massimo uno strumento per turno, valutando i risultati prima di proseguire.
-5. Ricorri alla ricerca web solo come ultima risorsa o su richiesta esplicita.
 6. Redigi una risposta finale basata sui dati ottenuti, con citazioni e prossimi passi.
 
 Ricorda: la priorità è fornire risposte affidabili, verificabili e allineate agli interessi dell’utente, mantenendo trasparente ogni decisione presa."""
@@ -124,6 +122,7 @@ class AgentLoop:
         messages: list[ChatMessage],
         enable_tools: bool = True,
         model: str | None = None,
+        disable_web: bool = False,
     ) -> AsyncIterator[dict]:
         """
         Execute a single agent turn with strict single-tool stepper.
@@ -134,6 +133,7 @@ class AgentLoop:
             messages: Conversation history
             enable_tools: Whether to enable tool calling
             model: Optional model override
+            disable_web: Whether to disable web MCP tools
 
         Yields:
             Streaming events:
@@ -149,7 +149,18 @@ class AgentLoop:
             messages.insert(0, ChatMessage(role="system", content=system_prompt))
 
         # Get tools from registry
-        tools = self.registry.to_llm_tools() if enable_tools else None
+        if enable_tools:
+            all_tools = self.registry.to_llm_tools()
+            # Filter out web tools if disabled
+            if disable_web:
+                tools = [
+                    tool for tool in all_tools
+                    if not tool.get("function", {}).get("name", "").startswith(("web_", "web."))
+                ]
+            else:
+                tools = all_tools
+        else:
+            tools = None
 
         # Accumulators
         thinking_buffer = ""
@@ -303,6 +314,7 @@ class AgentLoop:
         enable_tools: bool = True,
         max_iterations: int | None = None,
         model: str | None = None,
+        disable_web: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Run agent until completion, handling tool calls automatically.
@@ -319,6 +331,7 @@ class AgentLoop:
             enable_tools: Enable tool calling
             max_iterations: Max tool iterations to prevent loops (uses instance default if None)
             model: Model override
+            disable_web: Whether to disable web MCP tools
 
         Yields:
             Dict payloads representing SSE events
@@ -341,6 +354,7 @@ class AgentLoop:
                 conversation,
                 enable_tools=enable_tools,
                 model=model,
+                disable_web=disable_web,
             ):
                 if event["type"] == "chunk":
                     # Stream content chunk immediately to client

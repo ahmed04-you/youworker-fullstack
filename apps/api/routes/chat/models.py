@@ -19,6 +19,7 @@ class UnifiedChatRequest(BaseModel):
     enable_tools: bool = True
     model: str | None = None
     expect_audio: bool = False
+    disable_web: bool = False
     stream: bool = True
 
 
@@ -52,6 +53,7 @@ class ChatRequest(BaseModel):
     enable_tools: bool = True
     model: str | None = None
     expect_audio: bool = False
+    disable_web: bool = False
     stream: bool = True
 
 
@@ -65,6 +67,7 @@ class VoiceTurnRequest(BaseModel):
     enable_tools: bool = True
     model: str | None = None
     expect_audio: bool = False
+    disable_web: bool = False
 
 
 class VoiceTurnResponse(BaseModel):

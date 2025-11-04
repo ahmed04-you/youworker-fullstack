@@ -36,7 +36,7 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 - **Chat intelligente**: Conversazioni con LLM (Large Language Models) locali
 - **Ricerca semantica**: Indicizzazione vettoriale con Qdrant per recupero intelligente di documenti
 - **RAG (Retrieval-Augmented Generation)**: Risposte AI basate sulla vostra documentazione
-- **Supporto multimodale**: Input vocale (STT) e output vocale (TTS) tramite Piper con voce italiana "paola-medium"
+- **Supporto multimodale**: Input vocale (STT) e output vocale (TTS) tramite MeloTTS con voce italiana di alta qualità
 - **Streaming in tempo reale**: WebSocket per risposte AI fluide
 
 ### 🛠️ Architettura Basata su MCP
@@ -79,7 +79,7 @@ YouWorker è un agente AI avanzato, completamente locale e abilitato al Model Co
 - **Qdrant**: Database vettoriale per embeddings
 - **Docling**: Estrazione avanzata di contenuto da documenti
 - **Faster-Whisper**: Speech-to-text (modello OpenAI Whisper)
-- **Piper TTS**: Sintesi vocale italiana di alta qualità (modello "paola-medium")
+- **MeloTTS**: Sintesi vocale multilingue di alta qualità (MIT licensed, supporta italiano e altre lingue)
 
 ### Infrastruttura
 - **Docker & Docker Compose**: Containerizzazione e orchestrazione

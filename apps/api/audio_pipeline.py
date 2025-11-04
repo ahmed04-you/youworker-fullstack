@@ -21,12 +21,12 @@ import numpy as np
 
 if TYPE_CHECKING:
     from faster_whisper import WhisperModel
-    from piper import PiperVoice, SynthesisConfig
+    from melo.api import TTS as MeloTTS
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Optional dependencies (faster-whisper for STT, Piper for TTS)
+# Optional dependencies (faster-whisper for STT, MeloTTS for TTS)
 # ---------------------------------------------------------------------------
 
 try:  # pragma: no cover - optional dependency
@@ -37,33 +37,41 @@ except Exception:  # pragma: no cover
     FW_AVAILABLE = False
 
 try:  # pragma: no cover - optional dependency
-    from piper import PiperVoice, SynthesisConfig  # type: ignore
+    from melo.api import TTS as MeloTTS  # type: ignore
 
-    PIPER_AVAILABLE = True
+    MELO_AVAILABLE = True
 except Exception:  # pragma: no cover
-    PIPER_AVAILABLE = False
+    MELO_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
 # Globals for lazy-loading heavy models
 # ---------------------------------------------------------------------------
-WHISPER_MODEL: WhisperModel | None = None
+WHISPER_MODEL: "WhisperModel | None" = None
 WHISPER_LOCK = asyncio.Lock()
-PIPER_VOICE: PiperVoice | None = None
-PIPER_VOICE_NAME: str | None = None
-PIPER_LOCK = asyncio.Lock()
+MELO_TTS: "MeloTTS | None" = None
+MELO_LOCK = asyncio.Lock()
 
 WHISPER_TARGET_SR = 16000
 
-PIPER_BASE_URL = "https://huggingface.co/rhasspy/piper-voices/resolve/main"
-PIPER_VOICE_REGISTRY: dict[str, tuple[str, str]] = {
-    "it_IT-riccardo-x_low": (
-        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx",
-        "it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json",
-    ),
-    "it_IT-paola-medium": (
-        "it/it_IT/paola/medium/it_IT-paola-medium.onnx",
-        "it/it_IT/paola/medium/it_IT-paola-medium.onnx.json",
-    ),
+# MeloTTS supported languages and speakers
+MELO_LANGUAGES = {
+    "EN": "EN",  # English
+    "ES": "ES",  # Spanish
+    "FR": "FR",  # French
+    "ZH": "ZH",  # Chinese
+    "JP": "JP",  # Japanese
+    "KR": "KR",  # Korean
+    "IT": "IT",  # Italian
+}
+
+MELO_SPEAKERS = {
+    "EN": ["EN-US", "EN-BR", "EN-INDIA", "EN-AU", "EN-Default"],
+    "IT": ["IT"],  # Italian has one speaker
+    "ES": ["ES"],
+    "FR": ["FR"],
+    "ZH": ["ZH"],
+    "JP": ["JP"],
+    "KR": ["KR"],
 }
 
 
@@ -189,55 +197,40 @@ def _ensure_pcm16(audio_bytes: bytes, sample_rate: int) -> tuple[bytes, int]:
     return audio_bytes, sample_rate
 
 
-def _ensure_piper_voice_files(voice_name: str, model_dir: str) -> bool:
-    """Ensure Piper voice files are present locally."""
+def _resolve_melo_language() -> str:
+    """Resolve MeloTTS language from environment or default to Italian."""
+    lang_env = os.getenv("TTS_LANGUAGE", "IT").strip().upper()
+    if lang_env in MELO_LANGUAGES:
+        return lang_env
+    logger.warning("Unknown TTS language '%s', defaulting to IT", lang_env)
+    return "IT"
 
-    info = PIPER_VOICE_REGISTRY.get(voice_name)
-    if info is None:
-        logger.warning("Unknown Piper voice '%s'", voice_name)
-        return False
 
-    onnx_rel, json_rel = info
+def _resolve_melo_speaker(language: str) -> str:
+    """Resolve MeloTTS speaker for the given language."""
+    speaker_env = os.getenv("TTS_SPEAKER", "").strip()
+    available_speakers = MELO_SPEAKERS.get(language, [])
 
-    target_dir = Path(model_dir)
-    target_dir.mkdir(parents=True, exist_ok=True)
-    onnx_path = target_dir / f"{voice_name}.onnx"
-    json_path = target_dir / f"{voice_name}.onnx.json"
+    if not available_speakers:
+        logger.warning("No speakers available for language %s", language)
+        return language  # Fallback to language code
 
-    if onnx_path.exists() and json_path.exists():
-        return True
+    if speaker_env and speaker_env in available_speakers:
+        return speaker_env
 
-    downloads = [
-        (f"{PIPER_BASE_URL}/{onnx_rel}", onnx_path),
-        (f"{PIPER_BASE_URL}/{json_rel}", json_path),
-    ]
+    # Return first available speaker for the language
+    return available_speakers[0]
 
-    def _download(url: str, dest: Path) -> None:
-        temp_file: Path | None = None
-        try:
-            with tempfile.NamedTemporaryFile(delete=False, dir=str(dest.parent)) as tmp:
-                temp_file = Path(tmp.name)
-            logger.info("Downloading Piper asset '%s' -> %s", url, dest)
-            urlretrieve(url, temp_file)
-            if not temp_file.exists() or temp_file.stat().st_size == 0:
-                raise RuntimeError(f"Empty download from %s" % url)
-            temp_file.replace(dest)
-        except Exception:
-            if temp_file is not None:
-                with contextlib.suppress(Exception):
-                    temp_file.unlink(missing_ok=True)
-            raise
 
+def _resolve_melo_speed() -> float:
+    """Resolve speech speed from environment (0.5 to 2.0)."""
+    speed_env = os.getenv("TTS_SPEED", "1.0")
     try:
-        for url, dest in downloads:
-            _download(url, dest)
-        return True
-    except Exception as exc:  # pragma: no cover - network dependant
-        logger.error("Failed to download Piper voice '%s': %s", voice_name, exc, exc_info=True)
-        with contextlib.suppress(Exception):
-            onnx_path.unlink(missing_ok=True)
-            json_path.unlink(missing_ok=True)
-        return False
+        speed = float(speed_env)
+    except ValueError:
+        logger.warning("Invalid TTS_SPEED '%s'; defaulting to 1.0", speed_env)
+        speed = 1.0
+    return max(0.5, min(2.0, speed))
 
 
 class StreamingAudioProcessor:
@@ -330,7 +323,7 @@ def _resample_audio(audio: np.ndarray, source_sr: int, target_sr: int) -> np.nda
         return np.array(resampled, dtype=np.float32)
 
 
-async def _load_whisper() -> WhisperModel | None:
+async def _load_whisper() -> "WhisperModel | None":
     """Lazy-load faster-whisper model with environment overrides."""
     global WHISPER_MODEL
     if not FW_AVAILABLE:  # pragma: no cover - dependency optional
@@ -349,19 +342,29 @@ async def _load_whisper() -> WhisperModel | None:
         device = os.getenv("STT_DEVICE", "auto")
         compute_type = os.getenv("STT_COMPUTE_TYPE", "float16")
 
-        def load_candidate(candidate: tuple[str, str, str]) -> WhisperModel:
+        # Get number of workers for CPU inference (defaults to 1)
+        num_workers_env = os.getenv("STT_NUM_WORKERS", "1")
+        try:
+            num_workers = max(1, int(num_workers_env))
+        except ValueError:
+            logger.warning("Invalid STT_NUM_WORKERS '%s'; defaulting to 1", num_workers_env)
+            num_workers = 1
+
+        def load_candidate(candidate: tuple[str, str, str]) -> "WhisperModel":
             candidate_model, candidate_device, candidate_compute = candidate
             logger.info(
-                "Loading faster-whisper model (model=%s, device=%s, compute_type=%s, primary=%s)",
+                "Loading faster-whisper model (model=%s, device=%s, compute_type=%s, num_workers=%s, primary=%s)",
                 candidate_model,
                 candidate_device,
                 candidate_compute,
+                num_workers,
                 candidate_model == model_name and candidate_device == device,
             )
             return WhisperModel(
                 candidate_model,
                 device=candidate_device,
                 compute_type=candidate_compute,
+                num_workers=num_workers,
             )
 
         def is_cuda_device(dev: str) -> bool:
@@ -448,115 +451,91 @@ async def _load_whisper() -> WhisperModel | None:
     return WHISPER_MODEL
 
 
-PIPER_VOICE_PRIORITY = ["it_IT-paola-medium", "it_IT-riccardo-x_low"]
+async def _load_melo_tts() -> "MeloTTS | None":
+    """Lazy-load MeloTTS engine."""
+    global MELO_TTS
 
-
-def _resolve_piper_voice_name() -> str:
-    requested_voice = (os.getenv("TTS_VOICE") or "").strip()
-    if requested_voice and requested_voice in PIPER_VOICE_REGISTRY:
-        return requested_voice
-    if requested_voice and requested_voice not in PIPER_VOICE_REGISTRY:
-        logger.warning(
-            "Requested Piper voice '%s' unavailable; using preferred Italian fallback",
-            requested_voice,
-        )
-    for candidate in PIPER_VOICE_PRIORITY:
-        if candidate in PIPER_VOICE_REGISTRY:
-            return candidate
-    return next(iter(PIPER_VOICE_REGISTRY.keys()))
-
-
-def _resolve_piper_speed() -> float:
-    speed_env = os.getenv("TTS_SPEED", "1.0")
-    try:
-        speed = float(speed_env)
-    except ValueError:
-        logger.warning("Invalid TTS_SPEED '%s'; defaulting to 1.0", speed_env)
-        speed = 1.0
-    return max(0.5, min(2.0, speed))
-
-
-async def _load_piper_voice() -> "PiperVoice | None":
-    """Lazy-load Piper TTS voice."""
-    global PIPER_VOICE
-    global PIPER_VOICE_NAME
-
-    if not PIPER_AVAILABLE:  # pragma: no cover - dependency optional
-        logger.warning("piper not available; TTS disabled")
+    if not MELO_AVAILABLE:  # pragma: no cover - dependency optional
+        logger.warning("MeloTTS not available; TTS disabled")
         return None
 
-    if PIPER_VOICE is not None:
-        return PIPER_VOICE
+    if MELO_TTS is not None:
+        return MELO_TTS
 
-    async with PIPER_LOCK:
-        if PIPER_VOICE is not None:
-            return PIPER_VOICE
+    async with MELO_LOCK:
+        if MELO_TTS is not None:
+            return MELO_TTS
 
-        provider = (os.getenv("TTS_PROVIDER") or "piper").strip().lower()
+        provider = (os.getenv("TTS_PROVIDER") or "melo").strip().lower()
         if provider in {"none", "disabled"}:
             logger.info("TTS provider explicitly disabled via TTS_PROVIDER=%s", provider)
             return None
-        if provider not in {"piper"}:
-            logger.info("TTS provider set to %s, skipping Piper voice load", provider)
+        if provider not in {"melo", "melotts"}:
+            logger.info("TTS provider set to %s, skipping MeloTTS load", provider)
             return None
 
-        model_dir = os.getenv("TTS_MODEL_DIR", "/app/models/tts")
-        voice_name = _resolve_piper_voice_name()
+        language = _resolve_melo_language()
+        device = os.getenv("TTS_DEVICE", "auto").lower()
 
-        if not _ensure_piper_voice_files(voice_name, model_dir):
-            logger.error("Failed to prepare Piper voice files for '%s'", voice_name)
-            return None
-
-        model_path = os.path.join(model_dir, f"{voice_name}.onnx")
-        logger.info("Loading Piper TTS voice '%s' from %s", voice_name, model_path)
+        logger.info("Loading MeloTTS (language=%s, device=%s)", language, device)
 
         loop = asyncio.get_running_loop()
 
-        def _load() -> PiperVoice:
-            return PiperVoice.load(model_path)
+        def _load() -> "MeloTTS":
+            return MeloTTS(language=language, device=device)
 
         try:
-            PIPER_VOICE = await loop.run_in_executor(None, _load)
-        except (RuntimeError, ImportError, FileNotFoundError) as exc:  # pragma: no cover
-            logger.error("Failed to load Piper voice '%s': %s", voice_name, exc)
-            PIPER_VOICE = None
+            MELO_TTS = await loop.run_in_executor(None, _load)
+            logger.info("MeloTTS ready (language=%s, device=%s)", language, device)
+        except (RuntimeError, ImportError) as exc:  # pragma: no cover
+            logger.error("Failed to load MeloTTS: %s", exc)
+            MELO_TTS = None
             return None
 
-        PIPER_VOICE_NAME = voice_name
-        logger.info("Piper voice ready: %s", voice_name)
-
-    return PIPER_VOICE
+    return MELO_TTS
 
 
-def _generate_piper_wav(voice: "PiperVoice", text: str) -> tuple[bytes, int]:
-    """Generate WAV bytes using the Piper voice."""
-    global PIPER_VOICE_NAME
-    if not PIPER_VOICE_NAME:
-        PIPER_VOICE_NAME = _resolve_piper_voice_name()
+def _generate_melo_wav(tts: "MeloTTS", text: str) -> tuple[bytes, int]:
+    """Generate WAV bytes using MeloTTS."""
     preview = text[:100] + "..." if len(text) > 100 else text
-    speed = _resolve_piper_speed()
+    speed = _resolve_melo_speed()
+    language = _resolve_melo_language()
+    speaker = _resolve_melo_speaker(language)
+
     logger.info(
-        "Starting Piper synthesis (voice=%s, speed=%.2f, text=%s)",
-        PIPER_VOICE_NAME,
+        "Starting MeloTTS synthesis (language=%s, speaker=%s, speed=%.2f, text=%s)",
+        language,
+        speaker,
         speed,
         preview,
     )
 
-    sample_rate = (
-        voice.config.sample_rate
-        if hasattr(voice, "config") and hasattr(voice.config, "sample_rate")
-        else 22050
-    )
-    synth_cfg = None
-    if abs(speed - 1.0) > 1e-3:
-        synth_cfg = SynthesisConfig(length_scale=1.0 / speed)
-    with io.BytesIO() as wav_buffer:
-        with wave.open(wav_buffer, "wb") as wav_file:
-            voice.synthesize_wav(text, wav_file, syn_config=synth_cfg, set_wav_format=True)
-        wav_bytes = wav_buffer.getvalue()
+    # Generate audio with MeloTTS
+    # MeloTTS returns numpy array, we need to convert to WAV
+    try:
+        # Create temporary file for output
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_wav:
+            temp_path = temp_wav.name
 
-    logger.info("Generated Piper WAV: %d bytes at %d Hz", len(wav_bytes), int(sample_rate))
-    return wav_bytes, int(sample_rate)
+        # Generate speech to file
+        tts.tts_to_file(text, speaker_id=speaker, output_path=temp_path, speed=speed)
+
+        # Read the generated WAV file
+        with open(temp_path, "rb") as f:
+            wav_bytes = f.read()
+
+        # Clean up temp file
+        os.unlink(temp_path)
+
+        # MeloTTS typically outputs at 44100 Hz
+        sample_rate = 44100
+
+        logger.info("Generated MeloTTS WAV: %d bytes at %d Hz", len(wav_bytes), sample_rate)
+        return wav_bytes, sample_rate
+
+    except Exception as exc:
+        logger.error("MeloTTS synthesis failed: %s", exc, exc_info=True)
+        raise
 
 
 def _pcm16_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -685,7 +664,7 @@ async def stream_synthesize_speech(
     chunk_size: int = 1024,
 ) -> AsyncGenerator[tuple[bytes, int], None]:
     """
-    Stream speech synthesis in chunks using Piper TTS.
+    Stream speech synthesis in chunks using MeloTTS.
 
     Args:
         text: Text to synthesize
@@ -700,13 +679,13 @@ async def stream_synthesize_speech(
         if not cleaned:
             return
 
-    voice = await _load_piper_voice()
-    if not voice:
-        logger.error("Piper voice not available, cannot synthesize speech")
+    tts = await _load_melo_tts()
+    if not tts:
+        logger.error("MeloTTS not available, cannot synthesize speech")
         return
 
     def _synthesize_stream():
-        wav_bytes, sample_rate = _generate_piper_wav(voice, cleaned)
+        wav_bytes, sample_rate = _generate_melo_wav(tts, cleaned)
         audio_chunks: list[tuple[bytes, int]] = []
         for i in range(0, len(wav_bytes), chunk_size):
             chunk = wav_bytes[i : i + chunk_size]
@@ -719,7 +698,7 @@ async def stream_synthesize_speech(
         for chunk in chunks:
             yield chunk
     except (RuntimeError, ValueError) as exc:  # pragma: no cover
-        logger.error("Piper synthesis failed: %s", exc, exc_info=True)
+        logger.error("MeloTTS synthesis failed: %s", exc, exc_info=True)
         return
 
 
@@ -812,7 +791,7 @@ async def synthesize_speech(
     text: str,
 ) -> tuple[bytes, int] | None:
     """
-    Generate PCM16 mono audio for the provided text using Piper TTS.
+    Generate PCM16 mono audio for the provided text using MeloTTS.
 
     Returns:
         (wav_bytes, sample_rate) or None if synthesis not available.
@@ -823,16 +802,16 @@ async def synthesize_speech(
         if not cleaned:
             return None
 
-    voice = await _load_piper_voice()
-    if not voice:
-        logger.error("Piper voice not available, cannot synthesize speech")
+    tts = await _load_melo_tts()
+    if not tts:
+        logger.error("MeloTTS not available, cannot synthesize speech")
         return None
 
     loop = asyncio.get_running_loop()
     try:
-        return await loop.run_in_executor(None, _generate_piper_wav, voice, cleaned)
+        return await loop.run_in_executor(None, _generate_melo_wav, tts, cleaned)
     except (RuntimeError, ValueError) as exc:  # pragma: no cover
-        logger.error("Piper synthesis failed: %s", exc, exc_info=True)
+        logger.error("MeloTTS synthesis failed: %s", exc, exc_info=True)
         return None
 
     return None
@@ -840,7 +819,7 @@ async def synthesize_speech(
 
 __all__ = [
     "FW_AVAILABLE",
-    "PIPER_AVAILABLE",
+    "MELO_AVAILABLE",
     "StreamingAudioProcessor",
     "stream_transcribe_audio",
     "stream_synthesize_speech",

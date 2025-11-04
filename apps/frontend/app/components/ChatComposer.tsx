@@ -11,6 +11,8 @@ interface ChatComposerProps {
   hasMessages?: boolean;
   expectAudio?: boolean;
   onExpectAudioChange?: (enabled: boolean) => void;
+  enableWeb?: boolean;
+  onEnableWebChange?: (enabled: boolean) => void;
 }
 
 export default function ChatComposer({
@@ -21,7 +23,9 @@ export default function ChatComposer({
   scrollContainerRef,
   hasMessages = false,
   expectAudio = false,
-  onExpectAudioChange
+  onExpectAudioChange,
+  enableWeb = true,
+  onEnableWebChange
 }: ChatComposerProps) {
   const [message, setMessage] = useState("");
   const [hasSent, setHasSent] = useState(hasMessages);
@@ -160,6 +164,12 @@ export default function ChatComposer({
     }
   };
 
+  const handleWebToggle = () => {
+    if (onEnableWebChange) {
+      onEnableWebChange(!enableWeb);
+    }
+  };
+
   return (
     <>
       <label className={`composer-label ${hasSent ? "fade-out" : ""}`}>
@@ -186,6 +196,16 @@ export default function ChatComposer({
           >
             <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+            </svg>
+          </button>
+
+          <button
+            className={`control-btn web-toggle ${enableWeb ? "active" : ""}`}
+            onClick={handleWebToggle}
+            title="Enable web search"
+          >
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
             </svg>
           </button>
 

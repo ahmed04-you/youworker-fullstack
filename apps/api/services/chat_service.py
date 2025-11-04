@@ -214,6 +214,7 @@ class ChatService(BaseService):
         enable_tools: bool,
         max_iterations: int,
         model: str,
+        disable_web: bool = False,
     ) -> AsyncIterator[dict[str, Any]]:
         """
         Execute agent with conversation.
@@ -223,6 +224,7 @@ class ChatService(BaseService):
             enable_tools: Whether to enable tool usage
             max_iterations: Maximum agent iterations
             model: Model name
+            disable_web: Whether to disable web MCP tools
 
         Yields:
             Agent events (tool, token, log, done)
@@ -232,6 +234,7 @@ class ChatService(BaseService):
             enable_tools=enable_tools,
             max_iterations=max_iterations,
             model=model,
+            disable_web=disable_web,
         ):
             yield event
 
@@ -240,7 +243,7 @@ class ChatService(BaseService):
         text: str,
     ) -> tuple[str, int] | None:
         """
-        Synthesize speech from text using Piper TTS.
+        Synthesize speech from text using MeloTTS.
 
         Args:
             text: Text to synthesize
@@ -306,6 +309,7 @@ class ChatService(BaseService):
         model: str | None = None,
         enable_tools: bool = True,
         expect_audio: bool = False,
+        disable_web: bool = False,
         max_iterations: int | None = None,
     ) -> ChatResponse:
         """
@@ -397,6 +401,7 @@ class ChatService(BaseService):
             enable_tools=enable_tools,
             max_iterations=max_iters,
             model=request_model,
+            disable_web=disable_web,
         ):
             etype = event.get("event")
             data = event.get("data", {}) or {}
@@ -466,6 +471,7 @@ class ChatService(BaseService):
         model: str | None = None,
         enable_tools: bool = True,
         expect_audio: bool = False,
+        disable_web: bool = False,
         max_iterations: int | None = None,
     ) -> AsyncIterator[dict[str, Any]]:
         """
@@ -599,6 +605,7 @@ class ChatService(BaseService):
             enable_tools=enable_tools,
             max_iterations=max_iters,
             model=request_model,
+            disable_web=disable_web,
         ):
             etype = event.get("event")
             data = event.get("data", {}) or {}

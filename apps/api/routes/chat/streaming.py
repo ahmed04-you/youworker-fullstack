@@ -67,6 +67,7 @@ async def chat_endpoint(
                     model=chat_request.model,
                     enable_tools=chat_request.enable_tools,
                     expect_audio=chat_request.expect_audio,
+                    disable_web=chat_request.disable_web,
                     max_iterations=settings.max_agent_iterations,
                 ):
                     pad = pad_pending
@@ -149,6 +150,7 @@ async def chat_endpoint(
         model=chat_request.model,
         enable_tools=chat_request.enable_tools,
         expect_audio=chat_request.expect_audio,
+        disable_web=chat_request.disable_web,
         max_iterations=settings.max_agent_iterations,
     )
 

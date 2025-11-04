@@ -62,6 +62,7 @@ export interface SimpleChatRequest {
   model?: string;
   enable_tools?: boolean;
   expect_audio?: boolean;
+  disable_web?: boolean;
   max_iterations?: number;
 }
 
@@ -82,6 +83,7 @@ export interface UnifiedChatRequest {
   enable_tools?: boolean;
   model?: string;
   expect_audio?: boolean;
+  disable_web?: boolean;
   stream?: boolean;
 }
 

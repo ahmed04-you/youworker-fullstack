@@ -11,7 +11,6 @@ import asyncio
 from dataclasses import dataclass
 from html.parser import HTMLParser
 import hashlib
-import json
 import mimetypes
 import os
 import shutil
@@ -28,19 +27,21 @@ from uuid import uuid4
 from packages.common import Settings, get_logger, get_settings
 from packages.llm import Embedder
 from packages.parsers import (
-    docling_extract,
-    media_transcribe,
-    ocr_extract,
-    should_run_ocr,
-    table_extract,
+    DocumentToImageConverter,
+    VisionParser,
+)
+from packages.parsers.media_transcriber import (
+    parse_audio_to_markdown,
+    parse_video_to_markdown,
 )
 from packages.parsers.models import DocChunk, IngestionItem, IngestionReport
+from packages.llm.model_manager import get_model_manager
 from packages.vectorstore import ensure_collections, get_client
 from packages.vectorstore.schema import DocumentSource
 
-from .chunker import chunk_text_tokens
+from packages.parsers.chunker import chunk_text
 from .embedder_integration import embed_chunks, prepare_points, upsert_embedded_chunks
-from .metadata_builder import build_chunk_metadata, collect_artifacts, prune_metadata
+from .metadata_builder import build_chunk_metadata, prune_metadata
 
 logger = get_logger(__name__)
 
@@ -120,12 +121,16 @@ class IngestionPipeline:
     ) -> None:
         self._settings = settings or get_settings()
         self._config = config or PipelineConfig(
-            chunk_size=self._settings.ingest_chunk_size,
-            chunk_overlap=self._settings.ingest_chunk_overlap,
+            chunk_size=2048,  # Vision-based pipeline uses 2048 token chunks
+            chunk_overlap=256,
             max_concurrency=self._settings.ingest_max_concurrency,
         )
         self._temp_dirs: list[Path] = []
         self._active_ingestions = 0
+
+        # Vision-based components
+        self.doc_converter = DocumentToImageConverter()
+        self.vision_parser = VisionParser()
 
         # Ensure collections on init
         client = self._get_qdrant_client()
@@ -157,114 +162,124 @@ class IngestionPipeline:
         recursive = self._config.recursive if recursive is None else recursive
         tags = list(tags or [])
 
+        # Switch to ingestion mode (load vision models, unload chat model)
+        model_manager = await get_model_manager()
+        logger.info("Switching to ingestion mode for document processing")
+        await model_manager.switch_to_ingestion_mode()
+
         try:
-            if from_web:
-                items = await self._fetch_web_resources(path_or_url)
-            else:
-                items = self._enumerate_local(Path(path_or_url), recursive=recursive)
-        except Exception as exc:
-            logger.error(
-                "ingestion-enumeration-error",
-                extra={
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                    "path_or_url": path_or_url,
-                    "from_web": from_web,
-                    "user_id": user_id
-                }
-            )
-            return IngestionReport(
-                total_files=0,
-                total_chunks=0,
-                files=[],
-                errors=[{"target": path_or_url, "error": str(exc)}],
-            )
-
-        file_reports: list[dict] = []
-        errors: list[dict] = []
-        total_chunks = 0
-
-        if not items:
-            return IngestionReport(total_files=0, total_chunks=0, files=[], errors=[])
-
-        concurrency = self._effective_concurrency()
-        semaphore = asyncio.Semaphore(concurrency)
-        tasks = [
-            asyncio.create_task(
-                self._process_item_task(
-                    idx,
-                    item,
-                    tags=tags,
-                    from_web=from_web,
-                    collection_name=collection_name,
-                    user_id=user_id,
-                    semaphore=semaphore,
+            try:
+                if from_web:
+                    items = await self._fetch_web_resources(path_or_url)
+                else:
+                    items = self._enumerate_local(Path(path_or_url), recursive=recursive)
+            except Exception as exc:
+                logger.error(
+                    "ingestion-enumeration-error",
+                    extra={
+                        "error": str(exc),
+                        "error_type": type(exc).__name__,
+                        "path_or_url": path_or_url,
+                        "from_web": from_web,
+                        "user_id": user_id
+                    }
                 )
-            )
-            for idx, item in enumerate(items)
-        ]
+                return IngestionReport(
+                    total_files=0,
+                    total_chunks=0,
+                    files=[],
+                    errors=[{"target": path_or_url, "error": str(exc)}],
+                )
 
-        results: list[tuple[int, IngestionItem, ProcessedItemResult | None, Exception | None]] = []
-        for task in asyncio.as_completed(tasks):
-            results.append(await task)
+            file_reports: list[dict] = []
+            errors: list[dict] = []
+            total_chunks = 0
 
-        results.sort(key=lambda entry: entry[0])
+            if not items:
+                return IngestionReport(total_files=0, total_chunks=0, files=[], errors=[])
 
-        aggregate_artifacts: dict[str, int] = {"tables": 0, "images": 0, "charts": 0}
-        aggregate_samples: dict[str, list[dict[str, Any]]] = {
-            "tables": [],
-            "images": [],
-            "charts": [],
-        }
+            concurrency = self._effective_concurrency()
+            semaphore = asyncio.Semaphore(concurrency)
+            tasks = [
+                asyncio.create_task(
+                    self._process_item_task(
+                        idx,
+                        item,
+                        tags=tags,
+                        from_web=from_web,
+                        collection_name=collection_name,
+                        user_id=user_id,
+                        semaphore=semaphore,
+                    )
+                )
+                for idx, item in enumerate(items)
+            ]
 
-        for _, item, stats, error in results:
-            if error is not None:
-                errors.append({"path": str(item.path), "error": str(error)})
-                continue
+            results: list[tuple[int, IngestionItem, ProcessedItemResult | None, Exception | None]] = []
+            for task in asyncio.as_completed(tasks):
+                results.append(await task)
 
-            if stats is None:
-                continue
+            results.sort(key=lambda entry: entry[0])
 
-            total_chunks += stats.chunk_count
-            artifact_counts = stats.artifact_summary.get("counts", {})
-            artifact_samples = stats.artifact_summary.get("artifacts", {})
-            for key, value in artifact_counts.items():
-                aggregate_artifacts[key] = aggregate_artifacts.get(key, 0) + int(value or 0)
+            aggregate_artifacts: dict[str, int] = {"tables": 0, "images": 0, "charts": 0}
+            aggregate_samples: dict[str, list[dict[str, Any]]] = {
+                "tables": [],
+                "images": [],
+                "charts": [],
+            }
 
-            for key, entries in (artifact_samples or {}).items():
-                if not isinstance(entries, list):
+            for _, item, stats, error in results:
+                if error is not None:
+                    errors.append({"path": str(item.path), "error": str(error)})
                     continue
-                bucket = aggregate_samples.setdefault(key, [])
-                for entry in entries:
-                    if len(bucket) >= 10:
-                        break
-                    bucket.append(entry)
 
-            file_reports.append(
-                {
-                    "path": str(item.path),
-                    "uri": item.uri,
-                    "mime": item.mime,
-                    "chunks": stats.chunk_count,
-                    "size_bytes": item.bytes_size,
-                    "artifacts": artifact_counts,
-                    "artifact_samples": artifact_samples,
-                }
+                if stats is None:
+                    continue
+
+                total_chunks += stats.chunk_count
+                artifact_counts = stats.artifact_summary.get("counts", {})
+                artifact_samples = stats.artifact_summary.get("artifacts", {})
+                for key, value in artifact_counts.items():
+                    aggregate_artifacts[key] = aggregate_artifacts.get(key, 0) + int(value or 0)
+
+                for key, entries in (artifact_samples or {}).items():
+                    if not isinstance(entries, list):
+                        continue
+                    bucket = aggregate_samples.setdefault(key, [])
+                    for entry in entries:
+                        if len(bucket) >= 10:
+                            break
+                        bucket.append(entry)
+
+                file_reports.append(
+                    {
+                        "path": str(item.path),
+                        "uri": item.uri,
+                        "mime": item.mime,
+                        "chunks": stats.chunk_count,
+                        "size_bytes": item.bytes_size,
+                        "artifacts": artifact_counts,
+                        "artifact_samples": artifact_samples,
+                    }
+                )
+
+            artifact_samples_total = {k: v for k, v in aggregate_samples.items() if v}
+
+            report = IngestionReport(
+                total_files=len(items),
+                total_chunks=total_chunks,
+                files=file_reports,
+                errors=errors,
+                artifact_totals=aggregate_artifacts if any(aggregate_artifacts.values()) else None,
+                artifact_samples=artifact_samples_total or None,
             )
-
-        artifact_samples_total = {k: v for k, v in aggregate_samples.items() if v}
-
-        report = IngestionReport(
-            total_files=len(items),
-            total_chunks=total_chunks,
-            files=file_reports,
-            errors=errors,
-            artifact_totals=aggregate_artifacts if any(aggregate_artifacts.values()) else None,
-            artifact_samples=artifact_samples_total or None,
-        )
-        self._cleanup_temp_dirs()
-        self._active_ingestions = max(0, self._active_ingestions - 1)
-        return report
+            self._cleanup_temp_dirs()
+            self._active_ingestions = max(0, self._active_ingestions - 1)
+            return report
+        finally:
+            # Always switch back to chat mode
+            logger.info("Switching back to chat mode after ingestion")
+            await model_manager.switch_to_chat_mode()
 
     async def _process_item_task(
         self,
@@ -305,114 +320,102 @@ class IngestionPipeline:
         collection_name: str | None = None,
         user_id: int | None = None,
     ) -> ProcessedItemResult:
+        """Process a single item using vision-based parsing."""
         source = self._determine_source(item.mime, from_web=from_web)
-        raw_chunks: list[DocChunk] = []
+        markdown_content = ""
 
-        if source in {"audio", "video"}:
-            raw_chunks.extend(
-                media_transcribe(
-                    item.path,
-                    uri=item.uri,
-                    mime=item.mime,
-                    source=source,
-                )
-            )
-        elif source == "image":
-            raw_chunks.extend(
-                ocr_extract(
-                    item.path,
-                    uri=item.uri,
-                    mime=item.mime,
-                    source=source,
-                )
-            )
-        else:
-            docling_chunks = list(
-                docling_extract(
-                    item.path,
-                    uri=item.uri,
-                    mime=item.mime,
-                    source=source,
-                )
-            )
-            raw_chunks.extend(docling_chunks)
+        try:
+            # Route to appropriate processor based on file type
+            if source == "audio":
+                logger.info(f"Processing audio file: {item.path}")
+                markdown_content = await parse_audio_to_markdown(item.path)
+            elif source == "video":
+                logger.info(f"Processing video file: {item.path}")
+                markdown_content = await parse_video_to_markdown(item.path)
+            else:
+                # All other files: convert to images then analyze with vision
+                logger.info(f"Processing document with vision: {item.path}")
+                images_with_metadata = await self.doc_converter.convert(item.path)
 
-            if should_run_ocr(item.mime, docling_chunks):
-                ocr_chunks = list(
-                    ocr_extract(
-                        item.path,
-                        uri=item.uri,
-                        mime=item.mime,
-                        source=source,
+                if not images_with_metadata:
+                    logger.warning(f"No images extracted from {item.path}")
+                    return ProcessedItemResult(
+                        chunk_count=0,
+                        artifact_summary={"counts": {}, "artifacts": {}}
                     )
-                )
-                raw_chunks.extend(ocr_chunks)
 
-            table_chunks = list(
-                table_extract(
-                    item.path,
-                    uri=item.uri,
-                    mime=item.mime,
-                    source=source,
+                # Analyze all images with Qwen3-VL
+                markdown_content = await self.vision_parser.analyze_images_batch(
+                    images_with_metadata,
+                    max_concurrent=2  # Limit concurrent vision analysis
                 )
+        except Exception as e:
+            logger.error(
+                f"Error processing {item.path} with vision pipeline: {e}",
+                exc_info=True
             )
-            raw_chunks.extend(self._dedupe_table_chunks(raw_chunks, table_chunks))
+            return ProcessedItemResult(
+                chunk_count=0,
+                artifact_summary={"counts": {}, "artifacts": {}}
+            )
 
-        artifact_summary = collect_artifacts(raw_chunks)
+        if not markdown_content or not markdown_content.strip():
+            logger.warning(f"No content extracted from {item.path}")
+            return ProcessedItemResult(
+                chunk_count=0,
+                artifact_summary={"counts": {}, "artifacts": {}}
+            )
 
-        if not raw_chunks:
+        # Simple artifact counting from markdown tags
+        artifact_summary = self._extract_artifact_summary(markdown_content)
+
+        # Chunk the markdown content using 1024 token semantic chunking
+        path_hash = self._path_hash(item)
+        text_segments = chunk_text(
+            markdown_content,
+            size=1024,  # Vision-based pipeline uses 1024 tokens
+            overlap=128,
+        )
+
+        if not text_segments:
+            logger.warning(f"No chunks created from {item.path}")
             return ProcessedItemResult(chunk_count=0, artifact_summary=artifact_summary)
 
-        path_hash = self._path_hash(item)
+        # Create DocChunk objects from segments
         prepared_chunks: list[DocChunk] = []
+        chunk_tags = set(tags)
+        combined_tags = sorted(chunk_tags) if chunk_tags else None
 
-        for raw_index, raw_chunk in enumerate(raw_chunks, start=1):
-            raw_text = raw_chunk.text or ""
-            segments = chunk_text_tokens(
-                raw_text,
-                self._config.chunk_size,
-                self._config.chunk_overlap,
-            )
-            if not segments:
-                trimmed = raw_text.strip()
-                if not trimmed:
-                    continue
-                segments = [trimmed]
+        for chunk_index, segment_text in enumerate(text_segments, start=1):
+            segment_text = segment_text.strip()
+            if not segment_text:
+                continue
 
-            tag_values = None
-            base_metadata = dict(raw_chunk.metadata or {})
-            if "tags" in base_metadata:
-                tag_values = base_metadata.pop("tags")
-            total_parts = len(segments)
-            for part_index, text in enumerate(segments, start=1):
-                segment_text = text.strip()
-                if not segment_text:
-                    continue
+            # Extract clean filename from path
+            from pathlib import Path
+            from urllib.parse import unquote
+            filename = Path(unquote(str(item.path))).name if item.path else None
 
-                chunk_tags = set(tags)
-                if isinstance(tag_values, (list, tuple, set)):
-                    chunk_tags.update(tag for tag in tag_values if isinstance(tag, str))
-                combined_tags = sorted(chunk_tags) if chunk_tags else None
+            metadata = {
+                "chunk_index": chunk_index,
+                "total_chunks": len(text_segments),
+            }
+            if filename:
+                metadata["filename"] = filename
+            if combined_tags:
+                metadata["__chunk_tags"] = combined_tags
 
-                metadata = dict(base_metadata)
-                metadata["source_type"] = metadata.get("source_type") or source
-                metadata["raw_chunk_index"] = raw_index
-                metadata["raw_chunk_part"] = part_index
-                metadata["raw_chunk_parts"] = total_parts
-                if combined_tags:
-                    metadata["__chunk_tags"] = combined_tags
-
-                prepared_chunks.append(
-                    DocChunk(
-                        id=str(uuid4()),
-                        chunk_id=len(prepared_chunks) + 1,
-                        text=segment_text,
-                        uri=raw_chunk.uri or item.uri,
-                        mime=raw_chunk.mime or item.mime,
-                        source=source,
-                        metadata=metadata,
-                    )
+            prepared_chunks.append(
+                DocChunk(
+                    id=str(uuid4()),
+                    chunk_id=chunk_index,
+                    text=segment_text,
+                    uri=item.uri,
+                    mime=item.mime,
+                    source=source,
+                    metadata=metadata,
                 )
+            )
 
         if not prepared_chunks:
             return ProcessedItemResult(chunk_count=0, artifact_summary=artifact_summary)
@@ -585,44 +588,6 @@ class IngestionPipeline:
             candidate = f"{stem}-{counter}{suffix}"
         return candidate
 
-    def _dedupe_table_chunks(
-        self,
-        existing_chunks: Sequence[DocChunk],
-        candidate_chunks: Sequence[DocChunk],
-    ) -> list[DocChunk]:
-        if not candidate_chunks:
-            return []
-
-        seen_keys: set[str] = set()
-        for chunk in existing_chunks:
-            key = self._table_chunk_key(chunk)
-            if key:
-                seen_keys.add(key)
-
-        deduped: list[DocChunk] = []
-        for chunk in candidate_chunks:
-            key = self._table_chunk_key(chunk)
-            if not key or key in seen_keys:
-                continue
-            seen_keys.add(key)
-            metadata = dict(chunk.metadata or {})
-            metadata.setdefault("content_type", "table")
-            chunk.metadata = metadata
-            deduped.append(chunk)
-
-        return deduped
-
-    @staticmethod
-    def _table_chunk_key(chunk: DocChunk) -> str | None:
-        metadata = chunk.metadata or {}
-        payload = metadata.get("table_data") or metadata.get("table") or chunk.text
-        if not payload:
-            return None
-        try:
-            encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False)
-        except TypeError:
-            encoded = repr(payload)
-        return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
     def _enumerate_local(self, path: Path, *, recursive: bool) -> list[IngestionItem]:
         if not path.exists():
@@ -742,6 +707,47 @@ class IngestionPipeline:
         if self._settings.ingest_accelerator == "gpu":
             configured = min(configured, 2)  # Limit for GPU memory
         return max(1, min(configured, cpu_limit, 18))
+
+    @staticmethod
+    def _extract_artifact_summary(markdown_content: str) -> dict[str, Any]:
+        """
+        Extract artifact summary from markdown content with tags.
+
+        Counts occurrences of: <table>, <chart>, <graph>, <image>, <code>
+        """
+        import re
+
+        counts = {
+            "tables": len(re.findall(r"<table>", markdown_content, re.IGNORECASE)),
+            "charts": len(re.findall(r"<chart>", markdown_content, re.IGNORECASE)),
+            "graphs": len(re.findall(r"<graph>", markdown_content, re.IGNORECASE)),
+            "images": len(re.findall(r"<image>", markdown_content, re.IGNORECASE)),
+            "code": len(re.findall(r"<code>", markdown_content, re.IGNORECASE)),
+        }
+
+        # Extract samples (first occurrence of each type)
+        artifacts: dict[str, list[dict[str, Any]]] = {}
+
+        for artifact_type, pattern in [
+            ("tables", r"<table>(.*?)</table>"),
+            ("charts", r"<chart>(.*?)</chart>"),
+            ("graphs", r"<graph>(.*?)</graph>"),
+            ("images", r"<image>(.*?)</image>"),
+        ]:
+            matches = re.findall(pattern, markdown_content, re.DOTALL | re.IGNORECASE)
+            if matches:
+                # Take first match as sample
+                sample_text = matches[0].strip()[:200]  # First 200 chars
+                artifacts[artifact_type] = [{
+                    "preview": sample_text,
+                    "count": len(matches)
+                }]
+
+        return {
+            "counts": counts,
+            "artifacts": artifacts,
+            "pages": []  # Vision-based doesn't have traditional pages
+        }
 
 
 class _AssetHTMLParser(HTMLParser):

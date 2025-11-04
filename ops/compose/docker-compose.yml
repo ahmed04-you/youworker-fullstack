@@ -62,23 +62,6 @@ services:
       test: ["CMD-SHELL", "ollama list || exit 1"]
       start_period: 120s
 
-  mcp_web:
-    build:
-      context: ../..
-      dockerfile: ops/docker/Dockerfile.mcp_web
-    container_name: youworker-mcp-web
-    env_file:
-      - ../../.env
-    command: ["uvicorn", "apps.mcp_servers.web.server:app", "--host", "0.0.0.0", "--port", "7001"]
-    restart: unless-stopped
-    ports:
-      - "7001:7001"
-    healthcheck:
-      <<: *healthcheck-defaults
-      test: ["CMD-SHELL", "curl -f http://localhost:7001/health || exit 1"]
-    environment:
-      PYTHONUNBUFFERED: "1"
-
   mcp_semantic:
     build:
       context: ../..
@@ -138,6 +121,23 @@ services:
       OLLAMA_BASE_URL: "http://ollama:11434"
       QDRANT_URL: "http://qdrant:6333"
 
+  mcp_web:
+    build:
+      context: ../..
+      dockerfile: ops/docker/Dockerfile.mcp_web
+    container_name: youworker-mcp-web
+    env_file:
+      - ../../.env
+    command: ["uvicorn", "apps.mcp_servers.web.server:app", "--host", "0.0.0.0", "--port", "7001"]
+    restart: unless-stopped
+    ports:
+      - "7001:7001"
+    healthcheck:
+      <<: *healthcheck-defaults
+      test: ["CMD-SHELL", "curl -f http://localhost:7001/health || exit 1"]
+    environment:
+      PYTHONUNBUFFERED: "1"
+
   api:
     build:
       context: ../..
@@ -163,13 +163,13 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
-      mcp_web:
-        condition: service_healthy
       mcp_semantic:
         condition: service_healthy
       mcp_datetime:
         condition: service_healthy
       mcp_units:
+        condition: service_healthy
+      mcp_web:
         condition: service_healthy
     deploy:
       resources:

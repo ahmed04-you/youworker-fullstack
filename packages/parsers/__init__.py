@@ -1,26 +1,27 @@
-"""Document parsing interfaces (Docling, OCR, tables, transcription)."""
+"""
+Document parsers - Vision-based extraction with Qwen3-VL.
 
-from .chunker import chunk_text, chunk_token_ranges, tokenize_text
-from .docling_extractor import extract as docling_extract
+All parsing now routes through vision model for maximum information extraction.
+"""
+
+from .doc_to_image import DocumentToImageConverter
 from .media_transcriber import (
-    release_resources as media_release_resources,
-    transcribe as media_transcribe,
+    parse_audio_to_markdown,
+    parse_video_to_markdown,
+    transcribe_simple,
 )
+from .vision_parser import VisionParser
 from .models import DocChunk, IngestionItem, IngestionReport
-from .ocr_extractor import extract as ocr_extract, should_run_ocr
-from .table_extractor import extract as table_extract
+from .chunker import chunk_text
 
 __all__ = [
+    "DocumentToImageConverter",
+    "VisionParser",
+    "parse_audio_to_markdown",
+    "parse_video_to_markdown",
+    "transcribe_simple",
     "DocChunk",
     "IngestionItem",
     "IngestionReport",
     "chunk_text",
-    "chunk_token_ranges",
-    "tokenize_text",
-    "docling_extract",
-    "table_extract",
-    "ocr_extract",
-    "should_run_ocr",
-    "media_transcribe",
-    "media_release_resources",
 ]

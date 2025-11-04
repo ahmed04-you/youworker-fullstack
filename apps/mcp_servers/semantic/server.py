@@ -2,7 +2,7 @@
 MCP server for semantic/vector search over ingested documents.
 
 Tools:
-- local_rag_search: Compose an answer using RAG with citations
+- knowledge_search: Search knowledge base and compose answer with citations (15 chunks)
 """
 
 import logging
@@ -161,18 +161,20 @@ async def _semantic_query(
         return {"error": str(e)}
 
 
-async def local_rag_search(
+async def knowledge_search(
     question: str,
-    top_k: int = 5,
     tags: list[str] | None = None,
     collection: str | None = None,
 ) -> dict[str, Any]:
-    """RAG answer: embed → search → LLM synthesis with citations."""
+    """RAG answer: embed → search → LLM synthesis with citations.
+
+    Always retrieves exactly 15 chunks for optimal context.
+    """
     if not vector_store or not ollama_client:
         return {"error": "Services not initialized"}
 
-    # Validate using same rules as query
-    requested_top_k = max(1, min(top_k or 5, SEMANTIC_MAX_TOP_K))
+    # Fixed 15 chunks for consistent, comprehensive context
+    requested_top_k = 15
     base = await _semantic_query(
         question,
         top_k=requested_top_k,
@@ -282,23 +284,16 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="local_rag_search",
-    description="RAG answer composer with citations from the vector store.",
+    name="knowledge_search",
+    description="Search the knowledge base and compose an answer with citations. Automatically retrieves 15 relevant chunks for comprehensive context.",
     input_schema={
         "type": "object",
         "properties": {
             "question": {
                 "type": "string",
-                "description": "Question to answer using retrieved context",
+                "description": "Question to answer using the knowledge base",
                 "minLength": QUERY_MIN_LEN,
                 "maxLength": QUERY_MAX_LEN,
-            },
-            "top_k": {
-                "type": "integer",
-                "description": "Number of documents to retrieve for context",
-                "default": 5,
-                "minimum": 1,
-                "maximum": SEMANTIC_MAX_TOP_K,
             },
             "tags": {
                 "type": "array",
@@ -308,12 +303,12 @@ mcp_handler.register_tool(
                     "maxLength": 64,
                     "pattern": r"^[A-Za-z0-9._-]+$",
                 },
-                "description": "Optional tags to filter by",
+                "description": "Optional tags to filter documents",
                 "maxItems": 10,
             },
             "collection": {
                 "type": "string",
-                "description": "Optional collection name",
+                "description": "Optional collection to search within",
                 "minLength": 1,
                 "maxLength": 128,
                 "pattern": r"^[A-Za-z0-9._-]+$",
@@ -322,7 +317,7 @@ mcp_handler.register_tool(
         "required": ["question"],
         "additionalProperties": False,
     },
-    handler=local_rag_search,
+    handler=knowledge_search,
 )
 
 

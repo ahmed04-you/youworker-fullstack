@@ -117,7 +117,8 @@ class OllamaClient:
         """
         options = {
             "temperature": temperature,
-            "num_ctx": 32768,
+            "num_ctx": 65536,  # 64k context window for gpt-oss
+            "kv_cache_type": "q8_0",  # 8-bit quantized KV cache for memory efficiency
         }
 
         payload = {

@@ -3,8 +3,7 @@ from __future__ import annotations
 import tempfile
 from contextlib import suppress
 from pathlib import Path
-from typing import Iterator
-from uuid import uuid4
+from typing import Any
 
 import ffmpeg
 
@@ -15,9 +14,6 @@ from packages.common import (
     get_settings,
     resolve_accelerator,
 )
-from packages.vectorstore.schema import DocumentSource
-
-from .models import DocChunk
 
 logger = get_logger(__name__)
 
@@ -31,8 +27,8 @@ except ImportError:  # pragma: no cover
 
 _settings = get_settings()
 
-WHISPER_MODEL_NAME = _settings.ingest_whisper_model or "large-v3"
-WHISPER_COMPUTE_TYPE = _settings.ingest_whisper_compute_type or "int8"
+WHISPER_MODEL_NAME = _settings.ingest_whisper_model or "large-v3-turbo"
+WHISPER_COMPUTE_TYPE = _settings.ingest_whisper_compute_type or "float16"  # GPU default
 WHISPER_GPU_COMPUTE_TYPE = _settings.ingest_whisper_gpu_compute_type or "float16"
 WHISPER_CPU_THREADS = max(1, _settings.ingest_whisper_cpu_threads or 4)
 WHISPER_NUM_WORKERS = max(1, _settings.ingest_whisper_num_workers or 1)
@@ -44,9 +40,7 @@ def _active_compute_type(choice: AcceleratorChoice) -> str:
 
 
 _WHISPER_ACCELERATOR = resolve_accelerator(
-    preference=coerce_preference(
-        _settings.ingest_whisper_accelerator, _settings.ingest_accelerator
-    ),
+    preference="gpu",  # Media transcription always uses GPU
     explicit_device=_settings.ingest_whisper_device or _settings.ingest_gpu_device,
 )
 _MODEL_CACHE: WhisperModel | None = None
@@ -70,153 +64,13 @@ def release_resources() -> None:
     _reset_whisper_model()
 
 
-def transcribe(
-    path: Path,
-    *,
-    uri: str | None,
-    mime: str | None,
-    source: DocumentSource,
-) -> Iterator[DocChunk]:
-    """
-    Transcribe audio or video content using faster-whisper with optional GPU acceleration.
-
-    Automatically detects the spoken language (Italian, English, or others supported by the
-    configured Whisper model) and preserves the original text without translation.
-    """
-    if not WHISPER_AVAILABLE:  # pragma: no cover
-        logger.warning("whisper-not-installed", extra={"path": str(path)})
-        return
-
-    language_hint = _resolve_language_hint(WHISPER_LANGUAGE)
-    model = _get_whisper_model()
-    runtime = _MODEL_CHOICE or _WHISPER_ACCELERATOR
-
-    logger.info(
-        "whisper-transcribe-start",
-        extra={
-            "path": str(path),
-            "model": WHISPER_MODEL_NAME,
-            "device": runtime.compute_device,
-            "compute_type": _active_compute_type(runtime),
-            "language_hint": language_hint or "auto",
-            "accelerator": runtime.requested,
-            "gpu_available": runtime.gpu_available,
-        },
-    )
-
-    with _demux_to_wav(path) as audio_path:
-        try:
-            segments, detected_language = _run_transcription(
-                model,
-                audio_path,
-                language_hint=language_hint,
-            )
-        except Exception as exc:  # pragma: no cover
-            if runtime.using_gpu:
-                logger.warning(
-                    "whisper-transcribe-gpu-error",
-                    extra={
-                        "path": str(path),
-                        "error": str(exc),
-                    },
-                )
-                cpu_choice = resolve_accelerator(preference="cpu")
-                _reset_whisper_model()
-                try:
-                    model = _get_whisper_model(choice=cpu_choice, cpu_threads=20)
-                except Exception as model_exc:
-                    logger.warning(
-                        "whisper-transcribe-error",
-                        extra={
-                            "path": str(path),
-                            "error": str(model_exc),
-                        },
-                    )
-                    return
-                runtime = cpu_choice
-                logger.info(
-                    "whisper-transcribe-fallback",
-                    extra={
-                        "path": str(path),
-                        "accelerator": runtime.requested,
-                        "device": runtime.compute_device,
-                    },
-                )
-                try:
-                    segments, detected_language = _run_transcription(
-                        model,
-                        audio_path,
-                        language_hint=language_hint,
-                    )
-                except Exception as cpu_exc:
-                    logger.warning(
-                        "whisper-transcribe-error",
-                        extra={
-                            "path": str(path),
-                            "error": str(cpu_exc),
-                        },
-                    )
-                    return
-            else:
-                logger.warning("whisper-transcribe-error", extra={"path": str(path), "error": str(exc)})
-                return
-
-    logger.info(
-        "whisper-transcribe-complete",
-        extra={
-            "path": str(path),
-            "segments": len(segments),
-            "language": detected_language,
-        },
-    )
-
-    if not segments:
-        return
-
-    paragraphs = _segments_to_paragraphs(segments)
-    if not paragraphs:
-        return
-
-    for chunk_id, (paragraph_text, start_ts, end_ts) in enumerate(paragraphs, start=1):
-        paragraph_text = paragraph_text.strip()
-        if not paragraph_text:
-            continue
-        paragraph_index = chunk_id
-        formatted_timestamp = _format_timestamp(start_ts)
-        formatted_end = _format_timestamp(end_ts)
-        chunk_text = f"{paragraph_text}\n\n[{formatted_timestamp} - {formatted_end}]"
-        metadata = {
-            "paragraph_index": paragraph_index,
-            "start": start_ts,
-            "end": end_ts,
-            "language": detected_language,
-            "transcription_engine": "faster-whisper",
-            "model": WHISPER_MODEL_NAME,
-            "transcript_type": "original",
-            "timestamp_range": {
-                "start": formatted_timestamp,
-                "end": formatted_end,
-            },
-        }
-
-        yield DocChunk(
-            id=uuid4().hex,
-            chunk_id=chunk_id,
-            text=chunk_text,
-            uri=uri,
-            mime=mime,
-            source=source,
-            metadata=metadata,
-        )
-
-
 def _get_whisper_model(
     choice: AcceleratorChoice | None = None,
     *,
     cpu_threads: int | None = None,
     num_workers: int | None = None,
 ) -> WhisperModel:
-    """Load and cache the Whisper model preferring GPU when available."""
+    """Load and cache the Whisper model on GPU (required for media transcription)."""
     global _MODEL_CACHE, _MODEL_CHOICE
     if choice is None and _MODEL_CACHE is not None:
         return _MODEL_CACHE
@@ -233,9 +87,7 @@ def _get_whisper_model(
         attempts = [choice]
     else:
         attempts = [_WHISPER_ACCELERATOR]
-        if _WHISPER_ACCELERATOR.using_gpu:
-            cpu_choice = resolve_accelerator(preference="cpu")
-            attempts.append(cpu_choice)
+        # No CPU fallback - media transcription requires GPU
 
     last_error: Exception | None = None
     for candidate in attempts:
@@ -466,3 +318,251 @@ def _extract_language(info, *, fallback: str | None) -> str | None:
     if language:
         return str(language).lower()
     return fallback.lower() if isinstance(fallback, str) else fallback
+
+
+def _transcribe_simple_sync(file_path: Path) -> dict[str, Any]:
+    """
+    Synchronous helper for transcription using GPU.
+
+    Returns dict with:
+    - text: Full transcript as single string
+    - language: Detected language code
+    - duration: Audio duration in seconds
+    """
+    if not WHISPER_AVAILABLE:
+        logger.warning(f"Whisper not available, cannot transcribe {file_path}")
+        return {"text": "", "language": None, "duration": 0}
+
+    language_hint = _resolve_language_hint(WHISPER_LANGUAGE)
+    model = _get_whisper_model()
+
+    logger.info(f"Starting transcription: {file_path}")
+
+    with _demux_to_wav(file_path) as audio_path:
+        try:
+            segments, detected_language = _run_transcription(
+                model,
+                audio_path,
+                language_hint=language_hint,
+            )
+        except Exception as exc:
+            logger.error(f"Transcription failed: {exc}", exc_info=True)
+            return {"text": "", "language": None, "duration": 0}
+
+    if not segments:
+        return {"text": "", "language": detected_language, "duration": 0}
+
+    # Extract full text and calculate duration
+    full_text = " ".join(
+        (getattr(seg, "text", "") or "").strip()
+        for seg in segments
+    ).strip()
+
+    # Get duration from last segment
+    duration = 0.0
+    if segments:
+        last_seg = segments[-1]
+        duration = float(getattr(last_seg, "end", 0.0) or 0.0)
+
+    logger.info(f"Transcription complete: {len(segments)} segments, {duration:.1f}s")
+
+    return {
+        "text": full_text,
+        "language": detected_language,
+        "duration": duration,
+    }
+
+
+async def transcribe_simple(file_path: Path) -> dict[str, Any]:
+    """
+    Async GPU transcription for vision-based pipeline.
+
+    Runs transcription in thread pool to avoid blocking event loop.
+
+    Returns dict with:
+    - text: Full transcript as single string
+    - language: Detected language code
+    - duration: Audio duration in seconds
+    """
+    import asyncio
+    return await asyncio.to_thread(_transcribe_simple_sync, file_path)
+
+
+# ============================================================================
+# High-level media parsing functions for vision-based ingestion pipeline
+# ============================================================================
+
+
+async def parse_audio_to_markdown(file_path: Path) -> str:
+    """
+    Parse audio file to formatted markdown.
+
+    Args:
+        file_path: Path to audio file
+
+    Returns:
+        Transcribed markdown with metadata
+    """
+    try:
+        transcript_data = await transcribe_simple(file_path)
+
+        if not transcript_data or "text" not in transcript_data:
+            logger.warning(f"No transcript returned for {file_path}")
+            return ""
+
+        transcript_text = transcript_data["text"]
+
+        # Format as markdown
+        markdown = f"""# Audio Transcription
+
+**File**: {file_path.name}
+
+## Transcript
+
+{transcript_text}
+"""
+
+        # Add metadata if available
+        if "language" in transcript_data:
+            markdown += f"\n**Language**: {transcript_data['language']}\n"
+        if "duration" in transcript_data:
+            duration_mins = int(transcript_data["duration"] // 60)
+            duration_secs = int(transcript_data["duration"] % 60)
+            markdown += f"**Duration**: {duration_mins}:{duration_secs:02d}\n"
+
+        return markdown
+
+    except Exception as e:
+        logger.error(f"Error parsing audio {file_path}: {e}", exc_info=True)
+        return ""
+
+
+async def parse_video_to_markdown(file_path: Path) -> str:
+    """
+    Parse video file with vision + transcription to formatted markdown.
+
+    Process:
+    1. Extract keyframes (1 every 5 seconds)
+    2. Analyze each frame with Qwen3-VL
+    3. Transcribe audio track
+    4. Merge visual descriptions with transcript
+
+    Args:
+        file_path: Path to video file
+
+    Returns:
+        Rich markdown with visual + audio content
+    """
+    import asyncio
+    from .doc_to_image import DocumentToImageConverter
+    from .vision_parser import VisionParser
+
+    image_converter = DocumentToImageConverter()
+    vision_parser = VisionParser()
+
+    try:
+        # Step 1: Extract keyframes
+        logger.info(f"Extracting keyframes from {file_path}")
+        frames = await image_converter._convert_video(file_path)
+
+        if not frames:
+            logger.warning(f"No frames extracted from {file_path}, trying audio only")
+            return await parse_audio_to_markdown(file_path)
+
+        # Step 2 & 3: Analyze frames + transcribe audio in parallel
+        logger.info(f"Analyzing {len(frames)} frames and transcribing audio")
+
+        # Run vision analysis and transcription concurrently
+        vision_task = vision_parser.analyze_images_batch(frames, max_concurrent=2)
+        transcription_task = transcribe_simple(file_path)
+
+        vision_markdown, transcript_data = await asyncio.gather(
+            vision_task,
+            transcription_task,
+            return_exceptions=True,
+        )
+
+        # Handle errors
+        if isinstance(vision_markdown, Exception):
+            logger.error(f"Vision analysis failed: {vision_markdown}")
+            vision_markdown = ""
+
+        if isinstance(transcript_data, Exception):
+            logger.error(f"Transcription failed: {transcript_data}")
+            transcript_data = {}
+
+        # Step 4: Merge results
+        markdown = _merge_video_content(
+            file_path=file_path,
+            visual_content=vision_markdown,
+            transcript_data=transcript_data,
+            frame_count=len(frames),
+        )
+
+        return markdown
+
+    except Exception as e:
+        logger.error(f"Error parsing video {file_path}: {e}", exc_info=True)
+        return ""
+
+
+def _merge_video_content(
+    file_path: Path,
+    visual_content: str,
+    transcript_data: dict[str, Any],
+    frame_count: int,
+) -> str:
+    """
+    Merge visual analysis and transcript into coherent markdown.
+
+    Creates sections for:
+    - Video metadata
+    - Visual content (frame descriptions)
+    - Full transcript
+    """
+    markdown_parts = [
+        f"# Video Analysis: {file_path.name}",
+        "",
+        "## Metadata",
+        f"- **Frames analyzed**: {frame_count}",
+    ]
+
+    # Add duration if available
+    if transcript_data and "duration" in transcript_data:
+        duration = transcript_data["duration"]
+        mins = int(duration // 60)
+        secs = int(duration % 60)
+        markdown_parts.append(f"- **Duration**: {mins}:{secs:02d}")
+
+    # Add language if available
+    if transcript_data and "language" in transcript_data:
+        markdown_parts.append(f"- **Language**: {transcript_data['language']}")
+
+    markdown_parts.append("")
+
+    # Visual content section
+    if visual_content and visual_content.strip():
+        markdown_parts.extend(
+            [
+                "## Visual Content",
+                "",
+                "The following visual elements were extracted from video frames:",
+                "",
+                visual_content,
+                "",
+            ]
+        )
+
+    # Transcript section
+    if transcript_data and "text" in transcript_data and transcript_data["text"].strip():
+        markdown_parts.extend(
+            [
+                "## Audio Transcript",
+                "",
+                transcript_data["text"],
+                "",
+            ]
+        )
+
+    # Combine
+    return "\n".join(markdown_parts)

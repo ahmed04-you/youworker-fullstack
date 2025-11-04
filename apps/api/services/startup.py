@@ -127,6 +127,20 @@ class StartupService:
         )
         logger.info("Ollama client initialized")
 
+        # Preload startup models (gpt-oss:20b on GPU, STT in system RAM)
+        logger.info("Preloading startup models...")
+        try:
+            from packages.llm.model_manager import get_model_manager
+            model_manager = await get_model_manager()
+            await model_manager.ensure_startup_models_loaded()
+            logger.info("✓ Startup models preloaded (chat model on GPU)")
+        except Exception as e:
+            logger.warning(
+                "Failed to preload startup models",
+                extra={"error": str(e), "error_type": type(e).__name__}
+            )
+            # Continue anyway - models will load on first use
+
         # Initialize vector store
         logger.info("Initializing vector store...")
         self.vector_store = QdrantStore(
