@@ -754,6 +754,32 @@ main {
   border-color: #137333;
 }
 
+.web-toggle {
+  position: relative;
+}
+
+.web-toggle::after {
+  content: '';
+  position: absolute;
+  right: -1.5px;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 24px;
+  width: 1px;
+  background-color: #e0e0e0;
+}
+
+.web-toggle:hover {
+  background-color: #e8f0fe;
+  color: #1967d2;
+}
+
+.web-toggle.active {
+  background-color: #e8f0fe;
+  color: #1967d2;
+  border-color: #1967d2;
+}
+
 .chat-messages {
   flex: 1;
   overflow: auto;
