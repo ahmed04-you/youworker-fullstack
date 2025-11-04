@@ -163,7 +163,6 @@ async def process_tracked_agent_events(
     conversation: list[LLMChatMessage],
     enable_tools: bool,
     max_iterations: int,
-    language: str,
     model: str,
     user_id: int,
     session_id: int,
@@ -183,7 +182,6 @@ async def process_tracked_agent_events(
         messages=conversation,
         enable_tools=enable_tools,
         max_iterations=max_iterations,
-        language=language,
         model=model,
     ):
         event_type = event.get("event")

@@ -205,7 +205,7 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="now",
+    name="time_now",
     description="Get the current date and time in the specified timezone. Returns ISO format timestamp.",
     input_schema={
         "type": "object",
@@ -225,7 +225,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="format",
+    name="time_format",
     description="Format a timestamp with a custom format string and timezone. Uses Python strftime format codes.",
     input_schema={
         "type": "object",
@@ -259,7 +259,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="add",
+    name="time_add_delta",
     description="Add or subtract a time delta from a timestamp. Returns ISO format timestamp.",
     input_schema={
         "type": "object",

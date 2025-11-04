@@ -758,7 +758,7 @@ Cookie: youworker_token=...
       "avg_latency_ms": 150
     },
     {
-      "tool_name": "web.search",
+      "tool_name": "web.web_search",
       "count": 85,
       "avg_latency_ms": 850
     }

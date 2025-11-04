@@ -284,7 +284,7 @@ CREATE INDEX idx_tools_server ON tools(mcp_server_id);
 **Columns:**
 - `id`: Primary key
 - `mcp_server_id`: Foreign key to mcp_servers
-- `name`: Qualified tool name (e.g., "web.search")
+- `name`: Qualified tool name (e.g., "web.web_search")
 - `description`: Tool description
 - `input_schema`: JSON Schema for tool inputs
 - `enabled`: Tool enabled flag

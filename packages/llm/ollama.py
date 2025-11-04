@@ -117,7 +117,7 @@ class OllamaClient:
         """
         options = {
             "temperature": temperature,
-            "num_ctx": 16384,
+            "num_ctx": 32768,
         }
 
         payload = {

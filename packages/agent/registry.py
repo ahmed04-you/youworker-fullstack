@@ -109,7 +109,8 @@ class MCPRegistry:
         try:
             tools = await client.list_tools()
             for tool in tools:
-                tools_dict[tool.name] = tool
+                qualified_name = f"{client.server_id}.{tool.name}"
+                tools_dict[qualified_name] = tool
         except Exception as e:
             logger.error(
                 "Failed to discover tools from server",
@@ -128,10 +129,10 @@ class MCPRegistry:
             List of tool schemas in OpenAI/Ollama format
         """
         schemas: list[dict[str, Any]] = []
-        for qname, tool in self.tools.items():
+        for qualified_name, tool in self.tools.items():
             if not self._is_tool_available(tool):
                 continue
-            exposed = self._qualified_to_exposed.get(qname, qname.replace(".", "_"))
+            exposed = self._qualified_to_exposed.get(qualified_name, qualified_name.replace(".", "_"))
             schemas.append(
                 {
                     "type": "function",
@@ -154,7 +155,7 @@ class MCPRegistry:
         Route and execute a tool call.
 
         Args:
-            tool_name: Qualified tool name (e.g., "web.search")
+            tool_name: Qualified tool name (e.g., "web.web_search")
             arguments: Tool arguments
 
         Returns:
@@ -223,21 +224,27 @@ class MCPRegistry:
         exposed_to_qualified: dict[str, str] = {}
         qualified_to_exposed: dict[str, str] = {}
 
-        for qname in self.tools.keys():
-            base = self._sanitize_exposed(qname)
+        for qualified_name, tool in self.tools.items():
+            base = self._sanitize(tool.name)
             candidate = base
+            if candidate in exposed_to_qualified and exposed_to_qualified[candidate] != qualified_name:
+                base = self._sanitize(f"{tool.server_id}_{tool.name}")
+                candidate = base
+
             i = 2
-            while candidate in exposed_to_qualified and exposed_to_qualified[candidate] != qname:
+            while candidate in exposed_to_qualified and exposed_to_qualified[candidate] != qualified_name:
                 candidate = f"{base}_{i}"
                 i += 1
-            exposed_to_qualified[candidate] = qname
-            qualified_to_exposed[qname] = candidate
+
+            exposed_to_qualified[candidate] = qualified_name
+            qualified_to_exposed[qualified_name] = candidate
 
         self._exposed_to_qualified = exposed_to_qualified
         self._qualified_to_exposed = qualified_to_exposed
 
-    def _sanitize_exposed(self, qualified_name: str) -> str:
-        return qualified_name.replace(".", "_").replace("-", "_").replace("/", "_")
+    @staticmethod
+    def _sanitize(value: str) -> str:
+        return value.replace(".", "_").replace("-", "_").replace("/", "_")
 
     async def start_periodic_refresh(self, interval_seconds: int = 90) -> None:
         if interval_seconds <= 0:

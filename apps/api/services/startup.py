@@ -236,7 +236,6 @@ class StartupService:
             ollama_client=self.ollama_client,
             registry=self.registry,
             model=settings.chat_model,
-            default_language=settings.agent_default_language,
         )
 
         # Attach to app state

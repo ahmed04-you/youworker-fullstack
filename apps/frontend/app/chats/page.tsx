@@ -89,12 +89,12 @@ function normalizeMessageContent(message: Message): Message {
 function integrateToolEvent(
   previous: ToolRunDisplay[],
   event: ToolEvent,
-  now: number
+  sequence: number
 ): ToolRunDisplay[] {
   const toolName = event.tool || "Unknown Tool";
   const runId = typeof event.run_id === "number" ? event.run_id : undefined;
   const status = normalizeToolStatus(event.status);
-  const identifier = runId !== undefined ? `run-${runId}` : `${toolName}-${status}-${now}`;
+  const identifier = runId !== undefined ? `run-${runId}` : `${toolName}-${status}-${sequence}`;
 
   const existingIndex = previous.findIndex((entry) =>
     runId !== undefined ? entry.runId === runId : entry.tool === toolName && entry.status === "running"
@@ -108,7 +108,7 @@ function integrateToolEvent(
       tool: toolName,
       status,
       runId,
-      startedAt: status === "running" ? now : undefined,
+      startedAt: status === "running" ? Date.now() : undefined,
       latencyMs: status === "success" ? event.latency_ms ?? undefined : undefined,
       error: status === "error" ? (event.error as string | undefined) : undefined,
     });
@@ -116,10 +116,10 @@ function integrateToolEvent(
   }
 
   const existing = updated[existingIndex];
-  const startedAt = existing.startedAt ?? (status === "running" ? now : undefined);
+  const startedAt = existing.startedAt ?? (status === "running" ? Date.now() : undefined);
   let latency = existing.latencyMs;
   if (status !== "running") {
-    const computedLatency = startedAt ? Math.max(0, now - startedAt) : undefined;
+    const computedLatency = startedAt ? Math.max(0, Date.now() - startedAt) : undefined;
     latency = event.latency_ms ?? latency ?? computedLatency;
   }
 
@@ -301,6 +301,7 @@ export default function Chats() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionState, setTranscriptionState] = useState<TranscriptionState | null>(null);
   const transcriptionStateRef = useRef<TranscriptionState | null>(null);
+  const toolEventSequenceRef = useRef(0);
   const actionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const actionsMenuRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -342,10 +343,10 @@ export default function Chats() {
 
       setToolEvents((prev) => {
         const base = shouldMerge ? [...prev] : [];
-        const next = events.reduce(
-          (acc, event) => integrateToolEvent(acc, event, Date.now()),
-          base
-        );
+        const next = events.reduce((acc, event) => {
+          const sequence = toolEventSequenceRef.current++;
+          return integrateToolEvent(acc, event, sequence);
+        }, base);
         setHasToolEvents(next.length > 0);
         return next;
       });
@@ -359,7 +360,8 @@ export default function Chats() {
     }
 
     setToolEvents((prev) => {
-      const next = integrateToolEvent([...prev], event, Date.now());
+      const sequence = toolEventSequenceRef.current++;
+      const next = integrateToolEvent([...prev], event, sequence);
       setHasToolEvents(next.length > 0);
       return next;
     });

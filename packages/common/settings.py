@@ -171,7 +171,6 @@ class AgentConfig(BaseModel):
         le=50,
         description="Maximum tool call iterations before stopping agent loop (prevents infinite loops)"
     )
-    default_language: str = Field(default="it", description="Default agent response language")
 
 
 class MCPConfig(BaseModel):
@@ -484,10 +483,6 @@ class Settings(BaseSettings):
         return self.agent.max_iterations
 
     @property
-    def agent_default_language(self) -> str:
-        return self.agent.default_language
-
-    @property
     def mcp_server_urls(self) -> str:
         return self.mcp.server_urls
 
@@ -606,7 +601,6 @@ class Settings(BaseSettings):
 
             # Agent
             "MAX_AGENT_ITERATIONS": ("agent", "max_iterations"),
-            "AGENT_DEFAULT_LANGUAGE": ("agent", "default_language"),
 
             # MCP
             "MCP_SERVER_URLS": ("mcp", "server_urls"),

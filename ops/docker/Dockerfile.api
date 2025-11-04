@@ -1,18 +1,14 @@
 FROM python:3.11-slim AS base
 
 ARG ENABLE_GPU_TORCH=0
-ARG KOKORO_RELEASE_VERSION="v1.0.0"
+ARG PIPER_VOICE="it_IT-paola-medium"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_PIP_SYSTEM=1 \
     PATH="/root/.local/bin:${PATH}" \
     PYTHONPATH="/app" \
-    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusolver/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusparse/lib:/usr/local/lib/python3.11/site-packages/nvidia/cufft/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_cupti/lib:/usr/local/lib/python3.11/site-packages/nvidia/curand/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvtx/lib" \
-    KOKORO_RELEASE_VERSION="${KOKORO_RELEASE_VERSION}" \
-    KOKORO_MODEL_FILENAME="kokoro-v1.0.onnx" \
-    KOKORO_VOICES_FILENAME="voices-v1.0.bin" \
-    KOKORO_ASSETS_BASE_URL="https://github.com/nazdridoy/kokoro-tts/releases/download/${KOKORO_RELEASE_VERSION}"
+    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusolver/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusparse/lib:/usr/local/lib/python3.11/site-packages/nvidia/cufft/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_cupti/lib:/usr/local/lib/python3.11/site-packages/nvidia/curand/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvtx/lib"
 
 WORKDIR /app
 
@@ -50,15 +46,16 @@ COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
-# Download Kokoro TTS assets during build so runtime doesn't require network access
+# Download Piper TTS voice during build so runtime doesn't require network access
 RUN set -eux; \
     mkdir -p /opt/youworker/tts /app/models/tts; \
-    tmp_model="$(mktemp -p /tmp kokoro-model.XXXXXX)"; \
-    tmp_voices="$(mktemp -p /tmp kokoro-voices.XXXXXX)"; \
-    curl -fSL "${KOKORO_ASSETS_BASE_URL}/${KOKORO_MODEL_FILENAME}" -o "${tmp_model}"; \
-    curl -fSL "${KOKORO_ASSETS_BASE_URL}/${KOKORO_VOICES_FILENAME}" -o "${tmp_voices}"; \
-    mv "${tmp_model}" "/app/models/tts/${KOKORO_MODEL_FILENAME}"; \
-    mv "${tmp_voices}" "/app/models/tts/${KOKORO_VOICES_FILENAME}"; \
+    case "$PIPER_VOICE" in \
+      it_IT-paola-medium) onnx_rel="it/it_IT/paola/medium/it_IT-paola-medium.onnx"; cfg_rel="it/it_IT/paola/medium/it_IT-paola-medium.onnx.json" ;; \
+      it_IT-riccardo-x_low) onnx_rel="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx"; cfg_rel="it/it_IT/riccardo/x_low/it_IT-riccardo-x_low.onnx.json" ;; \
+      *) echo "Unsupported PIPER_VOICE '$PIPER_VOICE'"; exit 1 ;; \
+    esac; \
+    curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${onnx_rel}" -o "/app/models/tts/${PIPER_VOICE}.onnx"; \
+    curl -fSL "https://huggingface.co/rhasspy/piper-voices/resolve/main/${cfg_rel}" -o "/app/models/tts/${PIPER_VOICE}.onnx.json"; \
     mkdir -p /data/uploads /app/models && \
     chown -R appuser:appuser /app /data/uploads /app/models /app/models/tts
 

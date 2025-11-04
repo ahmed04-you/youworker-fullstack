@@ -570,7 +570,6 @@ async def stream_agent_response(
             messages=conversation,
             enable_tools=True,
             max_iterations=10,
-            language="it",
             model="gpt-oss:20b",
         ):
             event_type = event.get("event")

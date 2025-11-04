@@ -2,10 +2,10 @@
 MCP server for web research and fetching capabilities.
 
 Tools:
-- search: Web search via DuckDuckGo HTML
-- fetch: Fetch and extract basic content from URL
-- extract_readable: Extract main article content with readability
-- crawl: Crawl a page and its outgoing links (depth 1–2)
+- web_search: Web search via DuckDuckGo HTML
+- web_fetch: Fetch and extract basic content from URL
+- web_extract_article: Extract main article content with readability
+- web_crawl: Crawl a page and its outgoing links (depth 1–2)
 """
 
 import asyncio
@@ -535,7 +535,7 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="search",
+    name="web_search",
     description="Search the web for information. Returns a list of search results with titles, URLs, and snippets.",
     input_schema={
         "type": "object",
@@ -568,7 +568,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="fetch",
+    name="web_fetch",
     description="Fetch and extract content from a URL. Returns the page title, URL, main text content, and links.",
     input_schema={
         "type": "object",
@@ -595,7 +595,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="extract_readable",
+    name="web_extract_article",
     description="Extract main article content and metadata from a URL using readability.",
     input_schema={
         "type": "object",
@@ -627,7 +627,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="crawl",
+    name="web_crawl",
     description="Crawl a page and outgoing links up to depth 1–2; returns titles, URLs, and readable snippets.",
     input_schema={
         "type": "object",

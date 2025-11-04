@@ -76,7 +76,7 @@ async def convert_wrapper(**kwargs):
     )
 
 mcp_handler.register_tool(
-    name="convert",
+    name="units_convert",
     description="Convert units (length, mass, temperature, etc.) using Pint. Currency conversions are not supported.",
     input_schema={
         "type": "object",

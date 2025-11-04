@@ -270,7 +270,7 @@ class Tool(AsyncAttrs, Base):
     mcp_server_id: Mapped[int] = mapped_column(
         ForeignKey("mcp_servers.id", ondelete="CASCADE"), index=True
     )
-    name: Mapped[str] = mapped_column(String(256), index=True)  # qualified name like web.search
+    name: Mapped[str] = mapped_column(String(256), index=True)  # qualified name like web.web_search
     description: Mapped[str | None] = mapped_column(Text)
     input_schema: Mapped[dict | None] = mapped_column(JSONB)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, index=True)

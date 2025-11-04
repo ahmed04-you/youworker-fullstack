@@ -2,7 +2,7 @@
 MCP server for semantic/vector search over ingested documents.
 
 Tools:
-- vector_search: Compose an answer using RAG with citations
+- local_rag_search: Compose an answer using RAG with citations
 """
 
 import logging
@@ -161,7 +161,7 @@ async def _semantic_query(
         return {"error": str(e)}
 
 
-async def vector_search(
+async def local_rag_search(
     question: str,
     top_k: int = 5,
     tags: list[str] | None = None,
@@ -172,14 +172,24 @@ async def vector_search(
         return {"error": "Services not initialized"}
 
     # Validate using same rules as query
-    base = await _semantic_query(question, top_k=min(top_k, 5), tags=tags, collection=collection)
+    requested_top_k = max(1, min(top_k or 5, SEMANTIC_MAX_TOP_K))
+    base = await _semantic_query(
+        question,
+        top_k=requested_top_k,
+        tags=tags,
+        collection=collection,
+    )
     if "error" in base:
         return base
 
     # Prepare context for LLM
-    results = base.get("results", [])[: top_k or 5]
+    results = base.get("results", [])[:requested_top_k]
     if not results:
-        return {"answer": "Nessun contenuto trovato nei documenti.", "citations": []}
+        return {
+            "answer": "Nessun contenuto trovato nei documenti.",
+            "citations": [],
+            "sources": [],
+        }
 
     def _snippet(text: str, limit: int = 800) -> str:
         return (text or "")[:limit]
@@ -217,13 +227,49 @@ async def vector_search(
 
     # Stream and accumulate final answer
     answer_text = ""
-    async for chunk in ollama_client.chat_stream(
-        messages=msgs, model=os.environ.get("CHAT_MODEL", "gpt-oss:20b"), tools=None
-    ):
-        if chunk.content:
-            answer_text += chunk.content
+    try:
+        async for chunk in ollama_client.chat_stream(
+            messages=msgs,
+            model=os.environ.get("CHAT_MODEL", "gpt-oss:20b"),
+            tools=None,
+        ):
+            if chunk.content:
+                answer_text += chunk.content
+    except Exception as exc:  # pragma: no cover - network/LLM issues
+        logger.error(
+            "LLM synthesis failed",
+            extra={"error": str(exc), "error_type": type(exc).__name__},
+        )
+        return {
+            "error": "LLM synthesis failed",
+            "details": str(exc),
+            "citations": citations,
+            "sources": [
+                {
+                    "id": r["id"],
+                    "uri": r.get("metadata", {}).get("uri"),
+                    "score": r["score"],
+                    "text": r["text"],
+                    "metadata": r.get("metadata", {}),
+                }
+                for r in results
+            ],
+        }
 
-    return {"answer": answer_text.strip(), "citations": citations}
+    return {
+        "answer": answer_text.strip(),
+        "citations": citations,
+        "sources": [
+            {
+                "id": r["id"],
+                "uri": r.get("metadata", {}).get("uri"),
+                "score": r["score"],
+                "text": r["text"],
+                "metadata": r.get("metadata", {}),
+            }
+            for r in results
+        ],
+    }
 
 
 # Initialize MCP protocol handler
@@ -236,7 +282,7 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="vector_search",
+    name="local_rag_search",
     description="RAG answer composer with citations from the vector store.",
     input_schema={
         "type": "object",
@@ -276,7 +322,7 @@ mcp_handler.register_tool(
         "required": ["question"],
         "additionalProperties": False,
     },
-    handler=vector_search,
+    handler=local_rag_search,
 )
 
 

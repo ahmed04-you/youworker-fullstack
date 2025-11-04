@@ -288,20 +288,6 @@ files = [
 ]
 
 [[package]]
-name = "babel"
-version = "2.17.0"
-description = "Internationalization utilities"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "babel-2.17.0-py3-none-any.whl", hash = "sha256:4d0b53093fdfb4b21c92b5213dba5a1b23885afa8383709427046b21c366e5f2"},
-    {file = "babel-2.17.0.tar.gz", hash = "sha256:0c54cffb19f690cdcc52a3b50bcbf71e07a808d1c80d549f2459b9d2cf0afb9d"},
-]
-
-[package.extras]
-dev = ["backports.zoneinfo", "freezegun (>=1.0,<2.0)", "jinja2 (>=3.0)", "pytest (>=6.0)", "pytest-cov", "pytz", "setuptools", "tzdata"]
-
-[[package]]
 name = "beautifulsoup4"
 version = "4.14.2"
 description = "Screen-scraping library"
@@ -837,35 +823,6 @@ test = ["certifi (>=2024)", "cryptography-vectors (==46.0.3)", "pretend (>=0.7)"
 test-randomorder = ["pytest-randomly"]
 
 [[package]]
-name = "csvw"
-version = "3.7.0"
-description = "Python library to work with CSVW described tabular data"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "csvw-3.7.0-py2.py3-none-any.whl", hash = "sha256:21b88db50a35e940d4b5cdd8f3a8084493ad7f1bb1657ed7323aad977359940e"},
-    {file = "csvw-3.7.0.tar.gz", hash = "sha256:869b5c761481e52c01a99fb4749b278a4b8b0db4e0fa1965a33a3441c703465b"},
-]
-
-[package.dependencies]
-attrs = ">=18.1"
-babel = "*"
-isodate = "*"
-jsonschema = "*"
-language-tags = "*"
-python-dateutil = "*"
-rdflib = "*"
-requests = "*"
-rfc3986 = "<2"
-termcolor = "*"
-uritemplate = ">=3.0.0"
-
-[package.extras]
-dev = ["build", "flake8", "twine", "wheel"]
-docs = ["sphinx (<7)", "sphinx-autodoc-typehints", "sphinx-rtd-theme"]
-test = ["frictionless", "pytest (>=5)", "pytest-cov", "pytest-mock", "requests-mock"]
-
-[[package]]
 name = "ctranslate2"
 version = "4.6.0"
 description = "Fast inference engine for Transformer models"
@@ -1027,17 +984,6 @@ files = [
 [package.extras]
 graph = ["objgraph (>=1.7.2)"]
 profile = ["gprof2dot (>=2022.7.29)"]
-
-[[package]]
-name = "dlinfo"
-version = "2.0.0"
-description = "Python wrapper for libc's dlinfo and dyld_find on Mac"
-optional = false
-python-versions = ">=3.9"
-files = [
-    {file = "dlinfo-2.0.0-py3-none-any.whl", hash = "sha256:b32cc18e3ea67c0ca9ca409e5b41eed863bd1363dbc9dd3de90fedf11b61e7bc"},
-    {file = "dlinfo-2.0.0.tar.gz", hash = "sha256:88a2bc04f51d01bc604cdc9eb1c3cc0bde89057532ca6a3e71a41f6235433e17"},
-]
 
 [[package]]
 name = "docling"
@@ -1236,21 +1182,6 @@ six = ">=1.9.0"
 [package.extras]
 gmpy = ["gmpy"]
 gmpy2 = ["gmpy2"]
-
-[[package]]
-name = "espeakng-loader"
-version = "0.2.4"
-description = "A Python package that provides shared library loader for eSpeak NG"
-optional = false
-python-versions = ">=3.6"
-files = [
-    {file = "espeakng_loader-0.2.4-py3-none-macosx_10_12_x86_64.whl", hash = "sha256:b77477ae2ddf62a748e04e49714eabb2f3a24f344166200b00539083bd669904"},
-    {file = "espeakng_loader-0.2.4-py3-none-macosx_11_0_arm64.whl", hash = "sha256:d27cdca31112226e7299d8562e889d3e38a1e48055c9ee381b45d669072ee59f"},
-    {file = "espeakng_loader-0.2.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:08721baf27d13d461f6be6eed9a65277e70d68234ff484fd8b9897b222cdcb6d"},
-    {file = "espeakng_loader-0.2.4-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:d1e798141b46a050cdb75fcf3c17db969bb2c40394f3f4a48910655d547508b9"},
-    {file = "espeakng_loader-0.2.4-py3-none-win_amd64.whl", hash = "sha256:41f1e08ac9deda2efd1ea9de0b81dab9f5ae3c4b24284f76533d0a7b1dd7abd7"},
-    {file = "espeakng_loader-0.2.4-py3-none-win_arm64.whl", hash = "sha256:d7a2928843eaeb2df82f99a370f44e8a630f59b02f9b0d1f168a03c4eeb76b89"},
-]
 
 [[package]]
 name = "et-xmlfile"
@@ -1952,17 +1883,6 @@ files = [
 ]
 
 [[package]]
-name = "isodate"
-version = "0.7.2"
-description = "An ISO 8601 date/time/duration parser and formatter"
-optional = false
-python-versions = ">=3.7"
-files = [
-    {file = "isodate-0.7.2-py3-none-any.whl", hash = "sha256:28009937d8031054830160fce6d409ed342816b543597cece116d966c6d99e15"},
-    {file = "isodate-0.7.2.tar.gz", hash = "sha256:4cd1aa0f43ca76f4a6c6c0292a85f40b35ec2e43e315b59f06e6d32171a953e6"},
-]
-
-[[package]]
 name = "jinja2"
 version = "3.1.6"
 description = "A very fast and expressive template engine."
@@ -1978,17 +1898,6 @@ MarkupSafe = ">=2.0"
 
 [package.extras]
 i18n = ["Babel (>=2.7)"]
-
-[[package]]
-name = "joblib"
-version = "1.5.2"
-description = "Lightweight pipelining with Python functions"
-optional = false
-python-versions = ">=3.9"
-files = [
-    {file = "joblib-1.5.2-py3-none-any.whl", hash = "sha256:4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241"},
-    {file = "joblib-1.5.2.tar.gz", hash = "sha256:3faa5c39054b2f03ca547da9b2f52fde67c06240c31853f306aea97f13647b55"},
-]
 
 [[package]]
 name = "jsonlines"
@@ -2049,38 +1958,6 @@ files = [
 
 [package.dependencies]
 referencing = ">=0.31.0"
-
-[[package]]
-name = "kokoro-onnx"
-version = "0.4.9"
-description = "TTS with kokoro and onnx runtime"
-optional = false
-python-versions = "<3.14,>=3.10"
-files = [
-    {file = "kokoro_onnx-0.4.9-py3-none-any.whl", hash = "sha256:e0b51d62525166af795db715c7f0efb80233621b5ddc0766ed68995545589d9e"},
-    {file = "kokoro_onnx-0.4.9.tar.gz", hash = "sha256:08682138939f61548a7186ef5cdae79180a5dff6fa23781910eddb1583dcf30b"},
-]
-
-[package.dependencies]
-colorlog = ">=6.9.0"
-espeakng-loader = ">=0.2.4"
-numpy = ">=2.0.2"
-onnxruntime = ">=1.20.1"
-phonemizer-fork = ">=3.3.2"
-
-[package.extras]
-gpu = ["onnxruntime-gpu (>=1.20.1)"]
-
-[[package]]
-name = "language-tags"
-version = "1.2.0"
-description = "This project is a Python version of the language-tags Javascript project."
-optional = false
-python-versions = "*"
-files = [
-    {file = "language_tags-1.2.0-py3-none-any.whl", hash = "sha256:d815604622242fdfbbfd747b40c31213617fd03734a267f2e39ee4bd73c88722"},
-    {file = "language_tags-1.2.0.tar.gz", hash = "sha256:e934acba3e3dc85f867703eca421847a9ab7b7679b11b5d5cfd096febbf8bde6"},
-]
 
 [[package]]
 name = "latex2mathml"
@@ -3372,28 +3249,6 @@ Pillow = ">=9.1"
 pypdfium2 = ">=4.18.0"
 
 [[package]]
-name = "phonemizer-fork"
-version = "3.3.2"
-description = "Simple text to phones converter for multiple languages"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "phonemizer_fork-3.3.2-py3-none-any.whl", hash = "sha256:97305c76f4183b3825dae8f4c032265fe78c9946ce58c47d4b62161349264b74"},
-    {file = "phonemizer_fork-3.3.2.tar.gz", hash = "sha256:10e16e827d0443b087062e21b55e805c00989cf1343b2e81e734cae5f6c0cf69"},
-]
-
-[package.dependencies]
-attrs = ">=18.1"
-dlinfo = "*"
-joblib = "*"
-segments = "*"
-typing-extensions = "*"
-
-[package.extras]
-doc = ["sphinx", "sphinx-rtd-theme"]
-test = ["coverage[toml]", "pytest (>=6.0)", "pytest-cov"]
-
-[[package]]
 name = "pillow"
 version = "11.3.0"
 description = "Python Imaging Library (Fork)"
@@ -3516,6 +3371,28 @@ test-arrow = ["pyarrow"]
 tests = ["check-manifest", "coverage (>=7.4.2)", "defusedxml", "markdown2", "olefile", "packaging", "pyroma", "pytest", "pytest-cov", "pytest-timeout", "pytest-xdist", "trove-classifiers (>=2024.10.12)"]
 typing = ["typing-extensions"]
 xmp = ["defusedxml"]
+
+[[package]]
+name = "piper-tts"
+version = "1.3.0"
+description = "Fast and local neural text-to-speech engine"
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "piper_tts-1.3.0-cp39-abi3-macosx_10_9_x86_64.whl", hash = "sha256:0af0c90aeddf762555ed940de1ac576acbefb3623e6d5ca4fb1a70359ee7e65d"},
+    {file = "piper_tts-1.3.0-cp39-abi3-macosx_11_0_arm64.whl", hash = "sha256:810c91a084d335d32b42928b1ef69d6480cf7e3a5a8b15eff98edd2ef55f2791"},
+    {file = "piper_tts-1.3.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8d39f85c3f4b6ade512976849579344fc72595ec613f374dbcf8521716398907"},
+    {file = "piper_tts-1.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:234c25474655b26f3418b84522c815c43e9b1bc8a1fdb13c2b28514290c165f0"},
+    {file = "piper_tts-1.3.0-cp39-abi3-win_amd64.whl", hash = "sha256:dc6b5be4e15f3c0f4a6067b515bc6202ddf3e2b0c6cbd6c8bdeccab2453c89c7"},
+]
+
+[package.dependencies]
+onnxruntime = ">=1,<2"
+
+[package.extras]
+dev = ["black (==24.8.0)", "build (==1.2.2)", "cmake (>=3.18,<4)", "flake8 (==7.1.1)", "mypy (==1.14.0)", "ninja (>=1,<2)", "pylint (==3.2.7)", "pytest (==8.3.4)", "scikit-build (<1)"]
+http = ["flask (>=3,<4)"]
+train = ["cython (>=3,<4)", "jsonargparse[signatures] (>=4.27.7)", "librosa (<1)", "lightning (>=2,<3)", "onnx (>=1,<2)", "pathvalidate (>=3,<4)", "pysilero-vad (>=2.1,<3)", "tensorboard (>=2,<3)", "tensorboardX (>=2,<3)", "torch (>=2,<3)"]
 
 [[package]]
 name = "platformdirs"
@@ -4149,20 +4026,6 @@ pyobjc-framework-CoreML = ">=12.0"
 pyobjc-framework-Quartz = ">=12.0"
 
 [[package]]
-name = "pyparsing"
-version = "3.2.5"
-description = "pyparsing - Classes and methods to define and execute parsing grammars"
-optional = false
-python-versions = ">=3.9"
-files = [
-    {file = "pyparsing-3.2.5-py3-none-any.whl", hash = "sha256:e38a4f02064cf41fe6593d328d0512495ad1f3d8a91c4f73fc401b3079a59a5e"},
-    {file = "pyparsing-3.2.5.tar.gz", hash = "sha256:2df8d5b7b2802ef88e8d016a2eb9c7aeaa923529cd251ed0fe4608275d4105b6"},
-]
-
-[package.extras]
-diagrams = ["jinja2", "railroad-diagrams"]
-
-[[package]]
 name = "pypdfium2"
 version = "4.30.0"
 description = "Python bindings to PDFium"
@@ -4649,27 +4512,6 @@ six = ">=1.15.0"
 tqdm = "*"
 
 [[package]]
-name = "rdflib"
-version = "7.4.0"
-description = "RDFLib is a Python library for working with RDF, a simple yet powerful language for representing information."
-optional = false
-python-versions = ">=3.8.1"
-files = [
-    {file = "rdflib-7.4.0-py3-none-any.whl", hash = "sha256:0af003470404ff21bc0eb04077cc97ee96da581f2429bf42a8e163fc1c2797bc"},
-    {file = "rdflib-7.4.0.tar.gz", hash = "sha256:c8ee16c31848c19c174aed96185327ea139ca3d392fac7fa882ddf5687f8f533"},
-]
-
-[package.dependencies]
-pyparsing = ">=2.1.0,<4"
-
-[package.extras]
-berkeleydb = ["berkeleydb (>=18.1.0,<19.0.0)"]
-html = ["html5rdf (>=1.2,<2)"]
-lxml = ["lxml (>=4.3,<6.0)"]
-networkx = ["networkx (>=2,<4)"]
-orjson = ["orjson (>=3.9.14,<4)"]
-
-[[package]]
 name = "referencing"
 version = "0.37.0"
 description = "JSON Referencing + Python"
@@ -4829,20 +4671,6 @@ urllib3 = ">=1.21.1,<3"
 [package.extras]
 socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
-
-[[package]]
-name = "rfc3986"
-version = "1.5.0"
-description = "Validating URI References per RFC 3986"
-optional = false
-python-versions = "*"
-files = [
-    {file = "rfc3986-1.5.0-py2.py3-none-any.whl", hash = "sha256:a86d6e1f5b1dc238b218b012df0aa79409667bb209e58da56d0b94704e712a97"},
-    {file = "rfc3986-1.5.0.tar.gz", hash = "sha256:270aaf10d87d0d4e095063c65bf3ddbc6ee3d0b226328ce21e036f946e421835"},
-]
-
-[package.extras]
-idna2008 = ["idna"]
 
 [[package]]
 name = "rich"
@@ -5322,25 +5150,6 @@ numpy = ">=1.25.2,<2.6"
 dev = ["cython-lint (>=0.12.2)", "doit (>=0.36.0)", "mypy (==1.10.0)", "pycodestyle", "pydevtool", "rich-click", "ruff (>=0.0.292)", "types-psutil", "typing_extensions"]
 doc = ["intersphinx_registry", "jupyterlite-pyodide-kernel", "jupyterlite-sphinx (>=0.19.1)", "jupytext", "linkify-it-py", "matplotlib (>=3.5)", "myst-nb (>=1.2.0)", "numpydoc", "pooch", "pydata-sphinx-theme (>=0.15.2)", "sphinx (>=5.0.0,<8.2.0)", "sphinx-copybutton", "sphinx-design (>=0.4.0)"]
 test = ["Cython", "array-api-strict (>=2.3.1)", "asv", "gmpy2", "hypothesis (>=6.30)", "meson", "mpmath", "ninja", "pooch", "pytest (>=8.0.0)", "pytest-cov", "pytest-timeout", "pytest-xdist", "scikit-umfpack", "threadpoolctl"]
-
-[[package]]
-name = "segments"
-version = "2.3.0"
-description = "Segmentation with orthography profiles"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "segments-2.3.0-py2.py3-none-any.whl", hash = "sha256:30a5656787071430cd22422e04713b2a9beabe1a97d2ebf37f716a56f90577a3"},
-    {file = "segments-2.3.0.tar.gz", hash = "sha256:381143f66f59eaf45398f5bb57f899d6501be011048ec5f92754c9b24b181615"},
-]
-
-[package.dependencies]
-csvw = ">=1.5.6"
-regex = "*"
-
-[package.extras]
-dev = ["build", "flake8", "twine", "wheel"]
-test = ["pytest (>=5)", "pytest-cov", "pytest-mock"]
 
 [[package]]
 name = "semchunk"
@@ -6247,17 +6056,6 @@ files = [
 ]
 
 [[package]]
-name = "uritemplate"
-version = "4.2.0"
-description = "Implementation of RFC 6570 URI Templates"
-optional = false
-python-versions = ">=3.9"
-files = [
-    {file = "uritemplate-4.2.0-py3-none-any.whl", hash = "sha256:962201ba1c4edcab02e60f9a0d3821e82dfc5d2d6662a21abd533879bdb8a686"},
-    {file = "uritemplate-4.2.0.tar.gz", hash = "sha256:480c2ed180878955863323eea31b0ede668795de182617fef9c6ca09e6ec9d0e"},
-]
-
-[[package]]
 name = "urllib3"
 version = "2.5.0"
 description = "HTTP library with thread-safe connection pooling, file post, and more."
@@ -6694,4 +6492,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.11,<3.14"
-content-hash = "61842ab08e157ccae1df4fb81818c7f1062b41b3395c321101fb681786d754db"
+content-hash = "7195768da1fd469b27d12988d7fe7fd94427695a1c8355ad081e5ab3862c7dba"
