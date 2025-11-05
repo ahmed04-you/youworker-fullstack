@@ -1585,6 +1585,157 @@ main {
   padding: 32px 0;
 }
 
+/* Modern Auth Card - Centered and Beautiful */
+.auth-card-centered {
+  max-width: 480px;
+  width: 100%;
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08), 0 10px 30px rgba(0, 0, 0, 0.05);
+  padding: 48px 40px;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+.auth-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.auth-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a152a;
+  margin-bottom: 8px;
+}
+
+.auth-subtitle {
+  font-size: 16px;
+  color: #5f6368;
+  line-height: 1.5;
+}
+
+.auth-form-modern {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #202124;
+}
+
+.input-modern {
+  width: 100%;
+  padding: 14px 16px;
+  font-size: 15px;
+  border: 2px solid #e8eaed;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #202124;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.input-modern:focus {
+  outline: none;
+  border-color: #E32D21;
+  box-shadow: 0 0 0 4px rgba(227, 45, 33, 0.1);
+}
+
+.input-modern:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.input-modern::placeholder {
+  color: #9aa0a6;
+}
+
+.form-error-modern {
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(217, 48, 37, 0.08), rgba(217, 48, 37, 0.02));
+  border: 1px solid rgba(217, 48, 37, 0.2);
+  border-radius: 10px;
+  color: #c5221f;
+  font-size: 14px;
+  font-weight: 500;
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+
+.btn-modern {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 16px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-family: inherit;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.btn-modern-primary {
+  background: linear-gradient(135deg, #E32D21 0%, #c02419 100%);
+  color: #ffffff;
+}
+
+.btn-modern-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(227, 45, 33, 0.3);
+}
+
+.btn-modern-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(227, 45, 33, 0.2);
+}
+
+.btn-modern:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.btn-spinner {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .danger-card {
   background: linear-gradient(135deg, rgba(217, 48, 37, 0.08), rgba(217, 48, 37, 0.02));
   border: 1px solid rgba(217, 48, 37, 0.15);
@@ -2057,6 +2208,46 @@ main {
   margin-bottom: 32px;
   line-height: 1.5;
   animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+/* Redirect Message and Countdown */
+.redirect-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  margin: 32px 0;
+  animation: fadeInUp 0.6s ease-out 0.2s both;
+}
+
+.redirect-message .hero-subtitle-compact {
+  margin-bottom: 0;
+}
+
+.countdown-display {
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 64px;
+  font-weight: 700;
+  color: #E32D21;
+  background: linear-gradient(135deg, #ffffff 0%, #fff5f4 100%);
+  border-radius: 50%;
+  box-shadow: 0 10px 40px rgba(227, 45, 33, 0.15);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 10px 40px rgba(227, 45, 33, 0.15);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 15px 50px rgba(227, 45, 33, 0.25);
+  }
 }
 
 /* Compact Features - Horizontal Layout */

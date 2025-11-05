@@ -10,7 +10,7 @@ export default function Navbar() {
   return (
     <nav>
       <div className="nav-items">
-        <Link href="/" className={`nav-item ${pathname === "/" ? "active" : ""}`}>
+        <Link href="/home" className={`nav-item ${pathname === "/home" ? "active" : ""}`}>
           <div className="nav-icon-wrapper">
             <Image
               src="/youco-ico.svg"
