@@ -39,7 +39,7 @@ from packages.llm.model_manager import get_model_manager
 from packages.vectorstore import ensure_collections, get_client
 from packages.vectorstore.schema import DocumentSource
 
-from packages.parsers.chunker import chunk_text
+from packages.parsers.chunker import chunk_text, chunk_markdown_with_headers
 from .embedder_integration import embed_chunks, prepare_points, upsert_embedded_chunks
 from .metadata_builder import build_chunk_metadata, prune_metadata
 
@@ -320,7 +320,7 @@ class IngestionPipeline:
         collection_name: str | None = None,
         user_id: int | None = None,
     ) -> ProcessedItemResult:
-        """Process a single item using vision-based parsing."""
+        """Process a single item using the most appropriate method."""
         source = self._determine_source(item.mime, from_web=from_web)
         markdown_content = ""
 
@@ -332,8 +332,33 @@ class IngestionPipeline:
             elif source == "video":
                 logger.info(f"Processing video file: {item.path}")
                 markdown_content = await parse_video_to_markdown(item.path)
+            elif self._is_plain_text_file(item.mime, item.path):
+                # Plain text files: read directly (fast, accurate, no OCR needed)
+                logger.info(f"Processing plain text file: {item.path}")
+                try:
+                    # Try UTF-8 first, fallback to latin-1 for maximum compatibility
+                    try:
+                        with open(item.path, "r", encoding="utf-8") as f:
+                            markdown_content = f.read()
+                    except UnicodeDecodeError:
+                        with open(item.path, "r", encoding="latin-1") as f:
+                            markdown_content = f.read()
+
+                    # For HTML/XML, we keep raw content (could be enhanced with HTML2Text later)
+                    # For CSV/TSV, convert to markdown table
+                    if item.path.suffix.lower() in {".csv", ".tsv", ".tab"}:
+                        markdown_content = self._convert_tabular_to_markdown(
+                            markdown_content, item.path.suffix.lower()
+                        )
+
+                except Exception as e:
+                    logger.error(f"Error reading text file {item.path}: {e}")
+                    return ProcessedItemResult(
+                        chunk_count=0,
+                        artifact_summary={"counts": {}, "artifacts": {}}
+                    )
             else:
-                # All other files: convert to images then analyze with vision
+                # Binary documents: convert to images then analyze with vision
                 logger.info(f"Processing document with vision: {item.path}")
                 images_with_metadata = await self.doc_converter.convert(item.path)
 
@@ -369,12 +394,12 @@ class IngestionPipeline:
         # Simple artifact counting from markdown tags
         artifact_summary = self._extract_artifact_summary(markdown_content)
 
-        # Chunk the markdown content using 1024 token semantic chunking
+        # Chunk the markdown content with header context preservation
         path_hash = self._path_hash(item)
-        text_segments = chunk_text(
+        text_segments = chunk_markdown_with_headers(
             markdown_content,
-            size=1024,  # Vision-based pipeline uses 1024 tokens
-            overlap=128,
+            size=1024,  # 1024 token chunks for RAG
+            overlap=128,  # Overlap to preserve context at boundaries
         )
 
         if not text_segments:
@@ -664,6 +689,95 @@ class IngestionPipeline:
             items.extend(asset_items)
 
         return items
+
+    @staticmethod
+    def _convert_tabular_to_markdown(content: str, suffix: str) -> str:
+        """Convert CSV/TSV content to markdown table format."""
+        import csv
+        import io
+
+        try:
+            delimiter = "\t" if suffix in {".tsv", ".tab"} else ","
+            reader = csv.reader(io.StringIO(content), delimiter=delimiter)
+            rows = list(reader)
+
+            if not rows:
+                return content
+
+            # Build markdown table
+            lines = []
+
+            # Header row
+            if rows:
+                header = rows[0]
+                lines.append("| " + " | ".join(str(cell) for cell in header) + " |")
+                lines.append("| " + " | ".join("---" for _ in header) + " |")
+
+            # Data rows (limit to first 1000 rows to avoid huge tables)
+            for row in rows[1:1001]:
+                # Pad row if needed to match header length
+                padded_row = row + [""] * (len(rows[0]) - len(row))
+                lines.append("| " + " | ".join(str(cell) for cell in padded_row) + " |")
+
+            if len(rows) > 1001:
+                lines.append(f"\n*[Table truncated: showing 1000 of {len(rows)-1} rows]*\n")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.warning(f"Failed to convert tabular data to markdown: {e}")
+            return content  # Return original content on error
+
+    @staticmethod
+    def _is_plain_text_file(mime: str | None, file_path: Path) -> bool:
+        """
+        Determine if a file is plain text that can be read directly without OCR.
+
+        Returns True for text files, code files, JSON, XML, YAML, CSV, etc.
+        Returns False for binary documents (PDF, DOCX, etc.) that need vision parsing.
+        """
+        mime = (mime or "").lower()
+        suffix = file_path.suffix.lower()
+
+        # Text-based MIME types that can be read directly
+        text_mimes = {
+            "text/plain",
+            "text/markdown",
+            "text/x-markdown",
+            "text/csv",
+            "text/tab-separated-values",
+            "text/yaml",
+            "text/html",
+            "text/xml",
+            "text/css",
+            "text/javascript",
+            "application/json",
+            "application/yaml",
+            "application/x-yaml",
+            "application/xml",
+            "application/javascript",
+            "application/x-javascript",
+            "application/x-sh",
+            "application/x-python-code",
+        }
+
+        # File extensions for text/code files
+        text_extensions = {
+            ".txt", ".md", ".markdown", ".mdx",
+            ".py", ".js", ".jsx", ".ts", ".tsx",
+            ".java", ".c", ".cpp", ".h", ".hpp", ".cs",
+            ".rb", ".go", ".rs", ".php", ".swift", ".kt",
+            ".json", ".jsonl", ".ndjson",
+            ".xml", ".html", ".htm", ".xhtml",
+            ".css", ".scss", ".sass", ".less",
+            ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+            ".csv", ".tsv", ".tab",
+            ".sql", ".sh", ".bash", ".zsh", ".fish",
+            ".r", ".R", ".m", ".tex", ".rst", ".org",
+            ".log", ".diff", ".patch",
+        }
+
+        return mime in text_mimes or suffix in text_extensions
 
     @staticmethod
     def _determine_source(mime: str | None, *, from_web: bool) -> DocumentSource:

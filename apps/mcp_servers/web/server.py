@@ -535,7 +535,7 @@ mcp_handler = MCPProtocolHandler(
 
 # Register tools
 mcp_handler.register_tool(
-    name="web_search",
+    name="search",
     description="Search the web via DuckDuckGo. Returns titles, URLs, and snippets.",
     input_schema={
         "type": "object",
@@ -568,7 +568,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="web_fetch",
+    name="fetch",
     description="Fetch page content from URL. Returns title, text, and links.",
     input_schema={
         "type": "object",
@@ -595,7 +595,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="web_extract_article",
+    name="extract_article",
     description="Extract clean article content from URL using readability algorithm. Best for news articles and blogs.",
     input_schema={
         "type": "object",
@@ -627,7 +627,7 @@ mcp_handler.register_tool(
 )
 
 mcp_handler.register_tool(
-    name="web_crawl",
+    name="crawl",
     description="Crawl website starting from URL. Follows links up to specified depth. Returns pages with titles and snippets.",
     input_schema={
         "type": "object",

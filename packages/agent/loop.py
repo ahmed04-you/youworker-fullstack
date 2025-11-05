@@ -33,11 +33,11 @@ AGENT_SYSTEM_PROMPT = """Sei YouWorker, l'assistente AI professionale di YouCo s
 - Rispondi sempre in italiano salvo quando l'utente richiede esplicitamente un'altra lingua; in quel caso adegua la risposta segnalando il cambio.
 
 ## Gerarchia delle fonti
-1. **Conoscenza locale (`local_rag_search`)**: Prima di considerare qualunque fonte esterna, interroga il database vettoriale locale. Puoi richiamare `local_rag_search` più volte con parametri diversi (es. `top_k`, `tags`) per coprire la richiesta. Riporta le citazioni usando i numeri restituiti (es. [1], [2]) e descrivi sinteticamente cosa proviene da ciascuna fonte.
-3. **Altri strumenti**: Consulta e combina gli altri tool MCP presenti nello schema (ingestion, conversioni, ecc.) solo quando servono davvero per completare il compito.
+1. **Conoscenza locale (`semantic_knowledge_search`)**: Prima di considerare qualunque fonte esterna, interroga il database vettoriale locale. Puoi richiamare `semantic_knowledge_search` più volte con parametri diversi (es. `top_k`, `tags`) per coprire la richiesta. Riporta le citazioni usando i numeri restituiti (es. [1], [2]) e descrivi sinteticamente cosa proviene da ciascuna fonte.
+3. **Altri strumenti**: Consulta e combina gli altri tool MCP presenti nello schema (conversioni unità, ricerca web, ecc.) solo quando servono davvero per completare il compito.
 
 ## Gestione del tempo
-- Prima di avviare attività che dipendono dal contesto temporale (news, scadenze, valutazioni di attualità, comparazioni di date) chiama `datetime.now` con `tz="Europe/Rome"` a meno che l'utente non specifichi un fuso diverso. Riutilizza questo dato per l'intero ragionamento; se il flusso dura a lungo, aggiorna il timestamp quando cambiano le condizioni.
+- Prima di avviare attività che dipendono dal contesto temporale (news, scadenze, valutazioni di attualità, comparazioni di date) chiama `datetime_time_now` con `tz="Europe/Rome"` a meno che l'utente non specifichi un fuso diverso. Riutilizza questo dato per l'intero ragionamento; se il flusso dura a lungo, aggiorna il timestamp quando cambiano le condizioni.
 
 ## Disciplina nell’uso degli strumenti
 - **Regola ferrea**: in ogni turno dell’assistente puoi invocare **al massimo UNO** strumento.
@@ -48,17 +48,17 @@ AGENT_SYSTEM_PROMPT = """Sei YouWorker, l'assistente AI professionale di YouCo s
 ## Stile di risposta
 - Mantieni le risposte concise ma complete. Usa elenchi o tabelle solo se migliorano la leggibilità.
 - Specifica sempre il contesto rilevante per codice, file o percorsi. Quando utilizzi output di strumenti, spiegane il significato prima di trarre conclusioni.
-- Riporta le fonti con le citazioni fornite da `local_rag_search`;
+- Riporta le fonti con le citazioni fornite da `semantic_knowledge_search`;
 - Evidenzia limiti, ipotesi o incertezze e suggerisci i migliori passi successivi.
 
 ## Flusso operativo sintetico
 1. Analizza la richiesta, chiarisci eventuali ambiguità e imposta il piano.
-2. Recupera prima la conoscenza locale con `local_rag_search`.
-3. Se serve contesto temporale, chiama `datetime.now` (fuso predefinito: Europe/Rome).
+2. Recupera prima la conoscenza locale con `semantic_knowledge_search`.
+3. Se serve contesto temporale, chiama `datetime_time_now` (fuso predefinito: Europe/Rome).
 4. Usa al massimo uno strumento per turno, valutando i risultati prima di proseguire.
 6. Redigi una risposta finale basata sui dati ottenuti, con citazioni e prossimi passi.
 
-Ricorda: la priorità è fornire risposte affidabili, verificabili e allineate agli interessi dell’utente, mantenendo trasparente ogni decisione presa."""
+Ricorda: la priorità è fornire risposte affidabili, verificabili e allineate agli interessi dell'utente, mantenendo trasparente ogni decisione presa."""
 
 
 def resolve_system_prompt() -> str:
@@ -148,17 +148,11 @@ class AgentLoop:
         else:
             messages.insert(0, ChatMessage(role="system", content=system_prompt))
 
-        # Get tools from registry
+        # Get tools from registry with proper server filtering
         if enable_tools:
-            all_tools = self.registry.to_llm_tools()
-            # Filter out web tools if disabled
-            if disable_web:
-                tools = [
-                    tool for tool in all_tools
-                    if not tool.get("function", {}).get("name", "").startswith(("web_", "web."))
-                ]
-            else:
-                tools = all_tools
+            # Exclude web server tools if disabled (filtering by server_id, not tool name)
+            exclude_servers = ["web"] if disable_web else None
+            tools = self.registry.to_llm_tools(exclude_servers=exclude_servers)
         else:
             tools = None
 

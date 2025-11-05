@@ -129,10 +129,12 @@ class DocumentToImageConverter:
                 pdf = pdfium.PdfDocument(str(file_path))
                 for page_num in range(len(pdf)):
                     page = pdf[page_num]
-                    # Render at 2x resolution for better quality
-                    bitmap = page.render(scale=2.0)
+                    # Render at 200 DPI (scale=2.78) for high-quality OCR
+                    bitmap = page.render(scale=2.78)
                     pil_image = bitmap.to_pil()
                     pil_image = self._resize_if_needed(pil_image)
+                    # Set DPI metadata
+                    pil_image.info['dpi'] = (200, 200)
 
                     images.append(
                         {
@@ -186,8 +188,9 @@ class DocumentToImageConverter:
                 prs = Presentation(str(file_path))
 
                 for slide_num, slide in enumerate(prs.slides):
-                    # Create image canvas
+                    # Create image canvas at 200 DPI (1920x1080 HD resolution)
                     img = Image.new("RGB", (1920, 1080), "white")
+                    img.info['dpi'] = (200, 200)
                     draw = ImageDraw.Draw(img)
 
                     # Render slide elements (simplified - text and shapes)
@@ -233,8 +236,9 @@ class DocumentToImageConverter:
             try:
                 doc = Document(str(file_path))
 
-                # Create single image with all text
-                img = Image.new("RGB", (1920, 2400), "white")
+                # Create single image with all text at 200 DPI
+                img = Image.new("RGB", (1700, 2200), "white")
+                img.info['dpi'] = (200, 200)
                 draw = ImageDraw.Draw(img)
 
                 y_offset = 50
@@ -243,11 +247,11 @@ class DocumentToImageConverter:
                 for para in doc.paragraphs:
                     if para.text.strip():
                         # Wrap text if too long
-                        text = para.text[:150]  # Truncate long lines
+                        text = para.text[:100]  # Truncate long lines (optimized)
                         draw.text((50, y_offset), text, fill="black", font=font)
-                        y_offset += 25
+                        y_offset += 20
 
-                        if y_offset > 2300:  # Near bottom
+                        if y_offset > 2150:  # Near bottom (adjusted for larger canvas)
                             break
 
                 img = self._resize_if_needed(img)
@@ -285,24 +289,25 @@ class DocumentToImageConverter:
                 for sheet_num, sheet_name in enumerate(wb.sheetnames):
                     sheet = wb[sheet_name]
 
-                    # Create image canvas
+                    # Create image canvas at 200 DPI (1920x1080 HD resolution)
                     img = Image.new("RGB", (1920, 1080), "white")
+                    img.info['dpi'] = (200, 200)
                     draw = ImageDraw.Draw(img)
                     font = ImageFont.load_default()
 
                     # Render grid
-                    y_offset = 30
-                    for row_num, row in enumerate(sheet.iter_rows(max_row=50, max_col=10)):
-                        x_offset = 30
+                    y_offset = 20
+                    for row_num, row in enumerate(sheet.iter_rows(max_row=40, max_col=10)):
+                        x_offset = 20
                         for cell in row:
                             value = str(cell.value) if cell.value else ""
-                            if value and len(value) > 15:
-                                value = value[:15] + "..."
+                            if value and len(value) > 12:
+                                value = value[:12] + "..."
                             draw.text((x_offset, y_offset), value, fill="black", font=font)
-                            x_offset += 150
+                            x_offset += 120
 
-                        y_offset += 20
-                        if y_offset > 1000:
+                        y_offset += 18
+                        if y_offset > 1030:  # Adjusted for larger canvas
                             break
 
                     img = self._resize_if_needed(img)
@@ -332,20 +337,21 @@ class DocumentToImageConverter:
         def _render():
             try:
                 with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                    content = f.read(50000)  # First 50KB
+                    content = f.read(30000)  # First 30KB
 
-                # Create image
-                img = Image.new("RGB", (1920, 2400), "white")
+                # Create image at 200 DPI
+                img = Image.new("RGB", (1700, 2200), "white")
+                img.info['dpi'] = (200, 200)
                 draw = ImageDraw.Draw(img)
                 font = ImageFont.load_default()
 
-                y_offset = 30
-                for line in content.split("\n")[:150]:  # Max 150 lines
-                    line = line[:180]  # Max 180 chars per line
-                    draw.text((30, y_offset), line, fill="black", font=font)
-                    y_offset += 15
+                y_offset = 20
+                for line in content.split("\n")[:165]:  # More lines for larger canvas
+                    line = line[:140]  # More chars per line for larger canvas
+                    draw.text((20, y_offset), line, fill="black", font=font)
+                    y_offset += 13
 
-                    if y_offset > 2350:
+                    if y_offset > 2150:  # Adjusted for larger canvas
                         break
 
                 img = self._resize_if_needed(img)

@@ -25,7 +25,7 @@ class OllamaModelManager:
 
     Strategy:
     - Chat mode: Keep gpt-oss:20b loaded in GPU
-    - Ingestion mode: Unload chat, load qwen3-vl:4b + embeddinggemma:300m
+    - Ingestion mode: Unload chat, load qwen3-vl:4b-instruct + embeddinggemma:300m
     - STT model stays in system RAM throughout
     """
 
@@ -38,7 +38,7 @@ class OllamaModelManager:
         # Model configurations
         self.models = {
             "chat": self.settings.chat_model,  # gpt-oss:20b
-            "vision": "qwen3-vl:4b",
+            "vision": "qwen3-vl:4b-instruct",
             "embedding": self.settings.embed_model,  # embeddinggemma:300m
         }
 
@@ -141,7 +141,7 @@ class OllamaModelManager:
         Switch from chat mode to ingestion mode.
 
         Unloads: gpt-oss:20b (chat model)
-        Loads: qwen3-vl:4b (vision), embeddinggemma:300m (embedding)
+        Loads: qwen3-vl:4b-instruct (vision), embeddinggemma:300m (embedding)
         Keeps: STT model in system RAM (managed separately)
 
         Returns:
@@ -176,7 +176,7 @@ class OllamaModelManager:
         """
         Switch from ingestion mode back to chat mode.
 
-        Unloads: qwen3-vl:4b (vision)
+        Unloads: qwen3-vl:4b-instruct (vision)
         Loads: gpt-oss:20b (chat model)
         Keeps: embeddinggemma:300m (for RAG), STT model in system RAM
 

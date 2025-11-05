@@ -1472,12 +1472,6 @@ export default function Chats() {
               {toolEvents.map((event) => {
                 const toolName = event.tool || "Unknown Tool";
                 const isRunning = event.status === "running";
-                const statusLabel =
-                  event.status === "error"
-                    ? "Failed"
-                    : isRunning
-                      ? "Running"
-                      : "Completed";
                 const latencyLabel = !isRunning ? formatLatency(event.latencyMs) : undefined;
 
                 return (
@@ -1507,28 +1501,19 @@ export default function Chats() {
                     </div>
                     <div className="tool-info">
                       <div className="tool-name">{toolName}</div>
-                      <div className="tool-status-row">
-                        {isRunning ? (
-                          <span className="tool-status-spinner" aria-hidden="true" />
-                        ) : (
-                          <span className={`tool-status-dot status-${event.status}`} aria-hidden="true" />
-                        )}
-                        <span className="tool-status-text">
-                          {isRunning ? "Running…" : statusLabel}
-                        </span>
-                      </div>
                     </div>
                     <div className="tool-meta">
                       {isRunning ? (
-                        <span className="tool-meta-text">Processing…</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="tool-status-spinner" aria-hidden="true" />
+                          <span className="tool-meta-text">Running…</span>
+                        </div>
                       ) : latencyLabel ? (
                         <>
                           <span className="tool-latency">{latencyLabel}</span>
                           <span className="tool-meta-subtext">Latency</span>
                         </>
-                      ) : (
-                        <span className="tool-meta-text">{statusLabel}</span>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 );

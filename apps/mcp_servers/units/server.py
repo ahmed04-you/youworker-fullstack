@@ -76,7 +76,7 @@ async def convert_wrapper(**kwargs):
     )
 
 mcp_handler.register_tool(
-    name="units_convert",
+    name="convert",
     description="Convert between units (length, mass, temperature, volume, etc.). No currency conversions.",
     input_schema={
         "type": "object",

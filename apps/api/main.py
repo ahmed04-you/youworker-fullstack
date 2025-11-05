@@ -341,4 +341,6 @@ if __name__ == "__main__":
         host=settings.api_host,
         port=settings.api_port,
         log_level=settings.log_level.lower(),
+        timeout_keep_alive=3600,  # 1 hour for heavy file ingestion
+        timeout_graceful_shutdown=30,
     )

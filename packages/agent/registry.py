@@ -121,16 +121,23 @@ class MCPRegistry:
                 }
             )
 
-    def to_llm_tools(self) -> list[dict[str, Any]]:
+    def to_llm_tools(self, exclude_servers: list[str] | None = None) -> list[dict[str, Any]]:
         """
         Convert registry tools to LLM tool schema format.
+
+        Args:
+            exclude_servers: Optional list of server IDs to exclude (e.g., ["web"] to disable web tools)
 
         Returns:
             List of tool schemas in OpenAI/Ollama format
         """
+        exclude_set = set(exclude_servers or [])
         schemas: list[dict[str, Any]] = []
         for qualified_name, tool in self.tools.items():
             if not self._is_tool_available(tool):
+                continue
+            # Filter by server_id if specified
+            if exclude_set and tool.server_id in exclude_set:
                 continue
             exposed = self._qualified_to_exposed.get(qualified_name, qualified_name.replace(".", "_"))
             schemas.append(

@@ -54,4 +54,4 @@ EXPOSE 8001
 
 USER appuser
 
-CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8001", "--timeout-keep-alive", "75", "--limit-concurrency", "1000", "--backlog", "2048"]
+CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8001", "--timeout-keep-alive", "3600", "--limit-concurrency", "1000", "--backlog", "2048"]
