@@ -36,7 +36,7 @@ COPY requirements.txt /app/requirements.txt
 RUN /root/.local/bin/uv pip install --system --no-cache-dir --upgrade pip \
     && /root/.local/bin/uv pip install --system --no-cache-dir --requirement requirements.txt \
     && if [ "$ENABLE_GPU_TORCH" = "1" ]; then \
-        /root/.local/bin/uv pip install --system --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 torch==2.5.1; \
+        /root/.local/bin/uv pip install --system --no-cache-dir --index-url https://download.pytorch.org/whl/cu121 torch==2.5.1 torchaudio==2.5.1; \
     fi \
     && find /usr/local/lib/python3.11/site-packages -name "*.pyc" -delete \
     && find /usr/local/lib/python3.11/site-packages -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
@@ -46,7 +46,7 @@ COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
 COPY README.md /app/README.md
 
-# MeloTTS models are automatically downloaded at runtime when first needed
+# Piper TTS voices are downloaded at runtime when first needed
 RUN mkdir -p /data/uploads /app/models && \
     chown -R appuser:appuser /app /data/uploads /app/models
 
