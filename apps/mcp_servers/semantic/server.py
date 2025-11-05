@@ -168,13 +168,13 @@ async def knowledge_search(
 ) -> dict[str, Any]:
     """RAG answer: embed → search → LLM synthesis with citations.
 
-    Always retrieves exactly 15 chunks for optimal context.
+    Always retrieves exactly 10 chunks for optimal context.
     """
     if not vector_store or not ollama_client:
         return {"error": "Services not initialized"}
 
-    # Fixed 15 chunks for consistent, comprehensive context
-    requested_top_k = 15
+    # Fixed 10 chunks for consistent, comprehensive context
+    requested_top_k = 10
     base = await _semantic_query(
         question,
         top_k=requested_top_k,
