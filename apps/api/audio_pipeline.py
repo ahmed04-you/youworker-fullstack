@@ -94,16 +94,22 @@ def sanitize_tts_text(text: str, *, collapse_whitespace: bool = True) -> str:
         return (label or alt or link_target or image_target or "").strip()
 
     cleaned = MARKDOWN_LINK_RE.sub(_replace_link, cleaned)
+    # Handle lists by adding natural pauses
     cleaned = MARKDOWN_BULLET_RE.sub("", cleaned)
     cleaned = MARKDOWN_ORDERED_LIST_RE.sub("", cleaned)
     cleaned = MARKDOWN_HEADING_RE.sub("", cleaned)
     cleaned = MARKDOWN_BLOCKQUOTE_RE.sub("", cleaned)
     cleaned = MARKDOWN_CHECKBOX_RE.sub("", cleaned)
-    cleaned = MARKDOWN_RULE_RE.sub(" ", cleaned)
+    cleaned = MARKDOWN_RULE_RE.sub(". ", cleaned)
     # Replace table borders with pauses so content is still speakable
     cleaned = MARKDOWN_TABLE_BORDER_RE.sub(" ", cleaned)
-    # Strip emphasis markers
-    cleaned = re.sub(r"[*_~`]", " ", cleaned)
+    # Strip emphasis markers (bold, italic, strikethrough, code)
+    cleaned = re.sub(r"[*_~`]", "", cleaned)
+    # Remove extra brackets and parentheses from markdown syntax remnants
+    cleaned = re.sub(r"\[\s*\]|\(\s*\)", "", cleaned)
+    # Convert common markdown/HTML entities to natural speech
+    cleaned = cleaned.replace("&nbsp;", " ")
+    cleaned = cleaned.replace("&#x2F;", "/")
     # Normalize newlines into natural speech pauses
     cleaned = cleaned.replace("\r\n", "\n")
 
@@ -114,6 +120,7 @@ def sanitize_tts_text(text: str, *, collapse_whitespace: bool = True) -> str:
         return ". "
 
     cleaned = re.sub(r"\n+", _newline_to_pause, cleaned)
+    # Final whitespace cleanup
     if collapse_whitespace:
         cleaned = re.sub(r"\s+", " ", cleaned)
     cleaned = cleaned.strip()
@@ -446,15 +453,23 @@ async def _load_piper_tts() -> "PiperVoice | None":
         def _load() -> "PiperVoice":
             from piper import PiperVoice
 
-            # Download model if not present
+            # Check for pre-downloaded model (should exist from Docker build)
             model_path = models_dir / f"{voice_name}.onnx"
             config_path = models_dir / f"{voice_name}.onnx.json"
 
             if not model_path.exists() or not config_path.exists():
-                logger.info("Downloading Piper voice model: %s", voice_name)
-                base_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{voice_name.replace('_', '/')}"
-                urlretrieve(f"{base_url}.onnx", model_path)
-                urlretrieve(f"{base_url}.onnx.json", config_path)
+                # Fallback: Download model if not present (shouldn't happen in production)
+                logger.warning("Piper model not found at build location, downloading: %s", voice_name)
+                # Convert it_IT-paola-medium to it/it_IT-paola-medium (language prefix)
+                parts = voice_name.split('-', 1)
+                lang_code = parts[0].split('_')[0]  # Extract 'it' from 'it_IT'
+                base_url = f"https://huggingface.co/rhasspy/piper-voices/resolve/main/{lang_code}/{voice_name}"
+                try:
+                    urlretrieve(f"{base_url}.onnx", model_path)
+                    urlretrieve(f"{base_url}.onnx.json", config_path)
+                except Exception as e:
+                    logger.error("Failed to download Piper model: %s", e)
+                    raise
 
             return PiperVoice.load(str(model_path), config_path=str(config_path))
 
@@ -481,29 +496,16 @@ def _generate_piper_wav(voice: "PiperVoice", text: str) -> tuple[bytes, int]:
     )
 
     try:
-        # Synthesize audio - Piper returns raw PCM16 samples
+        # Synthesize audio using Piper's WAV file interface
         with io.BytesIO() as wav_buffer:
-            # Piper generates audio as int16 numpy array
-            audio_stream = voice.synthesize_stream_raw(text)
+            # Open WAV file for writing
+            with wave.open(wav_buffer, "wb") as wav_file:
+                # Note: length_scale controls speed (higher = slower, lower = faster)
+                length_scale = 1.0 / speed if speed != 1.0 else None
+                voice.synthesize(text, wav_file, length_scale=length_scale)
 
-            # Collect audio samples
-            audio_samples = []
-            for audio_chunk in audio_stream:
-                audio_samples.extend(audio_chunk)
-
-            # Convert to numpy array
-            audio_array = np.array(audio_samples, dtype=np.int16)
-
-            # Apply speed adjustment if needed
-            if speed != 1.0:
-                # Resample for speed change
-                current_length = len(audio_array)
-                new_length = int(current_length / speed)
-                indices = np.linspace(0, current_length - 1, new_length)
-                audio_array = np.interp(indices, np.arange(current_length), audio_array).astype(np.int16)
-
-            # Convert to WAV format
-            wav_bytes = _pcm16_to_wav(audio_array.tobytes(), PIPER_SAMPLE_RATE)
+            # Get the WAV bytes
+            wav_bytes = wav_buffer.getvalue()
 
             logger.info("Generated Piper WAV: %d bytes at %d Hz", len(wav_bytes), PIPER_SAMPLE_RATE)
             return wav_bytes, PIPER_SAMPLE_RATE

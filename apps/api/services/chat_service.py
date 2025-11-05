@@ -346,6 +346,12 @@ class ChatService(BaseService):
         # Unload ingestion Whisper model to free GPU memory for chat model
         release_whisper_resources()
 
+        # Unload embedding model to free GPU memory for chat model
+        try:
+            await self.agent_loop.ollama_client.unload_model(self.settings.embed_model)
+        except Exception as e:
+            logger.debug(f"Failed to unload embedding model: {e}")
+
         # Process input
         input_result = await self.process_text_or_audio_input(
             text_input=text_input,
@@ -512,6 +518,12 @@ class ChatService(BaseService):
         """
         # Unload ingestion Whisper model to free GPU memory for chat model
         release_whisper_resources()
+
+        # Unload embedding model to free GPU memory for chat model
+        try:
+            await self.agent_loop.ollama_client.unload_model(self.settings.embed_model)
+        except Exception as e:
+            logger.debug(f"Failed to unload embedding model: {e}")
 
         # Process input
         input_result = await self.process_text_or_audio_input(

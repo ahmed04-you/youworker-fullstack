@@ -379,6 +379,23 @@ class OllamaClient:
 
         return tool_calls
 
+    async def unload_model(self, model: str) -> None:
+        """
+        Explicitly unload a model from memory.
+
+        Args:
+            model: Model name to unload
+        """
+        try:
+            # Use generate endpoint with keep_alive=0 to unload
+            await self.client.post(
+                f"{self.base_url}/api/generate",
+                json={"model": model, "keep_alive": 0},
+            )
+            logger.debug(f"Unloaded model: {model}")
+        except Exception as e:
+            logger.warning(f"Failed to unload model {model}: {e}")
+
     async def embed(self, text: str, model: str = "embeddinggemma:300m") -> list[float]:
         """
         Generate embeddings for text.

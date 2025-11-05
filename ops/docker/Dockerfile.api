@@ -7,7 +7,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PIP_SYSTEM=1 \
     PATH="/root/.local/bin:${PATH}" \
     PYTHONPATH="/app" \
-    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusolver/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusparse/lib:/usr/local/lib/python3.11/site-packages/nvidia/cufft/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_cupti/lib:/usr/local/lib/python3.11/site-packages/nvidia/curand/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvtx/lib"
+    LD_LIBRARY_PATH="/usr/local/nvidia/lib:/usr/local/nvidia/lib64:/usr/local/cuda/lib:/usr/local/cuda/lib64:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib:/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusolver/lib:/usr/local/lib/python3.11/site-packages/nvidia/cusparse/lib:/usr/local/lib/python3.11/site-packages/nvidia/cufft/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.11/site-packages/nvidia/cuda_cupti/lib:/usr/local/lib/python3.11/site-packages/nvidia/curand/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvjitlink/lib:/usr/local/lib/python3.11/site-packages/nvidia/nvtx/lib" \
+    HF_HUB_CACHE="/app/models/whisper" \
+    TRANSFORMERS_CACHE="/app/models/whisper"
 
 WORKDIR /app
 
@@ -44,10 +46,13 @@ RUN /root/.local/bin/uv pip install --system --no-cache-dir --upgrade pip \
 COPY packages /app/packages
 COPY apps /app/apps
 COPY ops/alembic /app/ops/alembic
+COPY ops/docker/download_models.py /tmp/download_models.py
 COPY README.md /app/README.md
 
-# Piper TTS voices are downloaded at runtime when first needed
+# Create directories and download models at build time
 RUN mkdir -p /data/uploads /app/models && \
+    python3 /tmp/download_models.py && \
+    rm /tmp/download_models.py && \
     chown -R appuser:appuser /app /data/uploads /app/models
 
 EXPOSE 8001
