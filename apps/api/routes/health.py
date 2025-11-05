@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends
 
 from apps.api.audio_pipeline import (
     FW_AVAILABLE as STT_AVAILABLE,
-    MELO_AVAILABLE as TTS_AVAILABLE,
+    PIPER_AVAILABLE as TTS_AVAILABLE,
 )
 from apps.api.routes.deps import (
     get_agent_loop_optional,

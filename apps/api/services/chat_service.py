@@ -21,6 +21,7 @@ from apps.api.audio_pipeline import (
 from packages.agent import AgentLoop
 from packages.llm import ChatMessage
 from packages.db.models import ChatSession
+from packages.parsers.media_transcriber import release_resources as release_whisper_resources
 
 from .base import BaseService
 from ..routes.chat.helpers import ToolEventRecorder, prepare_chat_messages, get_user_id
@@ -342,6 +343,9 @@ class ChatService(BaseService):
             ValueError: Invalid input
             RuntimeError: Processing errors
         """
+        # Unload ingestion Whisper model to free GPU memory for chat model
+        release_whisper_resources()
+
         # Process input
         input_result = await self.process_text_or_audio_input(
             text_input=text_input,
@@ -506,6 +510,9 @@ class ChatService(BaseService):
             ValueError: Invalid input
             RuntimeError: Processing errors
         """
+        # Unload ingestion Whisper model to free GPU memory for chat model
+        release_whisper_resources()
+
         # Process input
         input_result = await self.process_text_or_audio_input(
             text_input=text_input,

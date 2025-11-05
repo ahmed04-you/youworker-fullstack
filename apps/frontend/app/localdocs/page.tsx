@@ -143,10 +143,6 @@ export default function LocalDocs() {
   };
 
   const handleDeleteDocument = async (documentId: number) => {
-    if (!window.confirm("Delete this document metadata? This action cannot be undone.")) {
-      return;
-    }
-
     try {
       const token = await ensureCsrfToken();
       await deleteDocument(documentId, token);

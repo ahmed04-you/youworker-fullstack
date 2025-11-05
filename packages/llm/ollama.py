@@ -117,7 +117,7 @@ class OllamaClient:
         """
         options = {
             "temperature": temperature,
-            "num_ctx": 65536,  # 64k context window for gpt-oss
+            "num_ctx": 32768,  # 32k context window for gpt-oss
             "kv_cache_type": "q8_0",  # 8-bit quantized KV cache for memory efficiency
         }
 
@@ -390,7 +390,11 @@ class OllamaClient:
         Returns:
             Embedding vector
         """
-        payload = {"model": model, "prompt": text}
+        payload = {
+            "model": model,
+            "prompt": text,
+            "keep_alive": 0,  # Unload embedding model immediately to save GPU memory
+        }
 
         try:
             await self._ensure_model_available(model)
